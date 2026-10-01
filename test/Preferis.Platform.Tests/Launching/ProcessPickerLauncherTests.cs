@@ -48,6 +48,39 @@ public class ProcessPickerLauncherTests : IDisposable
     }
 
     [Fact]
+    public void The_answer_counts_as_soon_as_stdout_closes_even_while_the_picker_animates_out()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        // The picker answers, closes stdout and keeps running for its closing animation.
+        var picker = FakePicker("cat > /dev/null; echo '{\"result\":\"selected\",\"profileId\":\"edge\"}'; exec 1>&-; sleep 3");
+        var started = System.Diagnostics.Stopwatch.StartNew();
+
+        var response = new ProcessPickerLauncher(picker, TimeSpan.FromSeconds(10), null).Show(Request());
+
+        Assert.Equal("edge", response?.ProfileId);
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(1.5), $"Took {started.Elapsed.TotalMilliseconds} ms");
+    }
+
+    [Fact]
+    public void A_picker_that_never_answers_is_killed_after_the_timeout()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var picker = FakePicker("cat > /dev/null; sleep 30");
+        var started = System.Diagnostics.Stopwatch.StartNew();
+
+        Assert.Null(new ProcessPickerLauncher(picker, TimeSpan.FromSeconds(1), null).Show(Request()));
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(5), $"Took {started.Elapsed.TotalMilliseconds} ms");
+    }
+
+    [Fact]
     public void Garbage_or_a_foreign_profile_yields_null()
     {
         if (OperatingSystem.IsWindows())

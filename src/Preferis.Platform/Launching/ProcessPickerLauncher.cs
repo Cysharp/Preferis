@@ -7,7 +7,8 @@ namespace Preferis.Platform.Launching;
 
 /// <summary>
 /// Runs the picker executable as a child process: request JSON on stdin, response JSON on stdout,
-/// the picker's own log lines on stderr (docs/Design.md §9.3). Any failure yields null and the Router falls back.
+/// the picker's own log lines on stderr (docs/Design.md §9.3). The response is read when stdout closes, which may be
+/// before the process exits. Any failure yields null and the Router falls back.
 /// </summary>
 public sealed class ProcessPickerLauncher : IPickerLauncher
 {
@@ -53,16 +54,18 @@ public sealed class ProcessPickerLauncher : IPickerLauncher
             process.StandardInput.Write(PickerMessages.Serialize(request));
             process.StandardInput.Close();
 
-            if (!process.WaitForExit((int)_timeout.TotalMilliseconds))
+            // The answer is complete when the picker closes stdout, which it does before its closing animation:
+            // the browser should not wait for the animation, nor for the process to exit.
+            if (!stdout.Wait(_timeout))
             {
                 _logStderr?.Invoke("picker timed out; killing it");
                 process.Kill(entireProcessTree: true);
                 return null;
             }
 
-            var output = stdout.GetAwaiter().GetResult();
-            stderr.Wait(TimeSpan.FromSeconds(1));
-            return PickerMessages.TryParseResponse(output.Trim(), request);
+            // Log lines written before the answer are normally read by now; do not wait for the picker to finish.
+            stderr.Wait(TimeSpan.FromMilliseconds(100));
+            return PickerMessages.TryParseResponse(stdout.Result.Trim(), request);
         }
         catch (Exception ex) when (ex is Win32Exception or IOException or InvalidOperationException)
         {

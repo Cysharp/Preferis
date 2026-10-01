@@ -1,6 +1,6 @@
 namespace Preferis.Settings.Services;
 
-/// <summary>Dialogs the view models need. Implemented with Avalonia's storage provider and a small message window; faked in the tests.</summary>
+/// <summary>Dialogs the view models need. Implemented with NSOpenPanel and NSAlert on macOS; faked in the tests.</summary>
 public interface IDialogService
 {
     /// <summary>Returns the chosen folder, or null when cancelled.</summary>

@@ -31,7 +31,7 @@ Preferis.Core.Hosting.IRoutingLog             Write(level, message)
 | `MacOS.MacBrowserDetector` | macOS | `NSWorkspace` の bundle id 解決と https ハンドラー列挙。Preferis 自身とヘルパー (`net.mayuki.Preferis` とその配下の bundle id) は、どのプロセスから呼んでも除外 |
 | `MacOS.MacSystemOpener` | macOS | 既定ハンドラーの bundle id を自分と比較。委譲は `open <url>` |
 | `MacOS.MacDefaultBrowserRegistrar` | macOS | `LSRegisterURL` + `setDefaultApplicationAtURL:toOpenURLsWithScheme:completionHandler:` (ブロック) 。失敗時は `LSSetDefaultHandlerForURLScheme`。対象の `Preferis.app` をパスで受け取る (Router は `ForMainBundle()`、設定 UI は自分を含む `Preferis.app`) |
-| `MacOS.MacApplicationIcons` | macOS | `iconForFile:` → `CGImageForProposedRect:` → PNG。AppKit を使わない UI (Avalonia の設定 UI) 向け |
+| `MacOS.MacApplicationIcons` | macOS | `iconForFile:` → `CGImageForProposedRect:` → PNG。UI 非依存の設定 ViewModel がアイコンを PNG で持つため |
 | `MacOS.MacUrlActivationSource` | macOS | NSApplication + `application:openURLs:` デリゲート (スパイク 1 の製品版) |
 | `MacOS.MacUserNotifier` | macOS | 暫定で `osascript` の `display dialog` (「Copy URL」ボタンつき)。後で NSAlert に置換可 |
 | `MacOS.ObjC` | macOS | objc ランタイム / Foundation / AppKit / Launch Services への最小限の P/Invoke。グローバルブロック生成を含む |
@@ -47,8 +47,8 @@ Router 実行ファイル (`Preferis.Router`) は `RouterHost` でこれらを�
 <install dir>/
   Preferis.exe              Router。NativeAOT 単一 exe。依存 DLL なし
   Preferis.Picker.exe       WinUI 3。NativeAOT。Windows App SDK 自己完結モードの DLL 群を同じフォルダーに同梱
-  Preferis.Settings.exe     Avalonia。NativeAOT 単一 exe
-  Microsoft.ui.xaml.dll ほか Windows App SDK ランタイム (Preferis.Picker.exe のみが使用)
+  Preferis.Settings.exe     WinUI 3 (M4)。NativeAOT
+  Microsoft.ui.xaml.dll ほか Windows App SDK ランタイム (Preferis.Picker.exe と Preferis.Settings.exe が使用)
 ```
 
 Router は同じフォルダーの DLL を一切インポートしないため、Windows App SDK の DLL が隣にあっても
@@ -205,9 +205,9 @@ Preferis.app/
         Contents/MacOS/Preferis Picker
         Contents/MonoBundle/         NativeAOT でも .NET のネイティブライブラリ数個と runtimeconfig.bin が置かれる
       Preferis Settings.app/         bundle id: net.mayuki.Preferis.Settings。CFBundleURLTypes なし。通常のアプリ (Dock に出る)
-        Contents/Info.plist          src/Preferis.Settings/macOS/Info.plist
-        Contents/MacOS/Preferis.Settings
-        Contents/MacOS/libAvaloniaNative.dylib, libSkiaSharp.dylib, libHarfBuzzSharp.dylib
+        Contents/Info.plist          Microsoft.macOS が生成 (src/Preferis.Settings.MacOS/Info.plist をマージ)
+        Contents/MacOS/Preferis Settings
+        Contents/MonoBundle/         ピッカーと同じ
     Resources/                       アイコン (Preferis.icns) は未作成
 ```
 
@@ -221,8 +221,6 @@ Preferis.app/
 - 署名は内側から順に行い、`--deep` は使わない: ヘルパー内の `.dylib` → 各ヘルパー → `Preferis.app`。最後に
   `codesign --verify --strict` で確かめる。開発中は ad-hoc 署名 (`codesign -s -`)、リリース (M5) では
   `SigningIdentity` プロパティで Developer ID に切り替え、公証 (と hardened runtime) を追加する。
-- Avalonia の依存 (SkiaSharp, HarfBuzzSharp, Avalonia.Native) のネイティブライブラリはユニバーサルで配布されるため、
-  `lipo -thin` で RID のアーキテクチャだけを残す (設定 UI が 36 MB → 26 MB)。
 - 同じ bundle id のバンドルが複数登録されていると URL の配送先が不定になるため、テスト中は `artifacts/`
   の 1 つだけを登録しておく。古い登録は `lsregister -u <path>` で解除する。
 
@@ -416,21 +414,38 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 - **`AppBundleDir` をプロジェクト外に向けない**: SDK 26.5 では、ネストしたライブラリの署名用の引数ファイルが dylib 自体に
   上書きされ、187 バイトのテキストになった。`build/Preferis.Build.proj` は既定の場所に作らせてからコピーする。
 
-### 3.8 設定 UI (`Preferis Settings.app`, Avalonia)
+### 3.8 設定 UI (`Preferis Settings.app`, AppKit)
 
-- `src/Preferis.Settings` を NativeAOT で publish すると、実行ファイル `Preferis.Settings` (17 MB) と Avalonia のネイティブライブラリ 3 つが
-  出力される。`Preferis.Build.proj` がこれを `Contents/MacOS/` にまとめ、`src/Preferis.Settings/macOS/Info.plist` を置いてバンドルにする。
-  コンパイル済みバインディング (`AvaloniaUseCompiledBindingsByDefault`) なので、トリミングの警告なしで動く。
+- `src/Preferis.Settings.MacOS` は Microsoft.macOS (`net10.0-macos`) の AppKit アプリで、ピッカーと同じく SDK が組み立てた
+  `.app` を `Preferis.Build.proj` がコピーする (§3.7)。画面は `Preferis.Settings.Core` の ViewModel の上に AppKit のビューを
+  コードで組む。AppKit には C# のオブジェクトへのバインディングがないため、`Bindings` が `INotifyPropertyChanged` の購読と
+  コントロールのイベントで双方向に結び、ビューを差し替えるときに購読を外す。
+- 見た目はシステム設定に倣う: `NSSplitViewController` のサイドバー、角丸のグループに「左にラベル、右にコントロール」の行を
+  並べたフォーム (`Form`)、ツールバーの Revert / Save、ウィンドウのサブタイトルに未保存とエラー件数。プロファイルとルールは
+  左に一覧 (`ListPane`。ドラッグで並べ替え、下に + − ⋯)、右に選択中の項目の編集画面。
+- ルールの条件は `NSPredicateEditor` (`ConditionEditor`)。左の式 `host` / `url` / `urlCaseSensitive` と演算子 `==` /
+  `BEGINSWITH` / `ENDSWITH` / `CONTAINS` / `LIKE` (wildcard) / `MATCHES` (regex) の `NSPredicate` を `ConditionPredicates` の木に
+  変換する。ポップアップの表示名はテンプレートのビューの項目名を書き換えて変える (エディターは行ごとにそのコピーを使い、
+  項目は元の式と演算子を保持する)。`NSPredicateEditor` は自分自身を `NSRuleEditor` のデリゲートにしているので差し替えず、
+  変更はアクションと `RowsDidChange` 通知、パターンの入力中は `NSControlTextDidChange` 通知で拾う。パターン欄は
+  エディター自身が行の幅に合わせて伸ばす。
 - 自分の場所 (`AppContext.BaseDirectory` から 5 階層上) が `.app` なら、それを `Preferis.app` とみなす。`MacDefaultBrowserRegistrar` に
   そのパスを渡して登録状態を表示し、「既定のブラウザーにする」では `Contents/MacOS/Preferis --register` を実行する。
   `dotnet run` で単体起動した場合は登録できない旨を表示する。
 - ブラウザー検出 (`MacBrowserDetector.DetectBrowsers`)、ブラウザープロファイル列挙、アイコン (`MacApplicationIcons`, 64 px) は起動時に
-  1 回行い、プロファイル画面の更新ボタンでやり直す。フォルダー・ファイルの選択は Avalonia の `StorageProvider` (ネイティブのパネル)。
+  1 回行い、プロファイル画面の「+」メニューの「Detect Browsers Again」でやり直す。フォルダー・ファイルの選択は `NSOpenPanel`、
+  確認は `NSAlert` (どちらもモーダル)。
 - macOS 27 で Chromium のプロファイルデータが読めない場合 (§3.4) は、検出一覧に「フルディスクアクセスを与える」旨を表示する。
 - Launch Services 経由で開いた場合 `HOME` などの環境変数はシェルのものではない。開発中に別の設定で試すときは、
   実行ファイルを直接 `HOME=<dir>` 付きで起動する。
-- `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で各ページ (とルール画面のいくつかの状態) を PNG に書き出して終了する。
+- `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で各ページ (とルール・プロファイル画面のいくつかの状態) を PNG に書き出して終了する。
   `PREFERIS_SETTINGS_SNAPSHOT_URL=<url>` を併せて指定するとテストページでその URL を試した状態を描く。開発用。
+  アプリはアクセサリー (Dock に出ない) として起動し、ウィンドウはデスクトップより後ろのレベルに置くので、画面の見た目も
+  フォーカスも変わらない。キャプチャは `screencapture -l <ウィンドウ番号>` で行う (macOS 26 ではビューのビットマップ描画に
+  スクロールビューの中身が入らず、画面外のウィンドウはキャプチャできない)。起動元 (ターミナルなど) に画面収録の許可が要る。
+- Microsoft.macOS の注意点 (§3.7 に加えて): `NSTableView.Source` を設定した時点で `SelectionDidChange` が呼ばれることがあるので、
+  ハンドラーは組み立て途中のフィールドではなく通知の `Object` からテーブルを取る。`DidFinishLaunching` で投げた例外は AppKit が
+  ログに出して握りつぶし、ウィンドウのないプロセスが残るため、捕まえて終了する。
 - 終了 (⌘Q、AppleScript の quit) は未保存の変更がなければそのまま終わる。`osascript -e 'tell application id
   "net.mayuki.Preferis.Settings" to quit'` は終了したにもかかわらず -128 (ユーザーによるキャンセル) を返すことがある。
 

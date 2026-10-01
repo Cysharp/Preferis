@@ -4,7 +4,7 @@ using System.Runtime.Versioning;
 namespace Preferis.Platform.MacOS;
 
 /// <summary>
-/// Application icons as PNG for UIs that cannot use an NSImage directly (the Avalonia settings UI).
+/// Application icons as PNG, for the settings view models: they are shared with Windows, so they cannot hold an NSImage.
 /// The picker, being AppKit, asks NSWorkspace itself.
 /// </summary>
 [SupportedOSPlatform("macos")]

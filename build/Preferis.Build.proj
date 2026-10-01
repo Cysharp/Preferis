@@ -20,11 +20,10 @@
     <SigningIdentity Condition="'$(SigningIdentity)' == ''">-</SigningIdentity>
     <RouterProject>$(RepoRoot)src/Preferis.Router/Preferis.Router.csproj</RouterProject>
     <PickerProject>$(RepoRoot)src/Preferis.Picker.MacOS/Preferis.Picker.MacOS.csproj</PickerProject>
-    <SettingsProject>$(RepoRoot)src/Preferis.Settings/Preferis.Settings.csproj</SettingsProject>
+    <SettingsProject>$(RepoRoot)src/Preferis.Settings.MacOS/Preferis.Settings.MacOS.csproj</SettingsProject>
     <PublishProperties>Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier)</PublishProperties>
     <PickerBuiltBundle>$(RepoRoot)src/Preferis.Picker.MacOS/bin/$(Configuration)/net10.0-macos/$(RuntimeIdentifier)/Preferis Picker.app</PickerBuiltBundle>
-    <LipoArch Condition="'$(RuntimeIdentifier)' == 'osx-x64'">x86_64</LipoArch>
-    <LipoArch Condition="'$(LipoArch)' == ''">arm64</LipoArch>
+    <SettingsBuiltBundle>$(RepoRoot)src/Preferis.Settings.MacOS/bin/$(Configuration)/net10.0-macos/$(RuntimeIdentifier)/Preferis Settings.app</SettingsBuiltBundle>
   </PropertyGroup>
 
   <!-- `dotnet build` implies a restore of this project; there is nothing to restore here. -->
@@ -36,9 +35,9 @@
   </Target>
 
   <!--
-    Microsoft.macOS assembles and signs the .app itself, under the project's bin folder. It is copied from there:
-    pointing AppBundleDir outside the project made the SDK (26.5) write codesign arguments over the nested
-    libraries instead of signing them.
+    Microsoft.macOS assembles and signs the picker and settings .app itself, under the project's bin folder. They are
+    copied from there: pointing AppBundleDir outside the project made the SDK (26.5) write codesign arguments over the
+    nested libraries instead of signing them.
   -->
   <Target Name="PublishPicker" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
     <MSBuild Projects="$(PickerProject)" Targets="Restore" Properties="$(PublishProperties);MSBuildRestoreSessionId=$([System.Guid]::NewGuid())" />
@@ -46,9 +45,10 @@
     <Error Condition="!Exists('$(PickerBuiltBundle)/Contents/MacOS/Preferis Picker')" Text="The picker bundle was not found at $(PickerBuiltBundle)." />
   </Target>
 
-  <Target Name="PublishSettings">
+  <Target Name="PublishSettings" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
     <MSBuild Projects="$(SettingsProject)" Targets="Restore" Properties="$(PublishProperties);MSBuildRestoreSessionId=$([System.Guid]::NewGuid())" />
-    <MSBuild Projects="$(SettingsProject)" Targets="Publish" Properties="$(PublishProperties);SelfContained=true;PublishAot=true;_IsPublishing=true;PublishDir=$(PublishRoot)Settings/" />
+    <MSBuild Projects="$(SettingsProject)" Targets="Publish" Properties="$(PublishProperties);_IsPublishing=true" />
+    <Error Condition="!Exists('$(SettingsBuiltBundle)/Contents/MacOS/Preferis Settings')" Text="The settings bundle was not found at $(SettingsBuiltBundle)." />
   </Target>
 
   <Target Name="PublishMacOS" DependsOnTargets="PublishRouter;PublishPicker;PublishSettings" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
@@ -56,9 +56,6 @@
       <PickerBundle>$(HelpersDir)Preferis Picker.app</PickerBundle>
       <SettingsBundle>$(HelpersDir)Preferis Settings.app</SettingsBundle>
     </PropertyGroup>
-    <ItemGroup>
-      <_SettingsBinaries Include="$(PublishRoot)Settings/Preferis.Settings;$(PublishRoot)Settings/*.dylib" />
-    </ItemGroup>
 
     <RemoveDir Directories="$(BundleDir)" />
     <MakeDir Directories="$(BundleDir)Contents/MacOS;$(BundleDir)Contents/Resources;$(HelpersDir)" />
@@ -68,19 +65,9 @@
     <Copy SourceFiles="$(RepoRoot)src/Preferis.Router/macOS/Info.plist" DestinationFolder="$(BundleDir)Contents" />
     <WriteLinesToFile File="$(BundleDir)Contents/PkgInfo" Lines="APPL????" Overwrite="true" />
 
-    <!-- Picker: copied as built. `cp -R` keeps the bundle's symlinks and permissions intact. -->
+    <!-- Picker and settings: copied as built. `cp -R` keeps the bundles' symlinks and permissions intact. -->
     <Exec Command="cp -R &quot;$(PickerBuiltBundle)&quot; &quot;$(HelpersDir)&quot;" />
-
-    <!-- Settings: Avalonia publishes a plain executable plus native libraries; they live together in Contents/MacOS. -->
-    <MakeDir Directories="$(SettingsBundle)/Contents/MacOS;$(SettingsBundle)/Contents/Resources" />
-    <Copy SourceFiles="@(_SettingsBinaries)" DestinationFolder="$(SettingsBundle)/Contents/MacOS" />
-    <!-- SkiaSharp, HarfBuzzSharp and Avalonia.Native ship universal libraries; keep only this RID's half (about 10 MB). -->
-    <ItemGroup>
-      <_SettingsLibrary Include="$(SettingsBundle)/Contents/MacOS/*.dylib" />
-    </ItemGroup>
-    <Exec Command="if [ &quot;`lipo -archs '%(_SettingsLibrary.FullPath)'`&quot; != '$(LipoArch)' ]; then lipo '%(_SettingsLibrary.FullPath)' -thin $(LipoArch) -output '%(_SettingsLibrary.FullPath)'; fi" />
-    <Copy SourceFiles="$(RepoRoot)src/Preferis.Settings/macOS/Info.plist" DestinationFolder="$(SettingsBundle)/Contents" />
-    <WriteLinesToFile File="$(SettingsBundle)/Contents/PkgInfo" Lines="APPL????" Overwrite="true" />
+    <Exec Command="cp -R &quot;$(SettingsBuiltBundle)&quot; &quot;$(HelpersDir)&quot;" />
 
     <!-- Sign from the inside out without &#45;&#45;deep: nested libraries, then each helper, then the main bundle. -->
     <ItemGroup>

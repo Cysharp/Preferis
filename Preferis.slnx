@@ -5,7 +5,6 @@
     <Project Path="src/Preferis.Router/Preferis.Router.csproj" />
     <Project Path="src/Preferis.Picker.MacOS/Preferis.Picker.MacOS.csproj" />
     <Project Path="src/Preferis.Settings.Core/Preferis.Settings.Core.csproj" />
-    <Project Path="src/Preferis.Settings/Preferis.Settings.csproj" />
     <Project Path="src/Preferis.Settings.MacOS/Preferis.Settings.MacOS.csproj" />
   </Folder>
   <Folder Name="/test/">

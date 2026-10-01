@@ -149,7 +149,7 @@ Platform 層は単一プロジェクトとし、`OperatingSystem.IsWindows()` �
 | `Preferis --register` / `--unregister` | OS への登録/解除 |
 | `Preferis.Picker` | 標準入力からリクエスト JSON を読み、標準出力に応答 JSON を書く (§9.3) |
 | `Preferis.Picker --request <path>` | リクエストをファイルから読む。単体での動作確認用 |
-| `Preferis.Settings` | 設定 UI |
+| `Preferis Settings.app` / `Preferis.Settings.exe` | 設定 UI |
 
 ### 4.4 ビルドと成果物
 
@@ -168,7 +168,7 @@ artifacts/                 出力先 (.gitignore 対象)
 
 | コマンド | 内容 |
 | --- | --- |
-| `dotnet build build/Preferis.Build.proj -t:PublishMacOS -p:RuntimeIdentifier=osx-arm64` | Router / Picker.MacOS / Settings を NativeAOT で publish し、`Preferis.app` (ヘルパーバンドル込み) を組み立て、ad-hoc 署名する |
+| `dotnet build build/Preferis.Build.proj -t:PublishMacOS -p:RuntimeIdentifier=osx-arm64` | Router / Picker.MacOS / Settings.MacOS を NativeAOT で publish し、`Preferis.app` (ヘルパーバンドル込み) を組み立て、ad-hoc 署名する |
 | `dotnet build build/Preferis.Build.proj -t:PublishWindows -p:RuntimeIdentifier=win-x64` | 3 つの実行ファイルと Windows App SDK の自己完結 DLL を 1 フォルダーにまとめる |
 | `dotnet build build/Preferis.Build.proj -t:PublishMacOS -p:SigningIdentity="Developer ID Application: ..." -p:Notarize=true` | M5 で追加するリリース用。ad-hoc 署名を Developer ID に置き換え、公証まで行う |
 
@@ -419,12 +419,13 @@ Chromium 系のプロファイルディレクトリ名 (`Default`, `Profile 1`) 
 
 ### 9.1 設定 UI (`Preferis.Settings`)
 
-Avalonia (Fluent テーマ) のシングルウィンドウ、左にナビゲーション、右にコンテンツ。
+シングルウィンドウ、左にナビゲーション、右にコンテンツ。画面は OS ごとにネイティブで作り (macOS: AppKit でシステム設定に倣う、
+Windows: WinUI 3 (M4))、ViewModel とサービス (`Preferis.Settings.Core`) を共有する。
 
 | ページ | 内容 |
 | --- | --- |
-| プロファイル | プロファイル一覧 / 追加・編集・削除 / デフォルト指定。「検出されたブラウザー」パネルから 1 クリックでプロファイル化。ブラウザープロファイルは検出結果のドロップダウンから選択。プライベートモード、追加引数、OS 別上書き、フォールバック |
-| ルール | 順序付きリスト (ドラッグ並べ替え、有効/無効トグル、複製)。ルールエディターは条件ツリー (グループ追加、リーフの対象/一致種別/パターン入力) とアクション列エディター。末尾にキャッチオールルール (固定) |
+| プロファイル | プロファイル一覧 / 追加・編集・削除 / デフォルト指定。一覧の「+」メニューに並ぶ検出したブラウザーから 1 クリックでプロファイル化。ブラウザープロファイルは検出結果のドロップダウンから選択。プライベートモード、追加引数、OS 別上書き、フォールバック |
+| ルール | 順序付きリスト (ドラッグ並べ替え、有効/無効トグル、複製)。ルールエディターは条件ツリー (macOS は NSPredicateEditor) とアクション列エディター。末尾にキャッチオールルール (固定) |
 | テスト | URL を入力すると、評価の過程 (どのルールがどう判定され、どの URL に書き換わり、どのプロファイルに解決されたか) を表示する。`--dry-run` と同じエンジンを使う |
 | 一般 | 設定ファイルの場所 (「クラウドストレージへ移動」)、OS への登録状態と「既定のブラウザーに設定」ボタン、ピッカーの動作、ログと履歴の有無、言語 |
 
@@ -446,8 +447,11 @@ M3 での実装の要点:
   Chromium は `directory` / `name` / `email` をすべて、Firefox は `name` を保存する。最初に作ったプロファイルが既定になる。
   削除時に参照 (既定、フォールバック、`open` アクション) があれば一覧を示して確認し、参照も取り除く。
   コマンドで `.app` を選ぶと `/usr/bin/open -a <app> {url}` に変換する。
-- **ルール**: 並べ替えはボタン (↑↓) で行う。ドラッグ並べ替えは未実装。条件ツリーの `not` は独立した階層ではなく
-  各ノードの「Not」チェックとして表示する (`not not x` は `x` に畳まれる)。`open` は全プロファイルのチェックリストで、
+- **ルール**: 並べ替えはドラッグか「⋯」メニュー。キャッチオールは一覧の下の別枠に固定。条件は Mail のルールと同じ形の
+  エディター (macOS は NSPredicateEditor) で、根は常に「All / Any / None of the following are true」の行になる。
+  `ConditionPredicates` が条件木とエディターの木を相互変換する: `not` は「None of」(`not (a or b)`) で表し、
+  行が 1 つだけの All / Any は保存時にその行に畳む (単純なルールは単純なまま)。`url` の `ignoreCase: false` は
+  「URL (case-sensitive)」という別の対象として表す。空にした条件は「条件なし」(決してマッチしない)。`open` は全プロファイルのチェックリストで、
   チェックした順がピッカーの並び順になる。存在しない ID は「(missing)」として外すまで残す。未知の条件・アクションは
   読み取り専用で表示し、そのまま書き戻す。
 - **テスト**: 編集中 (未保存を含む) の設定でルーティングし、各候補がこのマシンで実際に何を実行するか
@@ -653,7 +657,7 @@ Windows 対応で追加するのは Platform の Windows 実装、Router の Win
 | M0 | スパイク (§12 の macOS 項目 1〜5) と計測方法の確立 | macOS 起動経路とピッカー構成の方式が確定している | 完了 (2026-10-01)。残件はヘルパーのネスト配置時の再確認で、M2 で行う。`tools/bench` は測る対象の Router ができる M2 で作る |
 | M1 | Core: 設定モデル、JSON、条件、ルーティング、プロファイル解決、IPC メッセージ、`--dry-run` | ユニットテストで §6〜§7 の仕様を網羅。`--dry-run` で設定ファイルの評価結果を確認できる | 完了 (2026-10-01)。`Preferis.Core` + 111 テスト、`Preferis.Router` は `--dry-run` のみ。NativeAOT publish 確認済み |
 | M2 | macOS Platform + Router 高速経路: Launch Services 検出、プロファイル列挙、LaunchPlan 実行、既定ブラウザー登録、Apple Event 受信。**`PublishMacOS` ターゲットで ad-hoc 署名済みの `Preferis.app` 一式を生成** | `artifacts/` の `Preferis.app` を既定ブラウザーにし、単一候補のルールで日常利用できる | 完了 (2026-10-01)。`open -a` 経由と argv 経由で Chrome / Edge Dev への振り分けを確認。既定ブラウザー化は `--register` をユーザーが実行して確認する。ピッカー不在時は既定プロファイルへフォールバック。Platform.md §5 に計測値 |
-| M3 | macOS ピッカー (AppKit, ヘルパーバンドル) + 設定 UI (AppKit)。両者を `Preferis.app` に同梱 | macOS で全機能が揃い、設定ファイルを手で編集せずに運用できる | 設定 UI を AppKit で作り直し中 (2026-10-01)。それ以前の状態: 実装完了、目視確認待ち。`Preferis Picker.app` (AppKit, NativeAOT, 4.6 MB) と `Preferis Settings.app` (Avalonia 12, NativeAOT, 26 MB) を `Contents/Helpers/` に同梱し内側から署名。Router 経由でピッカー表示まで 120 ms、「記憶する」、オプトイン履歴、`Preferis.app` を直接開くと設定 UI。テスト 333 件 (Core 221, Platform 28, Settings 84)。描画は PNG 書き出しで確認済みだが、実際のリンククリックからのピッカーの前面表示と設定 UI の手操作は開発者の目視確認が必要。未実装: UI の日本語化、ルールのドラッグ並べ替え、アプリアイコン |
+| M3 | macOS ピッカー (AppKit, ヘルパーバンドル) + 設定 UI (AppKit)。両者を `Preferis.app` に同梱 | macOS で全機能が揃い、設定ファイルを手で編集せずに運用できる | 実装完了、目視確認待ち (2026-10-02)。`Preferis Picker.app` (6.8 MB) と `Preferis Settings.app` (8.7 MB。Avalonia 版 26 MB から AppKit に置き換え) はどちらも AppKit + NativeAOT で、`Contents/Helpers/` に同梱し内側から署名 (`Preferis.app` 全体で 20 MB)。Router 経由でピッカー表示まで 120 ms、「記憶する」、オプトイン履歴、`Preferis.app` を直接開くと設定 UI。テスト 367 件 (Core 221, Platform 35, Settings.Core 111)。描画はウィンドウのキャプチャで確認済みだが、実際のリンククリックからのピッカーの前面表示と設定 UI の手操作は開発者の目視確認が必要。未実装: UI の日本語化、アプリアイコン |
 | M4 | Windows: スパイク (§12 の 6〜9)、Platform の Windows 実装、Router の Windows 経路、WinUI 3 ピッカー、WinUI 3 の設定 UI (`Preferis.Settings.Core` の ViewModel を使う)。**`PublishWindows` ターゲットで exe 一式のフォルダーを生成** | `artifacts/` の `Preferis.exe` を既定ブラウザーにし、M3 と同等の機能が揃う。同一の設定ファイルを両 OS で共有できる | 未着手 |
 | M5 | リリース: Developer ID 署名と公証、インストーラー (macOS: dmg / Homebrew cask、Windows: zip / winget 等)、ベンチ結果の記録、利用者向けドキュメント | 配布物を第三者が導入できる | 未着手 |
 

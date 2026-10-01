@@ -2,6 +2,8 @@
 
   <PropertyGroup>
     <RootNamespace>Preferis.Platform</RootNamespace>
+    <!-- Direct Objective-C runtime calls (function pointers, blocks) on macOS. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>Preferis platform layer: browser detection, profile enumeration, process launching, OS registration and URL reception for Windows and macOS.</Description>
   </PropertyGroup>
 

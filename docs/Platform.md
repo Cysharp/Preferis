@@ -6,23 +6,36 @@ Windows / macOS それぞれで必要な登録、検出、起動、実行ファ�
 
 ## 1. Platform 層のインターフェース
 
+抽象は `Preferis.Core.Hosting` (と `Preferis.Core.Browsers`) にあり、Platform 層はその実装だけを持ちます。
+Router のオーケストレーション (`RoutingService`) もフェイクでテストできるよう Core にあります。
+
 ```
-IAppPaths                   local.json / 既定 config.json / ログ / キャッシュ / 同梱実行ファイルの場所
-IBrowserDetector            DetectBrowsers() -> DetectedBrowser[]
-                            TryResolve(browserId) -> DetectedBrowser?       // 高速経路用 (1 件だけ)
-IBrowserProfileEnumerator   Enumerate(DetectedBrowser) -> BrowserProfileInfo[]
-IBrowserLauncher            Launch(LaunchPlan)
-ISystemOpener               OpenWithSystemDefault(Uri)                      // `system` アクション
-                            IsSelfDefaultHandler(scheme) -> bool            // ループ検出
-IDefaultBrowserRegistrar    Register() / Unregister() / GetStatus() / OpenSystemSettings()
-IPickerLauncher             Show(PickerRequest) -> PickerResponse?          // ピッカーを子プロセスで起動 (Design.md §9.3)
-IMessageBox                 ShowError(title, message, url)                  // 最終フォールバック。UI フレームワーク不要
-IUrlActivationSource        URL の受信 (argv / Apple Event)。Design.md §5.3 参照
+Preferis.Core.Configuration.ConfigPaths / ConfigLoader (IConfigStore)
+    local.json / 既定 config.json / ログの場所。読み込みは決して例外を投げず、壊れていれば既定 + エラー文字列
+Preferis.Core.Browsers.IBrowserLocator        TryResolve(browserId) -> DetectedBrowser?   高速経路用 (1 件だけ)
+Preferis.Core.Hosting.IBrowserDetector        : IBrowserLocator + DetectBrowsers()         設定 UI とフォールバック用
+Preferis.Core.Browsers.IBrowserProfileEnumerator  Enumerate(browser) -> list | null (読めない)
+Preferis.Core.Hosting.IBrowserLauncher        Launch(LaunchPlan)
+Preferis.Core.Hosting.ISystemOpener           IsSelfDefaultHandler(scheme) / OpenWithSystemDefault(url)
+Preferis.Core.Hosting.IPickerLauncher         Show(PickerRequest) -> PickerResponse?       子プロセス (Design.md §9.3)
+Preferis.Core.Hosting.IUserNotifier           ShowError(title, message, url)               最終フォールバック
+Preferis.Core.Hosting.IDefaultBrowserRegistrar GetStatus / Register / Unregister / OpenSystemSettings
+Preferis.Core.Hosting.IRoutingLog             Write(level, message)
 ```
 
-`IPickerLauncher` の実装は共通で、同梱されたピッカー実行ファイルのパスだけが OS ごとに異なります
-(`IAppPaths.PickerExecutable`)。起動に失敗した場合や応答が解釈できない場合は `null` を返し、
-Router がフォールバックします。
+| 実装 (Preferis.Platform) | OS | 備考 |
+| --- | --- | --- |
+| `Browsers.BrowserProfileEnumerator` | 共通 | `ChromiumLocalStateReader` / `FirefoxProfilesIniReader` を使う。読めなければ null |
+| `Launching.LaunchPlanExecutor` | 共通 | `ProcessStartInfo.ArgumentList` に要素単位で渡す。macOS の `OpenWithApplication` は `open -a` |
+| `Launching.ProcessPickerLauncher` | 共通 | stdin/stdout JSON、タイムアウト、stderr をログへ転送。実行ファイルが無ければ null |
+| `MacOS.MacBrowserDetector` | macOS | `NSWorkspace` の bundle id 解決と https ハンドラー列挙 |
+| `MacOS.MacSystemOpener` | macOS | 既定ハンドラーの bundle id を自分と比較。委譲は `open <url>` |
+| `MacOS.MacDefaultBrowserRegistrar` | macOS | `LSRegisterURL` + `setDefaultApplicationAtURL:toOpenURLsWithScheme:completionHandler:` (ブロック) 。失敗時は `LSSetDefaultHandlerForURLScheme` |
+| `MacOS.MacUrlActivationSource` | macOS | NSApplication + `application:openURLs:` デリゲート (スパイク 1 の製品版) |
+| `MacOS.MacUserNotifier` | macOS | 暫定で `osascript` の `display dialog` (「Copy URL」ボタンつき)。後で NSAlert に置換可 |
+| `MacOS.ObjC` | macOS | objc ランタイム / Foundation / AppKit / Launch Services への最小限の P/Invoke。グローバルブロック生成を含む |
+
+Router 実行ファイル (`Preferis.Router`) は `RouterHost` でこれらを配線し、`FileLog` でログを書きます。
 
 ## 2. Windows
 
@@ -315,7 +328,9 @@ Preferis は `LSUIElement` なので、起動したブラウザーが前面に�
 ### 3.6 Router の URL 受信
 
 Router は UI フレームワークを持たないため、Apple Event を受けるための最小限の AppKit 呼び出しを
-objc ランタイム経由で自前で行います。
+objc ランタイム経由で自前で行います (`MacUrlActivationSource`)。Launch Services から起動されたかどうかは
+LS が設定する環境変数 `__CFBundleIdentifier` の有無で判定し、シェルから URL を引数に起動された場合は
+NSApplication を使わずその場で処理します。
 
 1. `objc_allocateClassPair(NSObject, "PreferisAppDelegate")` でデリゲートクラスを作り、
    `application:openURLs:` と `applicationDidFinishLaunching:` を `class_addMethod` で登録する。
@@ -323,8 +338,11 @@ objc ランタイム経由で自前で行います。
 2. `[NSApplication sharedApplication]` → `setDelegate:` → `run`。
 3. `application:openURLs:` で受け取った `NSArray<NSURL>` を列挙し、`absoluteString` → `UTF8String` で
    文字列化して URL ごとにルーティングを開始する。Finder から `.html` を開いた場合は `file://` URL が届く。
-4. 処理中の URL 件数をカウントし、ピッカー待ちを含めてすべて完了したら `terminate:` を呼ぶ。
-   処理中に次のイベントが届いた場合は同じプロセスで並行して処理する。
+4. 処理中の URL 件数をカウントし、ピッカー待ちを含めてすべて完了したら 300 ms の猶予の後に
+   `performSelectorOnMainThread:` 経由で `terminate:` を呼ぶ。URL ごとの処理はスレッドプールで行い、
+   ランループは次のイベントを受け続ける。
+5. `applicationDidFinishLaunching:` から 750 ms 以内に URL が届かなければ「アプリ自体が開かれた」とみなす。
+   設定 UI (M3) ができるまでは何もせず終了する。
 
 スパイク 1 (`spikes/UrlActivation`) でこの手順どおりに動作することを確認しました。必要な objc 呼び出しは
 `objc_getClass`, `sel_registerName`, `objc_allocateClassPair`, `class_addMethod`, `objc_registerClassPair` と
@@ -365,6 +383,19 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 計測結果は本書末尾に記録し、Design.md §5.2 の目標値と比較します。
 
 ## 5. 計測記録
+
+### 2026-10-01 M2: Router 実機確認 (`artifacts/osx-arm64/Preferis.app`, NativeAOT 5.0 MB, ad-hoc 署名)
+
+| 経路 | 結果 |
+| --- | --- |
+| シェルから `Preferis https://www.example.com/` | Chrome を直接起動。プロセス全体 32 ms (wall)、ルーティング〜起動呼び出し 19.8 ms |
+| `open -a Preferis.app https://www.example.com/` | Apple Event で受信し Chrome を起動。受信後 7.4 ms |
+| `open -a Preferis.app https://login.microsoftonline.com/` (2 候補) | ピッカー実行ファイル不在を警告し、既定プロファイル Edge Dev へフォールバック。受信後 26 ms |
+| `--status` | LS への登録 yes、既定ブラウザーは Edge Dev、設定ファイルの場所とプロファイル/ルール数を表示 |
+
+いずれも処理後にプロセスが残らないことを確認。既定ブラウザー化 (`--register`) は OS の確認ダイアログを伴うため
+ユーザー操作で行う。
+
 
 ### 2026-10-01 スパイク 1: macOS Router の URL 受信 (`spikes/UrlActivation`)
 

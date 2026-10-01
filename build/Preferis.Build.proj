@@ -1,0 +1,42 @@
+<Project DefaultTargets="PublishMacOS">
+
+  <!--
+    Orchestrates `dotnet publish` of the executables and assembles the distributable artifacts
+    (docs/Design.md §4.4). Only `dotnet` is required.
+
+      dotnet build build/Preferis.Build.proj -t:PublishMacOS -p:RuntimeIdentifier=osx-arm64
+      dotnet build build/Preferis.Build.proj -t:PublishMacOS -p:SigningIdentity="Developer ID Application: ..."
+  -->
+
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">osx-arm64</RuntimeIdentifier>
+    <RepoRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..'))</RepoRoot>
+    <ArtifactsDir>$(RepoRoot)artifacts/$(RuntimeIdentifier)/</ArtifactsDir>
+    <PublishRoot>$(ArtifactsDir)publish/</PublishRoot>
+    <BundleDir>$(ArtifactsDir)Preferis.app/</BundleDir>
+    <!-- "-" is ad-hoc signing for local testing; release builds pass a Developer ID (M5). -->
+    <SigningIdentity Condition="'$(SigningIdentity)' == ''">-</SigningIdentity>
+    <RouterProject>$(RepoRoot)src/Preferis.Router/Preferis.Router.csproj</RouterProject>
+  </PropertyGroup>
+
+  <!-- `dotnet build` implies a restore of this project; there is nothing to restore here. -->
+  <Target Name="Restore" />
+
+  <Target Name="PublishRouter">
+    <MSBuild Projects="$(RouterProject)" Targets="Restore" Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);MSBuildRestoreSessionId=$([System.Guid]::NewGuid())" />
+    <MSBuild Projects="$(RouterProject)" Targets="Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=true;PublishAot=true;_IsPublishing=true;PublishDir=$(PublishRoot)Router/" />
+  </Target>
+
+  <Target Name="PublishMacOS" DependsOnTargets="PublishRouter" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <RemoveDir Directories="$(BundleDir)" />
+    <MakeDir Directories="$(BundleDir)Contents/MacOS;$(BundleDir)Contents/Resources;$(BundleDir)Contents/Helpers" />
+    <Copy SourceFiles="$(PublishRoot)Router/Preferis" DestinationFolder="$(BundleDir)Contents/MacOS" />
+    <Copy SourceFiles="$(RepoRoot)src/Preferis.Router/macOS/Info.plist" DestinationFolder="$(BundleDir)Contents" />
+    <WriteLinesToFile File="$(BundleDir)Contents/PkgInfo" Lines="APPL????" Overwrite="true" />
+    <!-- Helpers (picker, settings) are signed first and nested here from M3 on. -->
+    <Exec Command="codesign --force --sign &quot;$(SigningIdentity)&quot; &quot;$(BundleDir)&quot;" />
+    <Message Importance="high" Text="Preferis.app: $(BundleDir)" />
+  </Target>
+
+</Project>

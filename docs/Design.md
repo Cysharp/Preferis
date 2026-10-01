@@ -105,9 +105,11 @@ Guidelines の `src` / `test` 構成に従います。
 Preferis.slnx
 src/
   Preferis.Core/              設定モデル、JSON シリアライズ、条件マッチャー、ルーティングエンジン、
-                              プロファイル解決、ピッカー IPC メッセージ。OS・UI 非依存。
-  Preferis.Platform/          IBrowserDetector / IBrowserLauncher / IDefaultBrowserRegistrar /
-                              IPickerLauncher / IAppPaths の抽象と Windows / macOS 実装。
+                              プロファイル解決、ピッカー IPC メッセージ、Router の実行時オーケストレーション
+                              (RoutingService とフォールバック連鎖)、Platform 層が実装する抽象
+                              (Hosting 名前空間)。OS・UI 非依存。
+  Preferis.Platform/          Core の抽象の Windows / macOS 実装: ブラウザー検出、プロファイル列挙、
+                              プロセス起動、ピッカー起動、OS 登録、URL 受信。
   Preferis.Router/            Router 実行ファイル (AssemblyName=Preferis)。net10.0。
                               macOS の Apple Event 受信 (objc 直接呼び出し) を含む。
   Preferis.Picker.Windows/    WinUI 3。net10.0-windows10.0.xxxxx。Windows でのみビルド。
@@ -133,8 +135,10 @@ Platform 層は単一プロジェクトとし、`OperatingSystem.IsWindows()` �
 
 | 起動 | 動作 |
 | --- | --- |
-| `Preferis <url>` | Router。OS シェルからの起動。最速経路 |
-| `Preferis` (引数なし) | `Preferis.Settings` を起動して終了 |
+| `Preferis <url> [<url> ...]` | Router。Windows では OS シェルからの起動 (最速経路)。macOS でもシェルから直接渡せる |
+| `Preferis` (引数なし、Launch Services から起動) | macOS。NSApplication を起動し、Apple Event で届く URL を処理して終了する |
+| `Preferis` (引数なし、シェルから) | 使い方を表示。将来は `Preferis.Settings` を起動 |
+| `Preferis --status` | OS への登録状態、既定ブラウザー、設定ファイルの場所を表示 |
 | `Preferis --dry-run <url> [--config <path>]` | 設定を読み、ルーティングの過程 (トレース) と決定、候補プロファイルを標準出力に表示して終了 (起動しない)。デバッグ・テスト用。終了コードは決定できれば 0、失敗なら 2 |
 | `Preferis --register` / `--unregister` | OS への登録/解除 |
 | `Preferis.Picker` | 標準入力からリクエスト JSON を読み、標準出力に応答 JSON を書く (§9.3) |
@@ -566,6 +570,7 @@ Windows:
 | 2026-10-01 | ブラウザー起動と設定ファイル書き込みは Router に集約 | 副作用を 1 か所にまとめる。ピッカーは純粋な UI |
 | 2026-10-01 | `.app` / `.exe` 一式を作るビルドは各 OS の最初のマイルストーン (M2 / M4) に含める。M5 に残すのは Developer ID 署名、公証、インストーラー、ドキュメント整備のみ | ローカル・内部テストで常に最終形の成果物を使えるようにする。配布形態だけがリリース段階の関心事 |
 | 2026-10-01 | macOS で先に機能を完成させ、Windows 対応はその後に行う | 開発環境が macOS であり、Apple Event 受信やヘルパーバンドルなど macOS 固有のリスクを早期に潰す。Core と設定 UI は OS 非依存なので Windows 対応は Platform と ピッカーの追加で済む |
+| 2026-10-01 | Platform 層が実装する抽象 (ブラウザー検出、起動、ピッカー、通知、登録) は Core の `Hosting` 名前空間に置き、Router のオーケストレーション (`RoutingService`) も Core に置く | フォールバック連鎖をフェイクでテストできるようにする。Platform は実装だけを持つ |
 | 2026-10-01 | ブラウザー ID はカタログの既知 ID のみ。チャネル (Stable / Beta / Dev / Canary) は別 ID とし、同系統の別チャネルで開くフォールバックは設けない | チャネルごとにプロファイルが別物であり、暗黙に別チャネルで開くと意図から外れる。マシン差は OS ごとの指定と `fallback` で明示する |
 
 ## 14. マイルストーンと現在の状態
@@ -579,7 +584,7 @@ Windows 対応で追加するのは Platform の Windows 実装、Router の Win
 | --- | --- | --- | --- |
 | M0 | スパイク (§12 の macOS 項目 1〜5) と計測方法の確立 | macOS 起動経路とピッカー構成の方式が確定している | 完了 (2026-10-01)。残件はヘルパーのネスト配置時の再確認で、M2 で行う。`tools/bench` は測る対象の Router ができる M2 で作る |
 | M1 | Core: 設定モデル、JSON、条件、ルーティング、プロファイル解決、IPC メッセージ、`--dry-run` | ユニットテストで §6〜§7 の仕様を網羅。`--dry-run` で設定ファイルの評価結果を確認できる | 完了 (2026-10-01)。`Preferis.Core` + 111 テスト、`Preferis.Router` は `--dry-run` のみ。NativeAOT publish 確認済み |
-| M2 | macOS Platform + Router 高速経路: Launch Services 検出、プロファイル列挙、LaunchPlan 実行、既定ブラウザー登録、Apple Event 受信。**`PublishMacOS` ターゲットで ad-hoc 署名済みの `Preferis.app` 一式を生成** | `artifacts/` の `Preferis.app` を既定ブラウザーにし、単一候補のルールで日常利用できる | 未着手 |
+| M2 | macOS Platform + Router 高速経路: Launch Services 検出、プロファイル列挙、LaunchPlan 実行、既定ブラウザー登録、Apple Event 受信。**`PublishMacOS` ターゲットで ad-hoc 署名済みの `Preferis.app` 一式を生成** | `artifacts/` の `Preferis.app` を既定ブラウザーにし、単一候補のルールで日常利用できる | 完了 (2026-10-01)。`open -a` 経由と argv 経由で Chrome / Edge Dev への振り分けを確認。既定ブラウザー化は `--register` をユーザーが実行して確認する。ピッカー不在時は既定プロファイルへフォールバック。Platform.md §5 に計測値 |
 | M3 | macOS ピッカー (AppKit, ヘルパーバンドル) + 設定 UI (Avalonia, macOS で検証)。両者を `Preferis.app` に同梱 | macOS で全機能が揃い、設定ファイルを手で編集せずに運用できる | 未着手 |
 | M4 | Windows: スパイク (§12 の 6〜9)、Platform の Windows 実装、Router の Windows 経路、WinUI 3 ピッカー、設定 UI の Windows 検証。**`PublishWindows` ターゲットで exe 一式のフォルダーを生成** | `artifacts/` の `Preferis.exe` を既定ブラウザーにし、M3 と同等の機能が揃う。同一の設定ファイルを両 OS で共有できる | 未着手 |
 | M5 | リリース: Developer ID 署名と公証、インストーラー (macOS: dmg / Homebrew cask、Windows: zip / winget 等)、ベンチ結果の記録、利用者向けドキュメント | 配布物を第三者が導入できる | 未着手 |

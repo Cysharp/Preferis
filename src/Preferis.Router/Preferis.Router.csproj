@@ -11,6 +11,11 @@
 
   <ItemGroup>
     <ProjectReference Include="../Preferis.Core/Preferis.Core.csproj" />
+    <ProjectReference Include="../Preferis.Platform/Preferis.Platform.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="macOS/Info.plist" />
   </ItemGroup>
 
 </Project>

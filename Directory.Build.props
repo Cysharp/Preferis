@@ -11,6 +11,7 @@
     <AnalysisLevel>latest</AnalysisLevel>
     <InvariantGlobalization>true</InvariantGlobalization>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <Version>0.1.0</Version>
     <Authors>Mayuki Sawatari</Authors>
     <Product>Preferis</Product>
   </PropertyGroup>

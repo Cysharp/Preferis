@@ -35,6 +35,23 @@ public sealed class ConfigLoader : IConfigStore
 
     public ConfigLoadResult Load() => Load(configPathOverride: null);
 
+    /// <summary>Reads <c>local.json</c> only (machine settings such as the log level). A broken or missing file yields defaults.</summary>
+    public LocalConfig LoadLocal()
+    {
+        if (!File.Exists(_paths.LocalConfigPath))
+        {
+            return new LocalConfig();
+        }
+        try
+        {
+            return ConfigSerializer.DeserializeLocal(File.ReadAllText(_paths.LocalConfigPath));
+        }
+        catch (Exception ex) when (ex is JsonException or IOException)
+        {
+            return new LocalConfig();
+        }
+    }
+
     /// <param name="configPathOverride">Explicit <c>config.json</c> path (e.g. from <c>--config</c>), bypassing <c>local.json</c> redirection.</param>
     public ConfigLoadResult Load(string? configPathOverride)
     {

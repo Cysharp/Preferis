@@ -91,3 +91,24 @@ public enum HandleOutcome
 
 /// <param name="ProfileId">The profile that was launched, or <c>browser:&lt;id&gt;</c> for a detected browser without a profile.</param>
 public sealed record HandleResult(HandleOutcome Outcome, string? ProfileId, string Summary);
+
+/// <summary>Registration of Preferis as a browser with the OS (docs/Platform.md §2.2 / §3.2).</summary>
+public interface IDefaultBrowserRegistrar
+{
+    RegistrationStatus GetStatus();
+
+    /// <summary>Registers Preferis and asks the OS to make it the default browser (the OS may ask the user to confirm).</summary>
+    RegistrationResult Register();
+
+    RegistrationResult Unregister();
+
+    /// <summary>Opens the OS page where the user picks the default browser.</summary>
+    void OpenSystemSettings();
+}
+
+/// <param name="IsRegistered">Preferis is known to the OS as a browser.</param>
+/// <param name="IsDefault">Preferis is the default handler for http and https.</param>
+/// <param name="CurrentDefault">Display name or path of the current default handler, when known.</param>
+public sealed record RegistrationStatus(bool IsRegistered, bool IsDefault, string? CurrentDefault);
+
+public sealed record RegistrationResult(bool Succeeded, string Message);

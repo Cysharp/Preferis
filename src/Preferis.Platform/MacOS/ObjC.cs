@@ -64,7 +64,9 @@ internal static unsafe partial class ObjC
     public static IntPtr Send(IntPtr receiver, string selector) => objc_msgSend(receiver, Sel(selector));
     public static IntPtr Send(IntPtr receiver, string selector, IntPtr arg) => objc_msgSend(receiver, Sel(selector), arg);
     public static IntPtr Send(IntPtr receiver, string selector, IntPtr arg1, IntPtr arg2) => objc_msgSend(receiver, Sel(selector), arg1, arg2);
+    public static IntPtr Send(IntPtr receiver, string selector, IntPtr arg1, IntPtr arg2, IntPtr arg3) => objc_msgSend(receiver, Sel(selector), arg1, arg2, arg3);
     public static IntPtr Send(IntPtr receiver, string selector, nuint arg) => objc_msgSend_nuint(receiver, Sel(selector), arg);
+    public static IntPtr Send(IntPtr receiver, string selector, nuint arg1, IntPtr arg2) => objc_msgSend_nuint(receiver, Sel(selector), arg1, arg2);
     public static IntPtr Send(IntPtr receiver, string selector, int arg) => objc_msgSend_int(receiver, Sel(selector), arg);
     public static nuint SendNUInt(IntPtr receiver, string selector) => objc_msgSend_ret_nuint(receiver, Sel(selector));
     public static nint SendNInt(IntPtr receiver, string selector) => objc_msgSend_ret_nint(receiver, Sel(selector));
@@ -233,7 +235,13 @@ internal static unsafe partial class ObjC
     private static partial IntPtr objc_msgSend(IntPtr receiver, IntPtr selector, IntPtr arg1, IntPtr arg2);
 
     [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
+    private static partial IntPtr objc_msgSend(IntPtr receiver, IntPtr selector, IntPtr arg1, IntPtr arg2, IntPtr arg3);
+
+    [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
     private static partial IntPtr objc_msgSend_nuint(IntPtr receiver, IntPtr selector, nuint arg);
+
+    [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
+    private static partial IntPtr objc_msgSend_nuint(IntPtr receiver, IntPtr selector, nuint arg1, IntPtr arg2);
 
     [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
     private static partial IntPtr objc_msgSend_int(IntPtr receiver, IntPtr selector, int arg);

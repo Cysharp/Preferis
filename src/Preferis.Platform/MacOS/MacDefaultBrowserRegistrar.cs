@@ -17,12 +17,29 @@ public sealed unsafe class MacDefaultBrowserRegistrar : IDefaultBrowserRegistrar
     private static readonly ManualResetEventSlim Completed = new(false);
     private static string? _completionError;
 
+    private readonly string? _appPath;
+
+    /// <param name="appPath">The <c>Preferis.app</c> bundle; null when not running from one (e.g. <c>dotnet run</c>).</param>
+    public MacDefaultBrowserRegistrar(string? appPath)
+    {
+        _appPath = appPath is not null && appPath.EndsWith(".app", StringComparison.Ordinal) && Directory.Exists(appPath) ? appPath : null;
+    }
+
+    /// <summary>For the Router, whose own bundle is <c>Preferis.app</c>.</summary>
+    public static MacDefaultBrowserRegistrar ForMainBundle()
+    {
+        using var pool = ObjC.AutoreleasePool();
+        return new MacDefaultBrowserRegistrar(ObjC.MainBundlePath);
+    }
+
+    public string? AppPath => _appPath;
+
     public RegistrationStatus GetStatus()
     {
         using var pool = ObjC.AutoreleasePool();
-        var selfPath = ObjC.MainBundlePath;
-        var selfId = ObjC.MainBundleIdentifier;
-        if (selfPath is null || !selfPath.EndsWith(".app", StringComparison.Ordinal))
+        var selfPath = _appPath;
+        var selfId = selfPath is null ? null : ObjC.BundleIdentifier(ObjC.BundleWithPath(selfPath));
+        if (selfPath is null)
         {
             return new RegistrationStatus(false, false, null);
         }
@@ -44,9 +61,9 @@ public sealed unsafe class MacDefaultBrowserRegistrar : IDefaultBrowserRegistrar
     public RegistrationResult Register()
     {
         using var pool = ObjC.AutoreleasePool();
-        var selfPath = ObjC.MainBundlePath;
-        var selfId = ObjC.MainBundleIdentifier;
-        if (selfPath is null || selfId is null || !selfPath.EndsWith(".app", StringComparison.Ordinal))
+        var selfPath = _appPath;
+        var selfId = selfPath is null ? null : ObjC.BundleIdentifier(ObjC.BundleWithPath(selfPath));
+        if (selfPath is null || selfId is null)
         {
             return new RegistrationResult(false, "Registration must run from inside Preferis.app (see docs/Design.md §4.4).");
         }
@@ -58,22 +75,20 @@ public sealed unsafe class MacDefaultBrowserRegistrar : IDefaultBrowserRegistrar
             return new RegistrationResult(false, $"LSRegisterURL failed with status {status}.");
         }
 
-        foreach (var scheme in Schemes)
-        {
-            var error = SetDefault(bundleUrl, scheme, selfId);
-            if (error is not null)
-            {
-                return new RegistrationResult(false, $"Could not become the default handler for {scheme}: {error}");
-            }
-        }
-
-        return new RegistrationResult(true, "Preferis is registered. macOS may have asked you to confirm the default browser change.");
+        var failure = DefaultHandlerRequest.Run(
+            Schemes,
+            scheme => IsDefaultHandler(scheme, selfId),
+            scheme => RequestDefault(bundleUrl, scheme),
+            scheme => ObjC.SetDefaultHandlerForScheme(scheme, selfId));
+        return failure is null
+            ? new RegistrationResult(true, "Preferis is the default browser.")
+            : new RegistrationResult(false, failure);
     }
 
     public RegistrationResult Unregister()
     {
-        var selfPath = ObjC.MainBundlePath;
-        if (selfPath is null || !selfPath.EndsWith(".app", StringComparison.Ordinal))
+        var selfPath = _appPath;
+        if (selfPath is null)
         {
             return new RegistrationResult(false, "Unregistration must run from inside Preferis.app.");
         }
@@ -96,8 +111,15 @@ public sealed unsafe class MacDefaultBrowserRegistrar : IDefaultBrowserRegistrar
         using var process = Process.Start(info);
     }
 
-    /// <summary>Uses the macOS 12 API with a completion block; falls back to the deprecated LS call when it fails.</summary>
-    private static string? SetDefault(IntPtr bundleUrl, string scheme, string selfId)
+    private static bool IsDefaultHandler(string scheme, string selfId)
+    {
+        using var pool = ObjC.AutoreleasePool();
+        var handler = ObjC.DefaultApplicationPathForUrl($"{scheme}://example.com/");
+        return handler is not null && string.Equals(ObjC.BundleIdentifier(ObjC.BundleWithPath(handler)), selfId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The macOS 12 API; the system shows a confirmation dialog. Returns the completion error, or null.</summary>
+    private static string? RequestDefault(IntPtr bundleUrl, string scheme)
     {
         Completed.Reset();
         _completionError = null;
@@ -105,18 +127,8 @@ public sealed unsafe class MacDefaultBrowserRegistrar : IDefaultBrowserRegistrar
         var block = ObjC.CreateGlobalBlock((IntPtr)(delegate* unmanaged<IntPtr, IntPtr, void>)&OnCompleted);
         ObjC.SendVoid(ObjC.SharedWorkspace, "setDefaultApplicationAtURL:toOpenURLsWithScheme:completionHandler:", bundleUrl, ObjC.NSString(scheme), block);
 
-        // The system shows a confirmation dialog; give the user time to answer it.
-        if (!Completed.Wait(TimeSpan.FromMinutes(2)))
-        {
-            return "timed out waiting for the system.";
-        }
-        if (_completionError is null)
-        {
-            return null;
-        }
-
-        var status = ObjC.SetDefaultHandlerForScheme(scheme, selfId);
-        return status == 0 ? null : $"{_completionError} (fallback LSSetDefaultHandlerForURLScheme returned {status})";
+        // Give the user time to answer the confirmation dialog.
+        return Completed.Wait(TimeSpan.FromMinutes(2)) ? _completionError : "timed out waiting for the system.";
     }
 
     [UnmanagedCallersOnly]

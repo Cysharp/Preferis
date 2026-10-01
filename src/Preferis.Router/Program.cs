@@ -30,6 +30,8 @@ internal static class Program
                 return Report(RouterHost.Create(interactive: true).Registrar.Unregister());
             case "--status":
                 return Status(RouterHost.Create(interactive: true));
+            case "--settings" when OperatingSystem.IsMacOS():
+                return RouterHost.OpenSettings(RouterHost.Create(interactive: true).Log) ? 0 : 1;
             case "--version":
                 Console.WriteLine(typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0");
                 return 0;
@@ -79,6 +81,7 @@ internal static class Program
               Preferis <url> [<url> ...]                     Route the URLs and open them.
               Preferis --dry-run <url> [--config <path>]     Show how <url> would be routed, without opening anything.
               Preferis --register | --unregister | --status  Manage the registration as the default browser.
+              Preferis --settings                            Open the settings.
               Preferis --version | --help
 
             When started by Launch Services (as the default browser) Preferis receives URLs from the OS instead.

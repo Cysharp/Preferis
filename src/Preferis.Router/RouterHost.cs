@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using Preferis.Core;
 using Preferis.Core.Configuration;
+using Preferis.Core.History;
 using Preferis.Core.Hosting;
 using Preferis.Core.Routing;
 using Preferis.Platform.Browsers;
@@ -13,13 +14,22 @@ namespace Preferis.Router;
 internal sealed class RouterHost
 {
     private int _inFlight;
+    private readonly RoutingHistory? _history;
+    // URLs of one Apple Event are routed in parallel; the history's read-modify-write must not interleave.
+    private readonly Lock _historyGate = new();
+    private readonly int _historySize;
 
-    private RouterHost(ConfigLoader config, RoutingService service, IDefaultBrowserRegistrar registrar, IRoutingLog log)
+    private RouterHost(ConfigLoader config, RoutingService service, IDefaultBrowserRegistrar registrar, IRoutingLog log, LocalConfig local)
     {
         Config = config;
         Service = service;
         Registrar = registrar;
         Log = log;
+        if (local.Logging is { History: true } logging)
+        {
+            _history = new RoutingHistory(config.Paths.HistoryPath);
+            _historySize = logging.HistorySize;
+        }
     }
 
     public ConfigLoader Config { get; }
@@ -43,7 +53,7 @@ internal sealed class RouterHost
         }
 
         // The picker is a helper bundle next to our own (docs/Platform.md §3.1).
-        var pickerPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Helpers", "Preferis Picker.app", "Contents", "MacOS", "Preferis Picker"));
+        var pickerPath = Path.Combine(HelpersDirectory, "Preferis Picker.app", "Contents", "MacOS", "Preferis Picker");
         var services = new RoutingServices(
             config,
             HostPlatform.MacOS,
@@ -57,7 +67,29 @@ internal sealed class RouterHost
             Environment.GetEnvironmentVariable,
             home);
 
-        return new RouterHost(config, new RoutingService(services), new MacDefaultBrowserRegistrar(), log);
+        return new RouterHost(config, new RoutingService(services), MacDefaultBrowserRegistrar.ForMainBundle(), log, local);
+    }
+
+    /// <summary><c>Preferis.app/Contents/Helpers</c>: the picker and settings bundles (docs/Platform.md §3.1).</summary>
+    private static string HelpersDirectory => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Helpers"));
+
+    private static string SettingsAppPath => Path.Combine(HelpersDirectory, "Preferis Settings.app");
+
+    /// <summary>Opens the settings UI. Launch Services brings an already running instance to the front instead of starting another.</summary>
+    [SupportedOSPlatform("macos")]
+    public static bool OpenSettings(IRoutingLog log)
+    {
+        if (!Directory.Exists(SettingsAppPath))
+        {
+            log.Write(LogLevel.Error, $"The settings app was not found at {SettingsAppPath}. Build Preferis.app with build/Preferis.Build.proj.");
+            return false;
+        }
+
+        var info = new System.Diagnostics.ProcessStartInfo("/usr/bin/open") { UseShellExecute = false };
+        info.ArgumentList.Add(SettingsAppPath);
+        using var process = System.Diagnostics.Process.Start(info);
+        process?.WaitForExit(10_000);
+        return process?.ExitCode == 0;
     }
 
     /// <summary>Routes URLs given on the command line. Exit code 0 unless one of them failed completely.</summary>
@@ -101,8 +133,9 @@ internal sealed class RouterHost
             },
             onLaunchedWithoutUrls: () =>
             {
-                // The settings UI (M3) will open here. Until then there is nothing to show.
-                Log.Write(LogLevel.Info, "Launched without a URL; nothing to do.");
+                // The user opened Preferis.app itself (Finder, Spotlight, Dock): show the settings.
+                Log.Write(LogLevel.Info, "Launched without a URL; opening the settings.");
+                OpenSettings(Log);
                 if (Volatile.Read(ref _inFlight) == 0)
                 {
                     MacUrlActivationSource.Terminate();
@@ -124,12 +157,35 @@ internal sealed class RouterHost
         {
             var result = Service.Handle(url);
             Log.Write(LogLevel.Info, $"{result.Outcome}: {result.Summary} ({System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F1} ms)");
+            RecordHistory(url, result);
             return result.Outcome;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Log.Write(LogLevel.Error, $"Unhandled failure while routing {url.AbsoluteUri}: {ex}");
             return HandleOutcome.Failed;
+        }
+    }
+
+    // After the launch, so the opt-in history never delays opening the URL.
+    private void RecordHistory(RoutingUrl url, HandleResult result)
+    {
+        if (_history is null)
+        {
+            return;
+        }
+        try
+        {
+            lock (_historyGate)
+            {
+                _history.Append(
+                    new HistoryEntry { Time = DateTimeOffset.Now, Url = url.AbsoluteUri, RuleId = result.RuleId, Outcome = result.Outcome.ToString(), ProfileId = result.ProfileId },
+                    _historySize);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Write(LogLevel.Warning, $"Could not record the history: {ex.Message}");
         }
     }
 

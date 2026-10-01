@@ -14,6 +14,9 @@ public sealed class MacBrowserDetector : IBrowserDetector
 {
     private const string ProbeUrl = "https://example.com/";
 
+    /// <summary>The Router's bundle id (src/Preferis.Router/macOS/Info.plist); the helpers' ids extend it.</summary>
+    private const string ProductBundleId = "net.mayuki.Preferis";
+
     private readonly IReadOnlyDictionary<string, BrowserOverride>? _overrides;
     private readonly string _homeDirectory;
 
@@ -46,7 +49,7 @@ public sealed class MacBrowserDetector : IBrowserDetector
         foreach (var path in ObjC.ApplicationPathsForUrl(ProbeUrl))
         {
             var bundleId = ObjC.BundleIdentifier(ObjC.BundleWithPath(path));
-            if (bundleId is null || IsSelf(bundleId, selfId))
+            if (bundleId is null || IsPreferis(bundleId, selfId))
             {
                 continue;
             }
@@ -85,6 +88,17 @@ public sealed class MacBrowserDetector : IBrowserDetector
             entry);
     }
 
-    private static bool IsSelf(string bundleId, string? selfId)
-        => selfId is not null && (string.Equals(bundleId, selfId, StringComparison.OrdinalIgnoreCase) || bundleId.StartsWith(selfId + ".", StringComparison.OrdinalIgnoreCase));
+    /// <summary>
+    /// Preferis must not offer itself (that would loop): neither the Router nor a helper, whichever process asks.
+    /// <paramref name="selfId"/> covers a bundle id other than the product's (e.g. a renamed development build).
+    /// </summary>
+    internal static bool IsPreferis(string bundleId, string? selfId)
+    {
+        static bool Related(string a, string b)
+            => string.Equals(a, b, StringComparison.OrdinalIgnoreCase)
+                || a.StartsWith(b + ".", StringComparison.OrdinalIgnoreCase)
+                || b.StartsWith(a + ".", StringComparison.OrdinalIgnoreCase);
+
+        return Related(bundleId, ProductBundleId) || (selfId is not null && Related(bundleId, selfId));
+    }
 }

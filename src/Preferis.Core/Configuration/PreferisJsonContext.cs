@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Preferis.Core.Configuration.Json;
+using Preferis.Core.Picker;
 
 namespace Preferis.Core.Configuration;
 
@@ -22,4 +23,6 @@ namespace Preferis.Core.Configuration;
 [JsonSerializable(typeof(NoneAction))]
 [JsonSerializable(typeof(RewriteAction))]
 [JsonSerializable(typeof(RerouteAction))]
+[JsonSerializable(typeof(PickerRequest))]
+[JsonSerializable(typeof(PickerResponse))]
 public sealed partial class PreferisJsonContext : JsonSerializerContext;

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- A short-lived dialog: no Dock icon and no menu bar. It still activates itself (docs/Platform.md §3.7). -->
+  <key>LSUIElement</key>
+  <true/>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>LSMinimumSystemVersion</key>
+  <string>12.0</string>
+  <!-- Deliberately no CFBundleURLTypes: Launch Services must route URLs only to the main Preferis bundle. -->
+</dict>
+</plist>

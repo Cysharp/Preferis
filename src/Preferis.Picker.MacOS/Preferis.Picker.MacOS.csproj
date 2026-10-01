@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The macOS picker (docs/Design.md §9.2, docs/Platform.md §3.7): an AppKit helper bundle that reads a
+    PickerRequest from stdin and writes a PickerResponse to stdout. Builds only on macOS (Microsoft.macOS workload).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-macos</TargetFramework>
+    <SupportedOSPlatformVersion>12.0</SupportedOSPlatformVersion>
+    <!-- Microsoft.macOS defaults to a universal (arm64 + x64) build; NativeAOT cannot produce one, so build one RID at a time. -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
+    <RootNamespace>Preferis.Picker.MacOS</RootNamespace>
+    <AssemblyName>Preferis Picker</AssemblyName>
+    <ApplicationTitle>Preferis Picker</ApplicationTitle>
+    <ApplicationId>net.mayuki.Preferis.Picker</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>$(Version)</ApplicationDisplayVersion>
+    <SelfContained>true</SelfContained>
+    <PublishAot>true</PublishAot>
+    <!-- Microsoft.macOS creates an installer .pkg on publish by default; only the .app is wanted. -->
+    <CreatePackage>false</CreatePackage>
+    <Description>Preferis picker for macOS: asks which profile should open a URL.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Preferis.Core/Preferis.Core.csproj" />
+    <ProjectReference Include="../Preferis.Platform/Preferis.Platform.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -46,6 +46,28 @@ public class PickerMessagesTests
     }
 
     [Fact]
+    public void Remembering_is_allowed_for_urls_with_a_host()
+    {
+        var config = Sample();
+
+        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.MacOS, null);
+
+        Assert.True(request.Options.AllowRemember);
+    }
+
+    [Fact]
+    public void Remembering_is_not_offered_for_urls_without_a_host()
+    {
+        // A "host equals ''" rule would capture every file: URL, which is not what the user chose.
+        var config = Sample();
+        var decision = new RoutingDecision.Open(RoutingUrl.Parse("file:///Users/me/page.html"), ["edge", "chrome-work"], OpenSource.Explicit, null);
+
+        var request = PickerMessages.CreateRequest(config, decision, HostPlatform.MacOS, null);
+
+        Assert.False(request.Options.AllowRemember);
+    }
+
+    [Fact]
     public void Request_round_trips_through_json()
     {
         var config = Sample();

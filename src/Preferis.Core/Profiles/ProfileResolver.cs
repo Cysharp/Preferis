@@ -191,10 +191,7 @@ public sealed class ProfileResolver
             return (null, $"Profile data of '{browser.Id}' could not be read and no profile directory is stored.");
         }
 
-        var match =
-            FindBy(profiles, p => p.Email, reference.Email, StringComparison.OrdinalIgnoreCase)
-            ?? FindBy(profiles, p => p.Name, reference.Name, StringComparison.OrdinalIgnoreCase)
-            ?? FindBy(profiles, p => p.Directory, reference.Directory, StringComparison.Ordinal);
+        var match = BrowserProfileMatcher.Match(profiles, reference, BrowserFamily.Chromium);
 
         return match is null
             ? (null, $"Browser profile {Describe(reference)} was not found in '{browser.Id}'.")
@@ -216,14 +213,11 @@ public sealed class ProfileResolver
             return (requested, null);
         }
 
-        var match = FindBy(profiles, p => p.Name, requested, StringComparison.OrdinalIgnoreCase);
+        var match = BrowserProfileMatcher.Match(profiles, reference, BrowserFamily.Firefox);
         return match?.Name is null
             ? (null, $"Browser profile {Describe(reference)} was not found in '{browser.Id}'.")
             : (match.Name, null);
     }
-
-    private static BrowserProfileInfo? FindBy(IReadOnlyList<BrowserProfileInfo> profiles, Func<BrowserProfileInfo, string?> key, string? value, StringComparison comparison)
-        => string.IsNullOrEmpty(value) ? null : profiles.FirstOrDefault(p => string.Equals(key(p), value, comparison));
 
     private static string Describe(BrowserProfileRef reference)
         => "(" + string.Join(", ", new[] { ("email", reference.Email), ("name", reference.Name), ("directory", reference.Directory) }

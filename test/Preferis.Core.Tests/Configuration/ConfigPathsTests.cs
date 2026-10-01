@@ -26,6 +26,7 @@ public class ConfigPathsTests
         Assert.Equal("/Users/me/Library/Application Support/Preferis/local.json", paths.LocalConfigPath);
         Assert.Equal("/Users/me/Library/Application Support/Preferis/config.json", paths.DefaultConfigPath);
         Assert.Equal("/Users/me/Library/Logs/Preferis", paths.LogDirectory);
+        Assert.Equal("/Users/me/Library/Logs/Preferis/history.jsonl", paths.HistoryPath);
     }
 }
 
@@ -113,5 +114,126 @@ public class ConfigLoaderTests : IDisposable
 
         Assert.Equal("edge", loader.Load().Config.DefaultProfile);
         Assert.Empty(Directory.GetFiles(_root, "*.tmp"));
+    }
+
+    [Fact]
+    public void Relocating_writes_the_config_there_points_local_json_at_it_and_removes_the_old_file()
+    {
+        var loader = Loader();
+        File.WriteAllText(Paths.DefaultConfigPath, Fixtures.ConfigSample);
+        var config = loader.Load().Config;
+        config.DefaultProfile = "chrome-work";
+        var cloud = Path.Combine(_root, "cloud", "Preferis", "config.json");
+
+        loader.RelocateConfig(config, Paths.DefaultConfigPath, cloud, overwrite: false);
+
+        Assert.False(File.Exists(Paths.DefaultConfigPath));
+        var reloaded = loader.Load();
+        Assert.Equal(cloud, reloaded.ConfigPath);
+        Assert.Equal("chrome-work", reloaded.Config.DefaultProfile);
+    }
+
+    [Fact]
+    public void Relocating_keeps_the_other_local_settings()
+    {
+        File.WriteAllText(Paths.LocalConfigPath, """{ "logging": { "level": "trace" }, "futureSetting": 1 }""");
+        var loader = Loader();
+
+        loader.RelocateConfig(PreferisConfig.CreateDefault(), Paths.DefaultConfigPath, Path.Combine(_root, "cloud", "config.json"), overwrite: false);
+
+        var local = loader.LoadLocal();
+        Assert.Equal("trace", local.Logging?.Level);
+        Assert.True(local.ExtensionData?.ContainsKey("futureSetting"));
+    }
+
+    [Fact]
+    public void Relocating_onto_an_existing_file_needs_consent()
+    {
+        var loader = Loader();
+        var cloud = Path.Combine(_root, "cloud.json");
+        File.WriteAllText(cloud, Fixtures.ConfigSample);
+
+        Assert.Throws<IOException>(() => loader.RelocateConfig(PreferisConfig.CreateDefault(), Paths.DefaultConfigPath, cloud, overwrite: false));
+        Assert.Equal(6, ConfigSerializer.Deserialize(File.ReadAllText(cloud)).Profiles.Count);
+
+        loader.RelocateConfig(PreferisConfig.CreateDefault(), Paths.DefaultConfigPath, cloud, overwrite: true);
+        Assert.Empty(ConfigSerializer.Deserialize(File.ReadAllText(cloud)).Profiles);
+    }
+
+    [Fact]
+    public void Relocating_back_to_the_default_location_removes_the_redirection()
+    {
+        var loader = Loader();
+        var cloud = Path.Combine(_root, "cloud.json");
+        loader.RelocateConfig(PreferisConfig.CreateDefault(), Paths.DefaultConfigPath, cloud, overwrite: false);
+
+        loader.RelocateConfig(PreferisConfig.CreateDefault(), cloud, Paths.DefaultConfigPath, overwrite: false);
+
+        Assert.Null(loader.LoadLocal().ConfigPath);
+        Assert.Equal(Paths.DefaultConfigPath, loader.Load().ConfigPath);
+    }
+
+    [Fact]
+    public void Relocating_onto_another_name_of_the_same_file_keeps_it()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // Creating symbolic links needs extra rights on Windows.
+            return;
+        }
+        var loader = Loader();
+        File.WriteAllText(Paths.DefaultConfigPath, Fixtures.ConfigSample);
+        var alias = Path.Combine(_root, "alias");
+        Directory.CreateSymbolicLink(alias, _root);
+        var config = loader.Load().Config;
+
+        loader.RelocateConfig(config, Paths.DefaultConfigPath, Path.Combine(alias, "config.json"), overwrite: true);
+
+        var reloaded = loader.Load();
+        Assert.True(reloaded.Exists);
+        Assert.Null(reloaded.Error);
+        Assert.Equal(6, reloaded.Config.Profiles.Count);
+    }
+
+    [Fact]
+    public void Relocating_away_from_a_shared_location_leaves_the_file_for_the_other_machines()
+    {
+        var loader = Loader();
+        var cloud = Path.Combine(_root, "cloud.json");
+        var elsewhere = Path.Combine(_root, "elsewhere.json");
+        loader.RelocateConfig(PreferisConfig.CreateDefault(), Paths.DefaultConfigPath, cloud, overwrite: false);
+
+        loader.RelocateConfig(PreferisConfig.CreateDefault(), cloud, elsewhere, overwrite: false);
+        loader.RelocateConfig(PreferisConfig.CreateDefault(), elsewhere, Paths.DefaultConfigPath, overwrite: false);
+
+        Assert.True(File.Exists(cloud));
+        Assert.True(File.Exists(elsewhere));
+    }
+
+    [Fact]
+    public void An_existing_config_elsewhere_can_be_adopted_without_touching_it()
+    {
+        var loader = Loader();
+        var synced = Path.Combine(_root, "synced.json");
+        File.WriteAllText(synced, Fixtures.ConfigSample);
+
+        loader.UseExistingConfig(synced);
+
+        var result = loader.Load();
+        Assert.Equal(synced, result.ConfigPath);
+        Assert.Equal(6, result.Config.Profiles.Count);
+        Assert.Equal(Fixtures.ConfigSample, File.ReadAllText(synced));
+    }
+
+    [Fact]
+    public void A_file_that_is_not_a_configuration_is_not_adopted()
+    {
+        var loader = Loader();
+        var other = Path.Combine(_root, "other.json");
+        File.WriteAllText(other, "[1, 2, 3]");
+
+        Assert.Throws<InvalidDataException>(() => loader.UseExistingConfig(other));
+        Assert.Throws<FileNotFoundException>(() => loader.UseExistingConfig(Path.Combine(_root, "missing.json")));
+        Assert.Null(loader.LoadLocal().ConfigPath);
     }
 }

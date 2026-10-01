@@ -97,6 +97,65 @@ public sealed class ConfigLoader : IConfigStore
 
     public void SaveLocal(LocalConfig local) => WriteAtomically(_paths.LocalConfigPath, ConfigSerializer.SerializeLocal(local));
 
+    /// <summary>
+    /// "Move to cloud storage": writes <paramref name="config"/> to <paramref name="newPath"/> and points <c>local.json</c>
+    /// at it. Moving to the default location removes the redirection. The file at <paramref name="currentPath"/> is deleted
+    /// only when it is this machine's default location: anywhere else it may be shared with other machines.
+    /// </summary>
+    /// <exception cref="IOException"><paramref name="newPath"/> exists and <paramref name="overwrite"/> is false, or a file operation failed.</exception>
+    public void RelocateConfig(PreferisConfig config, string currentPath, string newPath, bool overwrite)
+    {
+        var target = Path.GetFullPath(newPath);
+        var current = Path.GetFullPath(currentPath);
+        var samePlace = string.Equals(target, current, StringComparison.Ordinal);
+        if (!samePlace && !overwrite && File.Exists(target))
+        {
+            throw new IOException($"A file already exists at {target}.");
+        }
+
+        // Write the new file before switching over, so that a failure leaves the old configuration in effect.
+        Save(config, target);
+        PointLocalConfigAt(target);
+        if (!samePlace && string.Equals(current, Path.GetFullPath(_paths.DefaultConfigPath), StringComparison.Ordinal) && File.Exists(current))
+        {
+            File.Delete(current);
+            // Two spellings of one file (a symbolic link in the path, /var vs /private/var, letter case): the delete
+            // removed what was just written. Paths cannot be compared reliably across platforms, so check the result.
+            if (!File.Exists(target))
+            {
+                Save(config, target);
+            }
+        }
+    }
+
+    /// <summary>Points <c>local.json</c> at a configuration that already exists (e.g. synced from another machine) without modifying it.</summary>
+    /// <exception cref="FileNotFoundException">There is no file at <paramref name="path"/>.</exception>
+    /// <exception cref="InvalidDataException">The file is not a Preferis configuration.</exception>
+    public void UseExistingConfig(string path)
+    {
+        var target = Path.GetFullPath(path);
+        if (!File.Exists(target))
+        {
+            throw new FileNotFoundException($"There is no file at {target}.", target);
+        }
+        try
+        {
+            ConfigSerializer.Deserialize(File.ReadAllText(target));
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException($"{target} is not a Preferis configuration: {ex.Message}", ex);
+        }
+        PointLocalConfigAt(target);
+    }
+
+    private void PointLocalConfigAt(string configPath)
+    {
+        var local = LoadLocal();
+        local.ConfigPath = string.Equals(configPath, Path.GetFullPath(_paths.DefaultConfigPath), StringComparison.Ordinal) ? null : configPath;
+        SaveLocal(local);
+    }
+
     private static void WriteAtomically(string path, string content)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);

@@ -8,6 +8,9 @@ public sealed record ConfigPaths(string LocalConfigPath, string DefaultConfigPat
 {
     private const string AppFolder = "Preferis";
 
+    /// <summary>The opt-in routing history (contains URLs, so it stays in the local log directory).</summary>
+    public string HistoryPath => Path.Combine(LogDirectory, "history.jsonl");
+
     public static ConfigPaths ForWindows(string localAppData, string roamingAppData) => new(
         Path.Combine(localAppData, AppFolder, "local.json"),
         Path.Combine(roamingAppData, AppFolder, "config.json"),

@@ -39,6 +39,12 @@ public sealed class PickerOptions
     public double AutoSelectSeconds { get; set; }
 
     public bool RememberChoiceDefault { get; set; }
+
+    /// <summary>
+    /// Whether "always use this choice for this host" may be offered. False when there is nothing to remember
+    /// by: URLs without a host, or candidates that are detected browsers rather than configured profiles.
+    /// </summary>
+    public bool AllowRemember { get; set; } = true;
 }
 
 public enum PickerResult
@@ -87,6 +93,7 @@ public static class PickerMessages
                 Position = picker?.Position ?? "cursor",
                 AutoSelectSeconds = picker?.AutoSelectSeconds ?? 0,
                 RememberChoiceDefault = picker?.RememberChoiceDefault ?? false,
+                AllowRemember = decision.Url.Host.Length > 0,
             },
             Message = message,
         };

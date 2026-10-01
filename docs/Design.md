@@ -212,8 +212,9 @@ argv / Apple Event
 
 | 区間 | Windows | macOS |
 | --- | --- | --- |
-| プロセス起動 → ブラウザー起動 API 呼び出し | 30 ms 以下 | 30 ms 以下 |
-| プロセス起動 → ピッカー表示 | 300 ms 以下 (WinUI 3 がこれを超えるなら TaskDialog) | 150 ms 以下 |
+| プロセス起動 → URL 受信 | argv なので実質 0 | 200 ms 以下 (ウォーム)。スパイク 1 で計測済み。内訳は LS 起動の床 35〜65 ms、NativeAOT 初期化、AppKit ロード 15 ms、`NSApplication` 初期化 50〜60 ms、イベント配送 20 ms (Platform.md §5)。Preferis 側で削れるのは AppKit 以降の約 85 ms のみで、NSApplication なしでは受信できない |
+| URL 受信 → ブラウザー起動 API 呼び出し (Preferis 自身の処理) | 20 ms 以下 | 10 ms 以下 |
+| プロセス起動 → ピッカー表示 | 300 ms 以下 (WinUI 3 がこれを超えるなら TaskDialog) | 350 ms 以下 (URL 受信 200 ms + ヘルパー起動) |
 
 ### 5.3 macOS における URL 受信
 
@@ -229,8 +230,11 @@ macOS では既定ブラウザーに渡される URL は argv ではなく **App
   したがって Launch Services が URL を配送する先は常にメインの Router であり、設定 UI が開いている
   最中でも Router の新しいプロセスが URL を受け取る。
 - `LSUIElement=true` にして Router 起動時に Dock アイコンを出さない。
+- スパイク 1 で動作確認済み (§12)。NSApplication を使わず `NSAppleEventManager` + CFRunLoop だけで待っても
+  Launch Services はイベントを配送しないため、`NSApplication` の初期化 (約 50〜60 ms) は避けられない。
+  `LSBackgroundOnly` にしても短縮されなかった。
 - 代替: 自前の objc 呼び出しに問題が出た場合は Router の macOS ビルドだけ Microsoft.macOS に切り替える
-  (`NSApplicationDelegate.OpenUrls`)。ランタイム初期化コストの計測が必要 (§12)。
+  (`NSApplicationDelegate.OpenUrls`)。
 
 ### 5.4 Windows における URL 受信
 
@@ -496,12 +500,23 @@ macOS:
 
 1. **Router の URL 受信** — objc 直接呼び出しで `application:openURLs:` を受け取る最小実装と、
    プロセス起動から受信までの時間。問題があれば Microsoft.macOS 版と比較する。
+   **結果 (2026-10-01, `spikes/UrlActivation`)**: 成功。NativeAOT + objc 直接呼び出しで受信できる。ウォームで
+   プロセス起動 → 受信 150〜220 ms、うち LS の床 35〜65 ms (C の最小アプリで計測)、AppKit ロード 15 ms、
+   `sharedApplication` 50〜60 ms、配送 20 ms。再 publish 後の初回は 600〜900 ms (署名検証と LS 登録)。
+   `NSAppleEventManager` のみでは受信できず、`LSBackgroundOnly` でも短縮されない。方式は確定。
 2. **ヘルパーバンドルのピッカーへのアクティベーション** — Router から起動した `Preferis Picker.app` の
    ウィンドウがアクティブになるか (macOS 14 以降の協調型アクティベーション)。
 3. **起動中ブラウザーへのプロファイル指定受け渡し** — Chrome/Edge の実行ファイルを直接
    `--profile-directory` 付きで起動した時の挙動、Firefox `-P <name>` の挙動。
+   **結果 (2026-10-01)**: Chrome / Edge Dev とも成功。起動中に実行ファイルを直接起動すると新プロセスは
+   引数を既存インスタンスへ引き渡して終了し (Chrome 183 ms、Edge Dev は未ロードのプロファイルを開いたため 3.1 s)、
+   指定したプロファイルのセッションだけが更新された。重複インスタンスは発生しない。Firefox は未検証
+   (未インストール)。
 4. **既定ブラウザー一覧への表示条件** — `LSUIElement=true` かつヘルパーバンドルを含む構成で
    「デフォルトの Web ブラウザ」に列挙されるか。
+   **結果 (2026-10-01, 部分)**: `LSUIElement=true` のスパイクバンドルが `NSWorkspace.urlsForApplications(toOpen:)`
+   の https ハンドラー一覧と public.html ハンドラー一覧の両方に Chrome / Edge と並んで列挙された
+   (`spikes/UrlActivation/ls-query.swift`)。システム設定の一覧での目視確認とヘルパーバンドル同梱時の確認は未実施。
 5. **Microsoft.macOS ピッカーの NativeAOT ビルドとバンドル化** — ヘルパーバンドルとして
    `Contents/Helpers/` に配置し、内側から署名して動作すること。
 

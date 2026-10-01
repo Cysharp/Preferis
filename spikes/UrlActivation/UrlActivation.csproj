@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>Preferis.Spikes.UrlActivation</RootNamespace>
+    <AssemblyName>UrlActivation</AssemblyName>
+    <!-- Spike code: no XML docs, no analyzers noise. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!--
+    Assemble a minimal .app bundle after publish so Launch Services can deliver Apple Events to it.
+    Output: artifacts/spikes/UrlActivation.app (gitignored). Ad-hoc signed.
+  -->
+  <Target Name="MakeAppBundle" AfterTargets="Publish" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <PropertyGroup>
+      <BundleDir>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', '..', 'artifacts', 'spikes', 'UrlActivation.app'))</BundleDir>
+    </PropertyGroup>
+    <RemoveDir Directories="$(BundleDir)" />
+    <MakeDir Directories="$(BundleDir)Contents/MacOS;$(BundleDir)Contents/Resources" />
+    <Copy SourceFiles="$(PublishDir)$(AssemblyName)" DestinationFolder="$(BundleDir)Contents/MacOS" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)Info.plist" DestinationFolder="$(BundleDir)Contents" />
+    <Exec Command="codesign --force --sign - &quot;$(BundleDir)&quot;" />
+    <Message Importance="high" Text="App bundle: $(BundleDir)" />
+  </Target>
+
+</Project>

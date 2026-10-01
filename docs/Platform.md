@@ -293,7 +293,9 @@ Stable とは独立した `Local State` があることを確認しています�
 macOS では **ブラウザーが既に起動している時の挙動**が重要です。`open -a <App> --args ...` は
 アプリが起動中だと `--args` を無視して URL を Apple Event で渡すため、プロファイル指定が効きません。
 Chromium 系は実行ファイルを直接起動すれば、新プロセスが起動中インスタンスに引数ごと引き渡して
-終了するため、起動中でもプロファイル指定が効きます (Finicky 等の実績あり)。
+終了するため、起動中でもプロファイル指定が効きます。スパイク 3 で Chrome と Edge Dev について実機確認済み
+(§5)。引き渡しにかかる時間は対象プロファイルが既に開いていれば 200 ms 程度、未ロードなら数秒かかります
+(ブラウザー側のプロファイル読み込み時間)。
 
 | 対象 | 方法 |
 | --- | --- |
@@ -323,9 +325,11 @@ objc ランタイム経由で自前で行います。
 4. 処理中の URL 件数をカウントし、ピッカー待ちを含めてすべて完了したら `terminate:` を呼ぶ。
    処理中に次のイベントが届いた場合は同じプロセスで並行して処理する。
 
-必要な objc 呼び出しは十数個に収まる想定です。実装が難航する場合は Router の macOS ビルドだけを
-Microsoft.macOS (`net10.0-macos`) に切り替え、`NSApplicationDelegate.OpenUrls` を使います。
-その場合はランタイム初期化コストを計測して目標 (Design.md §5.2) に収まることを確認します。
+スパイク 1 (`spikes/UrlActivation`) でこの手順どおりに動作することを確認しました。必要な objc 呼び出しは
+`objc_getClass`, `sel_registerName`, `objc_allocateClassPair`, `class_addMethod`, `objc_registerClassPair` と
+`objc_msgSend` の数種類のシグネチャだけです。`LibraryImport` で宣言すれば NativeAOT でそのまま動きます。
+`NSAppleEventManager` + `CFRunLoopRun` だけで待つ方式は Launch Services からイベントが配送されず不可でした。
+Microsoft.macOS への切り替えは、この実装に問題が出た場合の代替として残します。
 
 ### 3.7 ピッカー (`Preferis Picker.app`, AppKit)
 
@@ -356,4 +360,34 @@ Microsoft.macOS (`net10.0-macos`) に切り替え、`NSApplicationDelegate.OpenU
 
 ## 5. 計測記録
 
-(未計測)
+### 2026-10-01 スパイク 1: macOS Router の URL 受信 (`spikes/UrlActivation`)
+
+環境: macOS 26 (Darwin 25.6), Apple Silicon, .NET 10.0.302, NativeAOT, ad-hoc 署名。`open -a <app> <url>` で起動、
+アプリ内で `Process.StartTime` 基準の経過時間を記録。初回 (再 publish 直後) を除いたウォーム 4 回の範囲。
+
+| 計測点 | NSApplication 方式 | 備考 |
+| --- | --- | --- |
+| プロセス起動 → Main | 76〜120 ms | C の最小アプリを LS 経由で起動すると 34〜66 ms。差分が NativeAOT の初期化 |
+| Main → AppKit ロード完了 | 13〜18 ms | `NativeLibrary.Load(AppKit)` |
+| → `sharedApplication` 完了 | 50〜60 ms | ウィンドウサーバー接続。`LSBackgroundOnly=true` でも変化なし |
+| → `application:openURLs:` 受信 | 17〜25 ms | `run` 開始からイベント配送まで |
+| **合計 (起動 → 受信)** | **153〜217 ms** | 初回のみ 630〜940 ms |
+| シェルから直接起動した場合の起動 → Main | 9〜35 ms | LS を経由しない参考値 |
+
+`NSAppleEventManager` + `CFRunLoopRun` のみ (NSApplication なし): 3 秒待ってもイベントは届かず、不可。
+
+### 2026-10-01 スパイク 3: 起動中ブラウザーへのプロファイル指定起動
+
+| ブラウザー | 状態 | コマンド | 結果 |
+| --- | --- | --- | --- |
+| Google Chrome | 未起動 | 実行ファイル直接 `--profile-directory=Default <url>` (detach) | 起動し URL を開いた |
+| Google Chrome | 起動中 | 同上 | 183 ms で終了 (引き渡し)。Default のセッションが更新。重複インスタンスなし |
+| Microsoft Edge Dev | 起動中 (Default が開いている) | 実行ファイル直接 `--profile-directory=Profile 1 <url>` | 3.1 s で終了。Profile 1 のセッションのみ更新、Default は変化なし。重複インスタンスなし |
+
+Firefox は未インストールのため未検証。
+
+### 2026-10-01 スパイク 4 (部分): Launch Services のハンドラー一覧
+
+`LSUIElement=true`、`CFBundleURLTypes` (http, https)、`CFBundleDocumentTypes` (public.html, public.xhtml) を持つ
+スパイクバンドルは、`NSWorkspace.urlsForApplications(toOpen:)` の https 一覧と public.html 一覧の両方に
+Chrome / Edge Dev / Safari と並んで列挙された。システム設定「デフォルトの Web ブラウザ」での目視確認は未実施。

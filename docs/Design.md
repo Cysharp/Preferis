@@ -506,6 +506,11 @@ macOS:
    `NSAppleEventManager` のみでは受信できず、`LSBackgroundOnly` でも短縮されない。方式は確定。
 2. **ヘルパーバンドルのピッカーへのアクティベーション** — Router から起動した `Preferis Picker.app` の
    ウィンドウがアクティブになるか (macOS 14 以降の協調型アクティベーション)。
+   **結果 (2026-10-01, `spikes/PickerHelper`)**: 成功。LS が起動した `LSUIElement` の Router から `posix_spawn`
+   相当 (`Process.Start`) で起動したヘルパーが、自身の `activateIgnoringOtherApps:` だけでアクティブかつキー
+   ウィンドウになり、最前面アプリもヘルパーになった (macOS 26)。Router 側からの `NSRunningApplication
+   activateWithOptions:` による補助は不要だったが、成功を返すので保険として残せる。stdin/stdout の JSON 往復も
+   そのまま動作。
 3. **起動中ブラウザーへのプロファイル指定受け渡し** — Chrome/Edge の実行ファイルを直接
    `--profile-directory` 付きで起動した時の挙動、Firefox `-P <name>` の挙動。
    **結果 (2026-10-01)**: Chrome / Edge Dev とも成功。起動中に実行ファイルを直接起動すると新プロセスは
@@ -519,6 +524,11 @@ macOS:
    (`spikes/UrlActivation/ls-query.swift`)。システム設定の一覧での目視確認とヘルパーバンドル同梱時の確認は未実施。
 5. **Microsoft.macOS ピッカーの NativeAOT ビルドとバンドル化** — ヘルパーバンドルとして
    `Contents/Helpers/` に配置し、内側から署名して動作すること。
+   **結果 (2026-10-01, 部分)**: `net10.0-macos` + `PublishAot=true` でビルドでき、実行ファイル 3.6 MB、バンドル 4.9 MB、
+   ad-hoc 署名は自動。ウォームでプロセス起動 → Main 40〜60 ms、→ ウィンドウ表示 190〜235 ms。
+   Microsoft.macOS 固有の注意: `.app` は `$(PublishDir)` ではなく `$(OutDir)` にできる、既定で `.pkg` も作る
+   (`CreatePackage=false` で抑止)、バンドル名は `ApplicationTitle` に従う。`Contents/Helpers/` へのネスト配置と
+   内側からの署名は Router のバンドル組み立て (M2) で確認する。
 
 Windows:
 
@@ -557,7 +567,7 @@ Windows 対応で追加するのは Platform の Windows 実装、Router の Win
 
 | M | 内容 | 完了条件 | 状態 |
 | --- | --- | --- | --- |
-| M0 | スパイク (§12 の macOS 項目 1〜5) と計測基盤 (`tools/bench`) | macOS 起動経路とピッカー構成の方式が確定している | 未着手 |
+| M0 | スパイク (§12 の macOS 項目 1〜5) と計測方法の確立 | macOS 起動経路とピッカー構成の方式が確定している | 完了 (2026-10-01)。残件はシステム設定での目視確認とヘルパーのネスト配置で、M2 で行う。`tools/bench` は測る対象の Router ができる M2 で作る |
 | M1 | Core: 設定モデル、JSON、条件、ルーティング、プロファイル解決、IPC メッセージ、`--dry-run` | ユニットテストで §6〜§7 の仕様を網羅。`--dry-run` で設定ファイルの評価結果を確認できる | 未着手 |
 | M2 | macOS Platform + Router 高速経路: Launch Services 検出、プロファイル列挙、LaunchPlan 実行、既定ブラウザー登録、Apple Event 受信。**`PublishMacOS` ターゲットで ad-hoc 署名済みの `Preferis.app` 一式を生成** | `artifacts/` の `Preferis.app` を既定ブラウザーにし、単一候補のルールで日常利用できる | 未着手 |
 | M3 | macOS ピッカー (AppKit, ヘルパーバンドル) + 設定 UI (Avalonia, macOS で検証)。両者を `Preferis.app` に同梱 | macOS で全機能が揃い、設定ファイルを手で編集せずに運用できる | 未着手 |

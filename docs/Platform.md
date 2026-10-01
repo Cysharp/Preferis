@@ -340,8 +340,13 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
   標準入出力でリクエストと応答をやり取りする (Design.md §9.3)。`open` 経由だと標準入出力を
   つなげないため使わない。
 - **アクティベーション**: ヘルパーは `LSUIElement=true` のまま `NSApp.activate(ignoringOtherApps: true)`
-  で前面化する。macOS 14 以降はアクティベーションが協調型になったため、Router 側で
-  `NSRunningApplication.activate` や `yieldActivation(to:)` 相当を呼ぶ必要があるか、スパイクで確認する。
+  で前面化する。スパイク 2 で、LS が起動した Router の子プロセスとして起動したヘルパーがこの呼び出しだけで
+  アクティブになることを確認した (macOS 26、§5)。`activateIgnoringOtherApps:` は macOS 14 で非推奨なので、
+  実装では `activate` を試してから非推奨 API にフォールバックし、Router 側の `NSRunningApplication
+  activateWithOptions:` も保険として呼ぶ。
+- **Microsoft.macOS のビルド挙動**: `.app` は `$(OutDir)` に組み立てられ `$(PublishDir)` には出ない。既定で
+  インストーラー `.pkg` も生成するため `CreatePackage=false` にする。バンドル名は `ApplicationTitle`。
+  `Contents/MonoBundle/` には NativeAOT でもランタイムのネイティブ dylib が数個置かれる。
 - 設定 UI (`Preferis Settings.app`) は Avalonia の実行ファイルを同じ形式でバンドル化し、Router が
   引数なしで起動された時に `open` で起動する。
 
@@ -385,6 +390,22 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 | Microsoft Edge Dev | 起動中 (Default が開いている) | 実行ファイル直接 `--profile-directory=Profile 1 <url>` | 3.1 s で終了。Profile 1 のセッションのみ更新、Default は変化なし。重複インスタンスなし |
 
 Firefox は未インストールのため未検証。
+
+### 2026-10-01 スパイク 2 + 5: ヘルパーバンドルのピッカー (`spikes/PickerHelper`)
+
+Microsoft.macOS (`net10.0-macos`) + NativeAOT。実行ファイル 3.6 MB、バンドル 4.9 MB。ad-hoc 署名。
+stdin からリクエスト JSON を読み、ウィンドウ表示後 0.6 秒で先頭候補を自動選択して stdout に応答を書く。
+
+| 計測点 | 単体起動 (シェル) | Router の子プロセス (Router は `open` 経由) |
+| --- | --- | --- |
+| プロセス起動 → Main | 48〜58 ms | 38〜40 ms |
+| → `applicationDidFinishLaunching` | — | 93〜99 ms |
+| → ウィンドウ表示 | 218〜234 ms | 187〜192 ms |
+| アクティベーション (`isActive` / キーウィンドウ / 最前面) | すべて真 | すべて真 (Router の補助なしでも真) |
+| Router: URL 受信 → ヘルパー spawn | — | 0.2 ms 未満 |
+
+初回 (再ビルド直後) は Main まで 1.1 s。Router 側から `NSRunningApplication activateWithOptions:` を呼ぶと
+`true` が返るが、呼ばなくてもヘルパーはアクティブになった。
 
 ### 2026-10-01 スパイク 4 (部分): Launch Services のハンドラー一覧
 

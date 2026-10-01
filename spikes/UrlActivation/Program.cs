@@ -20,6 +20,7 @@ internal static unsafe class Program
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library", "Logs", "PreferisSpike", "urlactivation.log");
 
     private static IntPtr _app;
+    private static string _mode = "nsapp";
 
     private static int Main(string[] args)
     {
@@ -31,14 +32,14 @@ internal static unsafe class Program
 
         // Mode switch for the spike (environment variables do not survive `open`): a marker file.
         var modePath = Path.Combine(Path.GetDirectoryName(LogPath)!, "mode");
-        var mode = File.Exists(modePath) ? File.ReadAllText(modePath).Trim() : "nsapp";
+        var mode = _mode = File.Exists(modePath) ? File.ReadAllText(modePath).Trim() : "nsapp";
         Log.AppendLine($"  mode: {mode}");
 
         // Watchdog: a spike must never linger. If nothing arrives, log and exit.
         new Thread(() =>
         {
-            Thread.Sleep(3000);
-            Log.AppendLine("  watchdog: no URL received within 3 s");
+            Thread.Sleep(8000);
+            Log.AppendLine("  watchdog: not finished within 8 s");
             Flush();
             Environment.Exit(2);
         })
@@ -144,12 +145,73 @@ internal static unsafe class Program
             }
             Record("url-received", received);
             Log.AppendLine($"  urls: {string.Join(' ', list)}");
+            if (_mode.StartsWith("pick", StringComparison.Ordinal))
+            {
+                // Spike 2: hand the URL to the picker helper in a child process and wait for its answer
+                // off the main thread, so the run loop keeps serving events meanwhile.
+                var url = list.FirstOrDefault() ?? "";
+                new Thread(() => RunPicker(url)) { IsBackground = true }.Start();
+                return;
+            }
             Flush();
             ObjC.SendVoid(_app, "terminate:", IntPtr.Zero);
         }
         catch (Exception ex)
         {
             Log.AppendLine($"  error: {ex}");
+            Flush();
+            Environment.Exit(1);
+        }
+    }
+
+    // Spawns artifacts/spikes/PickerHelper.app (sibling of our own bundle), writes a request to its
+    // stdin, reads the response from its stdout and the helper's own timing log from stderr.
+    // Mode "pick-assist" additionally activates the helper from here via NSRunningApplication,
+    // to see whether the parent must help the child come to the foreground.
+    private static void RunPicker(string url)
+    {
+        try
+        {
+            var helper = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "PickerHelper.app", "Contents", "MacOS", "PickerHelper"));
+            var request = "{\"url\":\"" + url + "\",\"candidates\":[{\"profileId\":\"edge\",\"name\":\"Microsoft Edge\"},{\"profileId\":\"chrome-work\",\"name\":\"Chrome (Work)\"}],\"autoSelectSeconds\":1.5}";
+            var psi = new ProcessStartInfo(helper)
+            {
+                UseShellExecute = false,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            var spawnedAt = DateTime.UtcNow;
+            using var process = Process.Start(psi)!;
+            Record("picker-spawned", spawnedAt);
+            process.StandardInput.Write(request);
+            process.StandardInput.Close();
+
+            if (_mode == "pick-assist")
+            {
+                Thread.Sleep(400); // Give the helper time to create its window first.
+                var running = ObjC.Send(ObjC.GetClass("NSRunningApplication"), "runningApplicationWithProcessIdentifier:", (int)process.Id);
+                const nuint NSApplicationActivateIgnoringOtherApps = 1 << 1;
+                var ok = ObjC.SendBool(running, "activateWithOptions:", NSApplicationActivateIgnoringOtherApps);
+                Log.AppendLine($"  router activateWithOptions: => {ok}");
+            }
+
+            var stderrTask = process.StandardError.ReadToEndAsync();
+            var response = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            Record("picker-responded", DateTime.UtcNow);
+            Log.AppendLine($"  picker exit code: {process.ExitCode}");
+            Log.AppendLine($"  picker response: {response.Trim()}");
+            foreach (var line in stderrTask.Result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                Log.AppendLine($"  {line}");
+            }
+            Flush();
+            Environment.Exit(0);
+        }
+        catch (Exception ex)
+        {
+            Log.AppendLine($"  picker error: {ex}");
             Flush();
             Environment.Exit(1);
         }
@@ -214,6 +276,8 @@ internal static unsafe partial class ObjC
     public static void SendVoid(IntPtr receiver, string selector) => objc_msgSend_void(receiver, Sel(selector));
     public static void SendVoid(IntPtr receiver, string selector, IntPtr arg) => objc_msgSend_void(receiver, Sel(selector), arg);
     public static IntPtr Send(IntPtr receiver, string selector, uint arg) => objc_msgSend_uint_arg(receiver, Sel(selector), arg);
+    public static IntPtr Send(IntPtr receiver, string selector, int arg) => objc_msgSend_int_arg(receiver, Sel(selector), arg);
+    public static bool SendBool(IntPtr receiver, string selector, nuint arg) => objc_msgSend_ret_bool_nuint_arg(receiver, Sel(selector), arg);
     public static void SendVoid(IntPtr receiver, string selector, IntPtr arg1, IntPtr arg2, uint arg3, uint arg4)
         => objc_msgSend_void(receiver, Sel(selector), arg1, arg2, arg3, arg4);
 
@@ -254,6 +318,13 @@ internal static unsafe partial class ObjC
 
     [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
     private static partial IntPtr objc_msgSend_uint_arg(IntPtr receiver, IntPtr selector, uint arg);
+
+    [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
+    private static partial IntPtr objc_msgSend_int_arg(IntPtr receiver, IntPtr selector, int arg);
+
+    [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
+    [return: MarshalAs(UnmanagedType.I1)]
+    private static partial bool objc_msgSend_ret_bool_nuint_arg(IntPtr receiver, IntPtr selector, nuint arg);
 
     [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
     private static partial void objc_msgSend_void(IntPtr receiver, IntPtr selector, IntPtr arg1, IntPtr arg2, uint arg3, uint arg4);

@@ -230,9 +230,10 @@ Router の `Info.plist` の要点:
 ```
 
 `CFBundleURLTypes` (http/https) と `CFBundleDocumentTypes` (public.html) の両方を宣言しているのは、
-手元の Chrome / Edge Dev の Info.plist と同じ構成です。システム設定の「デフォルトの Web ブラウザ」
-一覧に表示される条件はこの 2 つを満たすことと理解していますが、`LSUIElement=true` との組み合わせは
-スパイクで確認します (Design.md §12)。
+手元の Chrome / Edge Dev の Info.plist と同じ構成です。この構成に `LSUIElement=true` を組み合わせても
+システム設定の「デフォルトの Web ブラウザ」一覧に表示されることをスパイク 4 で確認しました (§5)。
+一覧の表示名には `CFBundleDisplayName` ではなく `.app` のファイル名が使われるため、バンドル名は必ず
+`Preferis.app` にします。
 
 ヘルパーの `Info.plist`: ピッカーは一瞬だけ表示されるダイアログなので `LSUIElement=true` とし、
 ウィンドウ表示時に `NSApp.activate` で前面化する。設定 UI は通常のアプリとして `LSUIElement=false`。
@@ -407,8 +408,9 @@ stdin からリクエスト JSON を読み、ウィンドウ表示後 0.6 秒で
 初回 (再ビルド直後) は Main まで 1.1 s。Router 側から `NSRunningApplication activateWithOptions:` を呼ぶと
 `true` が返るが、呼ばなくてもヘルパーはアクティブになった。
 
-### 2026-10-01 スパイク 4 (部分): Launch Services のハンドラー一覧
+### 2026-10-01 スパイク 4: Launch Services のハンドラー一覧と既定ブラウザー一覧
 
 `LSUIElement=true`、`CFBundleURLTypes` (http, https)、`CFBundleDocumentTypes` (public.html, public.xhtml) を持つ
 スパイクバンドルは、`NSWorkspace.urlsForApplications(toOpen:)` の https 一覧と public.html 一覧の両方に
-Chrome / Edge Dev / Safari と並んで列挙された。システム設定「デフォルトの Web ブラウザ」での目視確認は未実施。
+Chrome / Edge Dev / Safari と並んで列挙された。システム設定「デフォルトの Web ブラウザ」の一覧にも表示されることを
+目視で確認。表示名は `CFBundleDisplayName` (Preferis Spike) ではなく `.app` のファイル名 (UrlActivation) だった。

@@ -519,9 +519,12 @@ macOS:
    (未インストール)。
 4. **既定ブラウザー一覧への表示条件** — `LSUIElement=true` かつヘルパーバンドルを含む構成で
    「デフォルトの Web ブラウザ」に列挙されるか。
-   **結果 (2026-10-01, 部分)**: `LSUIElement=true` のスパイクバンドルが `NSWorkspace.urlsForApplications(toOpen:)`
-   の https ハンドラー一覧と public.html ハンドラー一覧の両方に Chrome / Edge と並んで列挙された
-   (`spikes/UrlActivation/ls-query.swift`)。システム設定の一覧での目視確認とヘルパーバンドル同梱時の確認は未実施。
+   **結果 (2026-10-01)**: 成功。`LSUIElement=true` のスパイクバンドルが `NSWorkspace.urlsForApplications(toOpen:)`
+   の https ハンドラー一覧と public.html ハンドラー一覧の両方に Chrome / Edge と並んで列挙され
+   (`spikes/UrlActivation/ls-query.swift`)、システム設定「デフォルトの Web ブラウザ」の一覧にも表示されることを
+   目視で確認した。一覧の表示名は `CFBundleDisplayName` ではなく `.app` のファイル名が使われる
+   (「Preferis Spike」ではなく「UrlActivation」と表示された) ため、製品のバンドル名は `Preferis.app` にする。
+   ヘルパーバンドル同梱時の再確認は M2 で行う。
 5. **Microsoft.macOS ピッカーの NativeAOT ビルドとバンドル化** — ヘルパーバンドルとして
    `Contents/Helpers/` に配置し、内側から署名して動作すること。
    **結果 (2026-10-01, 部分)**: `net10.0-macos` + `PublishAot=true` でビルドでき、実行ファイル 3.6 MB、バンドル 4.9 MB、
@@ -567,7 +570,7 @@ Windows 対応で追加するのは Platform の Windows 実装、Router の Win
 
 | M | 内容 | 完了条件 | 状態 |
 | --- | --- | --- | --- |
-| M0 | スパイク (§12 の macOS 項目 1〜5) と計測方法の確立 | macOS 起動経路とピッカー構成の方式が確定している | 完了 (2026-10-01)。残件はシステム設定での目視確認とヘルパーのネスト配置で、M2 で行う。`tools/bench` は測る対象の Router ができる M2 で作る |
+| M0 | スパイク (§12 の macOS 項目 1〜5) と計測方法の確立 | macOS 起動経路とピッカー構成の方式が確定している | 完了 (2026-10-01)。残件はヘルパーのネスト配置時の再確認で、M2 で行う。`tools/bench` は測る対象の Router ができる M2 で作る |
 | M1 | Core: 設定モデル、JSON、条件、ルーティング、プロファイル解決、IPC メッセージ、`--dry-run` | ユニットテストで §6〜§7 の仕様を網羅。`--dry-run` で設定ファイルの評価結果を確認できる | 未着手 |
 | M2 | macOS Platform + Router 高速経路: Launch Services 検出、プロファイル列挙、LaunchPlan 実行、既定ブラウザー登録、Apple Event 受信。**`PublishMacOS` ターゲットで ad-hoc 署名済みの `Preferis.app` 一式を生成** | `artifacts/` の `Preferis.app` を既定ブラウザーにし、単一候補のルールで日常利用できる | 未着手 |
 | M3 | macOS ピッカー (AppKit, ヘルパーバンドル) + 設定 UI (Avalonia, macOS で検証)。両者を `Preferis.app` に同梱 | macOS で全機能が揃い、設定ファイルを手で編集せずに運用できる | 未着手 |

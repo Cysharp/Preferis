@@ -422,7 +422,14 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
   コントロールのイベントで双方向に結び、ビューを差し替えるときに購読を外す。
 - 見た目はシステム設定に倣う: `NSSplitViewController` のサイドバー、角丸のグループに「左にラベル、右にコントロール」の行を
   並べたフォーム (`Form`)、ツールバーの Revert / Save、ウィンドウのサブタイトルに未保存とエラー件数。プロファイルとルールは
-  左に一覧 (`ListPane`。ドラッグで並べ替え、下に + − ⋯)、右に選択中の項目の編集画面。
+  左に一覧 (`ListPane`。ドラッグで並べ替え、下に + − ⋯)、右に選択中の項目の編集画面 (先頭にアイコン・名前・概要と問題点のグループ)。
+- フォームの寸法と部品は、システム設定が使う SwiftUI の grouped `Form` を macOS 26 で描いて測った値に合わせている:
+  ページ余白 20 pt、グループは角丸 12 pt・内側の余白 10 pt・塗りは `quaternarySystemFill`、行の高さは文字だけで 36.5 pt、
+  24 pt のコントロールで 37.5 pt (上下の余白 10.25 / 6.75 pt)、見出しは 13 pt 太字で行の内容と揃え、セクション間 28 pt。
+  スイッチは mini (HIG の Toggles も grouped form では mini を勧める)、テキストフィールドは枠なし・右寄せで行の残りを占め、
+  ポップアップは値の右に `secondarySystemFill` の丸いシェブロン (`MenuPopUpButton`。AppKit に同じ見た目のベゼルはないため
+  枠なしのポップアップにバッジを重ねる)。行は `NSStackView` ではなく制約で組む: 横向きのスタックは中央揃えのとき最も高い
+  ビューに対して上下のインセットを守らず、説明つきの行が詰まった。
 - ルールの条件は `NSPredicateEditor` (`ConditionEditor`)。左の式 `host` / `url` / `urlCaseSensitive` と演算子 `==` /
   `BEGINSWITH` / `ENDSWITH` / `CONTAINS` / `LIKE` (wildcard) / `MATCHES` (regex) の `NSPredicate` を `ConditionPredicates` の木に
   変換する。ポップアップの表示名はテンプレートのビューの項目名を書き換えて変える (エディターは行ごとにそのコピーを使い、
@@ -439,7 +446,8 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 - Launch Services 経由で開いた場合 `HOME` などの環境変数はシェルのものではない。開発中に別の設定で試すときは、
   実行ファイルを直接 `HOME=<dir>` 付きで起動する。
 - `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で各ページ (とルール・プロファイル画面のいくつかの状態) を PNG に書き出して終了する。
-  `PREFERIS_SETTINGS_SNAPSHOT_URL=<url>` を併せて指定するとテストページでその URL を試した状態を描く。開発用。
+  `PREFERIS_SETTINGS_SNAPSHOT_URL=<url>` を併せて指定するとテストページでその URL を試した状態を、
+  `PREFERIS_SETTINGS_SNAPSHOT_APPEARANCE=dark` でダークモードを描く。開発用。
   アプリはアクセサリー (Dock に出ない) として起動し、ウィンドウはデスクトップより後ろのレベルに置くので、画面の見た目も
   フォーカスも変わらない。キャプチャは `screencapture -l <ウィンドウ番号>` で行う (macOS 26 ではビューのビットマップ描画に
   スクロールビューの中身が入らず、画面外のウィンドウはキャプチャできない)。起動元 (ターミナルなど) に画面収録の許可が要る。

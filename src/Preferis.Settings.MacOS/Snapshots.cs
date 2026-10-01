@@ -10,6 +10,7 @@ namespace Preferis.Settings.MacOS;
 /// placed behind the desktop picture and never activated, so nothing visible changes and the focus stays where it is. Capturing
 /// goes through the window server (<c>screencapture -l</c>): drawing the views into a bitmap misses scroll view content
 /// on macOS 26. Needs the screen recording permission of the app that started this process.
+/// <c>PREFERIS_SETTINGS_SNAPSHOT_APPEARANCE=dark</c> draws the dark appearance.
 /// </summary>
 internal static class Snapshots
 {
@@ -45,6 +46,10 @@ internal static class Snapshots
         // covers it), invisible to the person using the Mac. Off-screen windows cannot be captured at all.
         const int BelowDesktopLevel = -2147483630;
         var nsWindow = window.Window;
+        if (Environment.GetEnvironmentVariable("PREFERIS_SETTINGS_SNAPSHOT_APPEARANCE") == "dark")
+        {
+            nsWindow.Appearance = NSAppearance.GetAppearance(NSAppearance.NameDarkAqua);
+        }
         nsWindow.Level = (NSWindowLevel)BelowDesktopLevel;
         nsWindow.OrderFrontRegardless();
 

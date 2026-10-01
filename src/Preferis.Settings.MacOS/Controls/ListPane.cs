@@ -53,8 +53,8 @@ internal sealed class ListPane<T> : IDisposable
         {
             BoxType = NSBoxType.NSBoxCustom,
             BorderWidth = 0,
-            CornerRadius = 10,
-            FillColor = OperatingSystem.IsMacOSVersionAtLeast(14) ? NSColor.QuaternarySystemFill : NSColor.Label.ColorWithAlphaComponent(0.05f),
+            CornerRadius = 12,
+            FillColor = Ui.GroupFill,
             ContentViewMargins = CGSize.Empty,
             ContentView = scroll,
             TranslatesAutoresizingMaskIntoConstraints = false,

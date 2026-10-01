@@ -12,14 +12,13 @@ internal sealed class GeneralPage : IPageView
 
     public GeneralPage(GeneralPageViewModel page)
     {
-        View = Ui.ScrollPage(Ui.VStack(22,
+        View = Form.Page(
             DefaultBrowser(page),
             ConfigurationFile(page),
             Picker(page),
             Language(page),
             ThisMac(page),
-            Ui.Secondary($"Preferis {page.Version}")));
-        FillSections((NSStackView)((NSView)((NSScrollView)View).DocumentView!).Subviews[0]);
+            Form.Footer($"Preferis {page.Version}"));
     }
 
     public NSView View { get; }
@@ -30,7 +29,6 @@ internal sealed class GeneralPage : IPageView
     {
         var status = Ui.Wrapping("", 380, 13, NSColor.Label);
         var make = Ui.Button("Make Default");
-        make.KeyEquivalent = "";
         _bindings.Command(make, page.RegisterCommand);
         var settings = Ui.Button("Open System Settings");
         _bindings.Command(settings, page.OpenSystemSettingsCommand);
@@ -86,12 +84,12 @@ internal sealed class GeneralPage : IPageView
 
         var seconds = NumberField(page, nameof(GeneralPageViewModel.AutoSelectSeconds), 0, 60, 1, () => page.AutoSelectSeconds, value => page.AutoSelectSeconds = value);
 
-        var remember = new NSSwitch();
+        var remember = Ui.Switch();
         _bindings.Switch(remember, page, nameof(GeneralPageViewModel.RememberChoiceDefault), () => page.RememberChoiceDefault, value => page.RememberChoiceDefault = value);
 
         return Form.Section("Picker", "Shown when a rule offers several profiles. These settings are shared with every computer using this configuration.",
             Form.Row("Position", position),
-            Form.Row("Choose automatically after", Ui.HStack(6, seconds, Ui.Secondary("seconds", 13)), "0 keeps the picker open until you choose."),
+            Form.Row("Choose automatically after", seconds, "In seconds. 0 keeps the picker open until you choose."),
             Form.Row("Remember the choice by default", remember, "Checks “Always open this host with this choice” when the picker opens."));
     }
 
@@ -109,7 +107,7 @@ internal sealed class GeneralPage : IPageView
         var logs = Ui.Button("Show Logs");
         _bindings.Command(logs, page.OpenLogFolderCommand);
 
-        var history = new NSSwitch();
+        var history = Ui.Switch();
         _bindings.Switch(history, page, nameof(GeneralPageViewModel.IsHistoryEnabled), () => page.IsHistoryEnabled, value => page.IsHistoryEnabled = value);
         var size = NumberField(page, nameof(GeneralPageViewModel.HistorySize), 1, 10_000, 10, () => page.HistorySize, value => page.HistorySize = (int)value);
         _bindings.Observe(page, () => size.Subviews.OfType<NSControl>().ToList().ForEach(c => c.Enabled = page.IsHistoryEnabled), nameof(GeneralPageViewModel.IsHistoryEnabled));
@@ -122,11 +120,12 @@ internal sealed class GeneralPage : IPageView
         static string Title(string level) => CultureInfo.InvariantCulture.TextInfo.ToTitleCase(level);
     }
 
-    // A small number field with a stepper, two-way bound.
+    // A short number field with a stepper, two-way bound, like a SwiftUI stepper row.
     private NSStackView NumberField(GeneralPageViewModel page, string property, double min, double max, double step, Func<double> get, Action<double> set)
     {
-        var field = new NSTextField { Alignment = NSTextAlignment.Right, BezelStyle = NSTextFieldBezelStyle.Rounded };
-        field.WidthAnchor.ConstraintEqualTo(64).Active = true;
+        var field = Ui.Field();
+        field.SetContentHuggingPriorityForOrientation(750, NSLayoutConstraintOrientation.Horizontal);
+        field.WidthAnchor.ConstraintEqualTo(56).Active = true;
         var stepper = new NSStepper { MinValue = min, MaxValue = max, Increment = step, ValueWraps = false };
         _bindings.Observe(page, () =>
         {
@@ -142,15 +141,6 @@ internal sealed class GeneralPage : IPageView
             }
         };
         stepper.Activated += (_, _) => set(stepper.DoubleValue);
-        return Ui.HStack(4, field, stepper);
-    }
-
-    // Sections span the page width; the stack would otherwise size them to their content.
-    private static void FillSections(NSStackView stack)
-    {
-        foreach (var view in stack.ArrangedSubviews.Take(stack.ArrangedSubviews.Length - 1))
-        {
-            Ui.FillWidth(view, stack);
-        }
+        return Ui.HStack(6, field, stepper);
     }
 }

@@ -12,7 +12,7 @@ internal sealed class TestPage : IPageView
 
     public TestPage(TestPageViewModel page)
     {
-        var url = Ui.Field("https://www.example.com/", monospaced: true);
+        var url = Ui.Field("https://www.example.com/");
         _bindings.Text(url, page, nameof(TestPageViewModel.Url), () => page.Url, value => page.Url = value);
         // Return in the field tests the URL, like the Test button.
         url.Activated += (_, _) => page.RunCommand.Execute(null);
@@ -22,26 +22,21 @@ internal sealed class TestPage : IPageView
         open.ToolTip = "Open the URL with Preferis, as if a link was clicked: the picker appears when the rules say so.";
         _bindings.Command(open, page.OpenCommand);
         var input = Ui.HStack(8, url, test, open);
-        url.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
 
-        var error = Ui.Label("", 12, color: NSColor.SystemRed);
+        var error = Ui.Flowing("", 12, NSColor.SystemRed);
+        var errorFooter = Form.Footer(error);
         _bindings.Observe(page, () =>
         {
             error.StringValue = page.Error ?? "";
-            error.Hidden = page.Error is null;
+            errorFooter.Hidden = page.Error is null;
         }, nameof(TestPageViewModel.Error));
 
         var intro = Form.Section(null,
             "Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so the picker and the browser can be tried for real."
                 + (page.CanOpenUrls ? "" : " Open needs Preferis Settings to run from inside Preferis.app."),
-            Form.Wide(input));
+            Form.Row("URL", input));
 
-        var stack = Ui.VStack(22, intro, error, Result(page), Opened(page), Steps(page), History(page));
-        foreach (var view in stack.ArrangedSubviews)
-        {
-            Ui.FillWidth(view, stack);
-        }
-        View = Ui.ScrollPage(stack);
+        View = Form.Page(intro, errorFooter, Result(page), Opened(page), Steps(page), History(page));
     }
 
     public NSView View { get; }
@@ -129,9 +124,9 @@ internal sealed class TestPage : IPageView
         var empty = Ui.Secondary("Nothing yet.", 12);
         var clear = Ui.Button("Clear History");
         _bindings.Command(clear, page.ClearHistoryCommand);
-        var header = Ui.HStack(8, Ui.SectionTitle("Recently Opened"), Ui.Spacer(), clear);
-        var box = Form.Section(null, Form.Wide(Ui.VStack(4, empty, rows)));
-        var section = Ui.VStack(6, header, box);
+        var header = Form.Header("Recently Opened", clear);
+        var box = Form.Group(Form.Wide(Ui.VStack(4, empty, rows)));
+        var section = Ui.VStack(8, header, box);
         Ui.FillWidth(header, section);
         Ui.FillWidth(box, section);
 

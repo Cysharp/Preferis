@@ -170,45 +170,30 @@ internal sealed class ProfilesPage : IPageView
             view.RemoveFromSuperview();
         }
         _editorBindings = new Bindings();
-        var editor = _shown is null ? Empty() : Editor(_shown, _editorBindings);
+        var editor = _shown is null
+            ? EditorParts.Empty("No Profile Selected", "Click + below the list to add the browsers found on this Mac, or a command.")
+            : Editor(_shown, _editorBindings);
         _editorHost.AddSubview(editor);
         Ui.Pin(editor, _editorHost);
     }
 
-    private static NSView Empty()
-    {
-        var text = Ui.VStack(6,
-            Ui.Label("No Profile Selected", 17, NSFontWeight.Semibold, NSColor.SecondaryLabel),
-            Ui.Wrapping("Click + below the list to add the browsers found on this Mac, or a command.", 320, 12));
-        text.Alignment = NSLayoutAttribute.CenterX;
-        var host = new NSView();
-        host.AddSubview(text);
-        text.TranslatesAutoresizingMaskIntoConstraints = false;
-        text.CenterXAnchor.ConstraintEqualTo(host.CenterXAnchor).Active = true;
-        text.CenterYAnchor.ConstraintEqualTo(host.CenterYAnchor).Active = true;
-        return host;
-    }
-
     private NSView Editor(ProfileViewModel profile, Bindings bindings)
     {
-        // Header: icon, name, id and problems.
-        var icon = new NSImageView { ImageScaling = NSImageScale.ProportionallyUpOrDown };
-        icon.WidthAnchor.ConstraintEqualTo(44).Active = true;
-        icon.HeightAnchor.ConstraintEqualTo(44).Active = true;
-        icon.ContentTintColor = NSColor.SecondaryLabel;
-        bindings.Observe(profile, () => icon.Image = Images.FromPng(profile.IconPng) ?? Images.Symbol(profile.IsCommand ? "terminal" : "globe", 28), nameof(ProfileViewModel.IconPng), nameof(ProfileViewModel.TargetKind));
-        var name = Ui.Field("Name");
-        name.Font = NSFont.SystemFontOfSize(17, NSFontWeight.Semibold)!;
-        bindings.Text(name, profile, nameof(ProfileViewModel.Name), () => profile.Name, value => profile.Name = value);
-        var id = Ui.Flowing($"Id: {profile.Id} — used by rules; it does not change when you rename the profile.");
-        var title = Ui.VStack(4, name, id);
-        Ui.FillWidth(name, title);
-        Ui.FillWidth(id, title);
-        var header = Ui.HStack(14, icon, title);
-        title.SetHuggingPriority(1, NSLayoutConstraintOrientation.Horizontal);
-        var issues = Issues(profile, bindings);
+        var icon = EditorParts.Icon();
+        bindings.Observe(profile, () => icon.Image = Images.FromPng(profile.IconPng) ?? Images.Symbol(profile.IsCommand ? "terminal" : "globe", 24), nameof(ProfileViewModel.IconPng), nameof(ProfileViewModel.TargetKind));
+        var title = Ui.Label("");
+        var subtitle = Ui.Flowing("");
+        bindings.Observe(profile, () =>
+        {
+            title.StringValue = profile.Name.Length > 0 ? profile.Name : "(Unnamed)";
+            subtitle.StringValue = profile.Summary;
+        }, nameof(ProfileViewModel.Name), nameof(ProfileViewModel.Summary));
+        var header = EditorParts.Header(icon, title, subtitle, profile, nameof(ProfileViewModel.Issues), () => profile.Issues, bindings);
 
-        var isDefault = new NSSwitch();
+        var name = Ui.Field("Name");
+        bindings.Text(name, profile, nameof(ProfileViewModel.Name), () => profile.Name, value => profile.Name = value);
+
+        var isDefault = Ui.Switch();
         bindings.Observe(profile, () =>
         {
             isDefault.State = profile.IsDefault ? 1 : 0;
@@ -223,35 +208,11 @@ internal sealed class ProfilesPage : IPageView
             () => profile.TargetKind, value => profile.TargetKind = value);
 
         var general = Form.Section(null,
+            Form.Row("Name", name, $"Rules refer to the profile by its id, “{profile.Id}”, which stays when you rename it."),
             Form.Row("Default profile", isDefault, "Opens links that the matching rule does not assign to a profile."),
             Form.Row("Opens with", target));
 
-        var stack = Ui.VStack(22, header, issues, general, BrowserSection(profile, bindings), CommandSection(profile, bindings), FallbackSection(profile, bindings));
-        foreach (var view in stack.ArrangedSubviews)
-        {
-            Ui.FillWidth(view, stack);
-        }
-        return Ui.ScrollPage(stack);
-    }
-
-    private static NSView Issues(ProfileViewModel profile, Bindings bindings)
-    {
-        var list = Ui.VStack(4);
-        bindings.Observe(profile, () =>
-        {
-            foreach (var view in list.ArrangedSubviews)
-            {
-                view.RemoveFromSuperview();
-            }
-            foreach (var issue in profile.Issues)
-            {
-                var message = Ui.Flowing(issue.Message, 12, issue.Severity == IssueSeverity.Error ? NSColor.SystemRed : NSColor.SystemOrange);
-                list.AddArrangedSubview(message);
-                Ui.FillWidth(message, list);
-            }
-            list.Hidden = profile.Issues.Count == 0;
-        }, nameof(ProfileViewModel.Issues));
-        return list;
+        return Form.Page(header, general, BrowserSection(profile, bindings), CommandSection(profile, bindings), FallbackSection(profile, bindings));
     }
 
     private static NSView BrowserSection(ProfileViewModel profile, Bindings bindings)
@@ -262,14 +223,13 @@ internal sealed class ProfilesPage : IPageView
         bindings.Popup(mac, profile, nameof(ProfileViewModel.MacOSBrowser), () => profile.BrowserChoices, () => profile.MacOSBrowser, value => profile.MacOSBrowser = value, c => c.Title, c => Images.FromPng(c.IconPng));
         var windows = Ui.Popup();
         bindings.Popup(windows, profile, nameof(ProfileViewModel.WindowsBrowser), () => profile.WindowsBrowserChoices, () => profile.WindowsBrowser, value => profile.WindowsBrowser = value, c => c.Title);
-        var perOs = new NSSwitch();
+        var perOs = Ui.Switch();
         bindings.Switch(perOs, profile, nameof(ProfileViewModel.PerOs), () => profile.PerOs, value => profile.PerOs = value);
         var browserProfile = Ui.Popup();
         bindings.Popup(browserProfile, profile, nameof(ProfileViewModel.BrowserProfile), () => profile.BrowserProfileChoices, () => profile.BrowserProfile, value => profile.BrowserProfile = value, c => c.Title);
-        var isPrivate = new NSSwitch();
+        var isPrivate = Ui.Switch();
         bindings.Switch(isPrivate, profile, nameof(ProfileViewModel.Private), () => profile.Private, value => profile.Private = value);
-        var (argsScroll, args) = Ui.TextArea(54);
-        argsScroll.WidthAnchor.ConstraintEqualTo(240).Active = true;
+        var args = Ui.LinesField("--new-window");
         bindings.Text(args, profile, nameof(ProfileViewModel.ExtraArgs), () => profile.ExtraArgs, value => profile.ExtraArgs = value);
 
         var browserRow = Form.Row("Browser", browser);
@@ -283,7 +243,7 @@ internal sealed class ProfilesPage : IPageView
             windowsRow,
             profileRow,
             Form.Row("Private window", isPrivate),
-            Form.Row("Extra arguments", argsScroll, "One per line, for example --new-window."));
+            Form.Row("Extra arguments", args, "One per line. Return starts a new one."));
 
         bindings.Observe(profile, () =>
         {
@@ -299,27 +259,23 @@ internal sealed class ProfilesPage : IPageView
 
     private NSView CommandSection(ProfileViewModel profile, Bindings bindings)
     {
-        var macPath = Ui.Field("/Applications/Foo.app/Contents/MacOS/Foo", monospaced: true);
-        macPath.WidthAnchor.ConstraintEqualTo(280).Active = true;
+        var macPath = Ui.Field("/Applications/Foo.app/Contents/MacOS/Foo");
         bindings.Text(macPath, profile, nameof(ProfileViewModel.MacOSCommandPath), () => profile.MacOSCommandPath, value => profile.MacOSCommandPath = value);
         var choose = Ui.Button("Choose…");
         bindings.Command(choose, profile.BrowseMacOSCommandCommand);
-        var (macArgsScroll, macArgs) = Ui.TextArea(54);
-        macArgsScroll.WidthAnchor.ConstraintEqualTo(280).Active = true;
+        var macArgs = Ui.LinesField("{url}");
         bindings.Text(macArgs, profile, nameof(ProfileViewModel.MacOSCommandArgs), () => profile.MacOSCommandArgs, value => profile.MacOSCommandArgs = value);
-        var winPath = Ui.Field(@"%LOCALAPPDATA%\Programs\Foo\foo.exe", monospaced: true);
-        winPath.WidthAnchor.ConstraintEqualTo(280).Active = true;
+        var winPath = Ui.Field(@"%LOCALAPPDATA%\Programs\Foo\foo.exe");
         bindings.Text(winPath, profile, nameof(ProfileViewModel.WindowsCommandPath), () => profile.WindowsCommandPath, value => profile.WindowsCommandPath = value);
-        var (winArgsScroll, winArgs) = Ui.TextArea(54);
-        winArgsScroll.WidthAnchor.ConstraintEqualTo(280).Active = true;
+        var winArgs = Ui.LinesField("{url}");
         bindings.Text(winArgs, profile, nameof(ProfileViewModel.WindowsCommandArgs), () => profile.WindowsCommandArgs, value => profile.WindowsCommandArgs = value);
 
         var section = Form.Section("Command",
             "{url} in the arguments is replaced with the URL; without it the URL is added at the end. Choosing an app runs it through /usr/bin/open.",
-            Form.Row("macOS", Ui.HStack(6, macPath, choose)),
-            Form.Row("Arguments", macArgsScroll, "One per line."),
+            Form.Row("macOS", Ui.HStack(8, macPath, choose)),
+            Form.Row("Arguments", macArgs, "One per line."),
             Form.Row("Windows", winPath),
-            Form.Row("Arguments", winArgsScroll, "One per line."));
+            Form.Row("Arguments", winArgs, "One per line."));
         bindings.Observe(profile, () => section.Hidden = !profile.IsCommand, nameof(ProfileViewModel.TargetKind));
         return section;
     }

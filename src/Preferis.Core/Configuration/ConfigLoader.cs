@@ -13,11 +13,11 @@ public sealed record ConfigLoadResult(PreferisConfig Config, LocalConfig Local, 
 public sealed class ConfigLoader : IConfigStore
 {
     private readonly ConfigPaths _paths;
-    private readonly Platform _platform;
+    private readonly HostPlatform _platform;
     private readonly Func<string, string?> _getEnvironmentVariable;
     private readonly string _homeDirectory;
 
-    public ConfigLoader(ConfigPaths paths, Platform platform, Func<string, string?> getEnvironmentVariable, string homeDirectory)
+    public ConfigLoader(ConfigPaths paths, HostPlatform platform, Func<string, string?> getEnvironmentVariable, string homeDirectory)
     {
         _paths = paths;
         _platform = platform;

@@ -37,7 +37,7 @@ public class ConfigLoaderTests : IDisposable
 
     private ConfigPaths Paths => new(Path.Combine(_root, "local.json"), Path.Combine(_root, "config.json"), Path.Combine(_root, "logs"));
 
-    private ConfigLoader Loader(Platform platform = Platform.MacOS) => new(Paths, platform, _ => null, _root);
+    private ConfigLoader Loader(HostPlatform platform = HostPlatform.MacOS) => new(Paths, platform, _ => null, _root);
 
     [Fact]
     public void Missing_files_yield_the_default_config_without_error()

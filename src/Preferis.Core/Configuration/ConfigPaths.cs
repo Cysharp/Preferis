@@ -24,7 +24,7 @@ public sealed record ConfigPaths(string LocalConfigPath, string DefaultConfigPat
 
     public static ConfigPaths ForCurrentPlatform() => PlatformInfo.Current switch
     {
-        Platform.Windows => ForWindows(
+        HostPlatform.Windows => ForWindows(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)),
         _ => ForMacOS(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)),

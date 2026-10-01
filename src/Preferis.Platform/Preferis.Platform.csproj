@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Preferis.Platform</RootNamespace>
+    <Description>Preferis platform layer: browser detection, profile enumeration, process launching, OS registration and URL reception for Windows and macOS.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Preferis.Core/Preferis.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Preferis.Platform.Tests" />
+  </ItemGroup>
+
+</Project>

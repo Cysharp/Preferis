@@ -63,7 +63,7 @@ public sealed class PickerResponse
 
 public static class PickerMessages
 {
-    public static PickerRequest CreateRequest(PreferisConfig config, RoutingDecision.Open decision, Platform platform, string? message)
+    public static PickerRequest CreateRequest(PreferisConfig config, RoutingDecision.Open decision, HostPlatform platform, string? message)
     {
         var profiles = config.Profiles.ToDictionary(p => p.Id, StringComparer.Ordinal);
         var picker = config.Settings?.Picker;

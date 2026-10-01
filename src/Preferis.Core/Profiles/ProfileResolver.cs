@@ -13,13 +13,13 @@ public sealed class ProfileResolver
 {
     private const string UrlPlaceholder = "{url}";
 
-    private readonly Platform _platform;
+    private readonly HostPlatform _platform;
     private readonly IBrowserLocator _locator;
     private readonly IBrowserProfileEnumerator _profiles;
     private readonly Func<string, string?> _getEnvironmentVariable;
     private readonly string _homeDirectory;
 
-    public ProfileResolver(Platform platform, IBrowserLocator locator, IBrowserProfileEnumerator profiles, Func<string, string?> getEnvironmentVariable, string homeDirectory)
+    public ProfileResolver(HostPlatform platform, IBrowserLocator locator, IBrowserProfileEnumerator profiles, Func<string, string?> getEnvironmentVariable, string homeDirectory)
     {
         _platform = platform;
         _locator = locator;
@@ -130,7 +130,7 @@ public sealed class ProfileResolver
             }
         }
 
-        if (browser.Family == BrowserFamily.Other && _platform == Platform.MacOS)
+        if (browser.Family == BrowserFamily.Other && _platform == HostPlatform.MacOS)
         {
             // Safari and unknown macOS apps do not take URLs on their command line; let Launch Services open it.
             if (profile.ExtraArgs is { Count: > 0 })
@@ -153,8 +153,8 @@ public sealed class ProfileResolver
     }
 
     /// <summary>The plan for opening a URL with a detected browser without any profile or option (fallback picker).</summary>
-    public static LaunchPlan PlanForBrowser(DetectedBrowser browser, RoutingUrl url, Platform platform)
-        => browser.Family == BrowserFamily.Other && platform == Platform.MacOS
+    public static LaunchPlan PlanForBrowser(DetectedBrowser browser, RoutingUrl url, HostPlatform platform)
+        => browser.Family == BrowserFamily.Other && platform == HostPlatform.MacOS
             ? new LaunchPlan(LaunchKind.OpenWithApplication, browser.ApplicationPath ?? browser.ExecutablePath, [url.AbsoluteUri], browser, null)
             : new LaunchPlan(LaunchKind.Execute, browser.ExecutablePath, [url.AbsoluteUri], browser, null);
 

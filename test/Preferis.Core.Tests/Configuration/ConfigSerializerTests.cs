@@ -24,12 +24,12 @@ public class ConfigSerializerTests
         var config = ConfigSerializer.Deserialize(Fixtures.ConfigSample);
 
         var edge = config.Profiles.Single(p => p.Id == "edge").Browser!;
-        Assert.Equal("edge", edge.For(Platform.Windows));
-        Assert.Equal("edge", edge.For(Platform.MacOS));
+        Assert.Equal("edge", edge.For(HostPlatform.Windows));
+        Assert.Equal("edge", edge.For(HostPlatform.MacOS));
 
         var system = config.Profiles.Single(p => p.Id == "system-browser").Browser!;
-        Assert.Equal("edge", system.For(Platform.Windows));
-        Assert.Equal("safari", system.For(Platform.MacOS));
+        Assert.Equal("edge", system.For(HostPlatform.Windows));
+        Assert.Equal("safari", system.For(HostPlatform.MacOS));
     }
 
     [Fact]
@@ -52,9 +52,9 @@ public class ConfigSerializerTests
         var tool = config.Profiles.Single(p => p.Id == "custom-tool");
 
         Assert.Null(tool.Browser);
-        Assert.Equal("%LOCALAPPDATA%\\Programs\\Foo\\foo.exe", tool.Command?.For(Platform.Windows)?.Path);
-        Assert.Equal(["--open", "{url}"], tool.Command?.For(Platform.Windows)?.Args);
-        Assert.Equal("/Applications/Foo.app/Contents/MacOS/Foo", tool.Command?.For(Platform.MacOS)?.Path);
+        Assert.Equal("%LOCALAPPDATA%\\Programs\\Foo\\foo.exe", tool.Command?.For(HostPlatform.Windows)?.Path);
+        Assert.Equal(["--open", "{url}"], tool.Command?.For(HostPlatform.Windows)?.Args);
+        Assert.Equal("/Applications/Foo.app/Contents/MacOS/Foo", tool.Command?.For(HostPlatform.MacOS)?.Path);
     }
 
     [Fact]

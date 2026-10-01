@@ -50,7 +50,7 @@ internal sealed class FakeHost
     }
 
     public RoutingService CreateService() => new(new RoutingServices(
-        new Store(this), Platform.MacOS, new Detector(this), new Profiles(this), new Launcher(this),
+        new Store(this), HostPlatform.MacOS, new Detector(this), new Profiles(this), new Launcher(this),
         new SystemOpener(this), new Picker(this), new Notifier(this), new Logger(this), _ => null, "/Users/me"));
 
     private sealed class Store(FakeHost host) : IConfigStore

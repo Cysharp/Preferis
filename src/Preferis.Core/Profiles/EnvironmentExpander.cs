@@ -5,9 +5,9 @@ namespace Preferis.Core.Profiles;
 /// <summary>Expands environment variables and <c>~</c> in paths from the configuration, per platform convention.</summary>
 public static partial class EnvironmentExpander
 {
-    public static string Expand(string input, Platform platform, Func<string, string?> getEnvironmentVariable, string homeDirectory)
+    public static string Expand(string input, HostPlatform platform, Func<string, string?> getEnvironmentVariable, string homeDirectory)
     {
-        return platform == Platform.Windows ? ExpandWindows(input, getEnvironmentVariable) : ExpandUnix(input, getEnvironmentVariable, homeDirectory);
+        return platform == HostPlatform.Windows ? ExpandWindows(input, getEnvironmentVariable) : ExpandUnix(input, getEnvironmentVariable, homeDirectory);
     }
 
     private static string ExpandWindows(string input, Func<string, string?> getEnvironmentVariable)

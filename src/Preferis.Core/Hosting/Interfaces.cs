@@ -63,7 +63,7 @@ public interface IRoutingLog
 /// <summary>Everything <see cref="RoutingService"/> depends on, supplied by the Router executable.</summary>
 public sealed record RoutingServices(
     IConfigStore Config,
-    Platform Platform,
+    HostPlatform HostPlatform,
     IBrowserDetector Browsers,
     IBrowserProfileEnumerator BrowserProfiles,
     IBrowserLauncher Launcher,

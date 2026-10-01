@@ -1,7 +1,7 @@
 namespace Preferis.Core;
 
 /// <summary>Operating systems Preferis runs on. Used wherever configuration or resolution is OS specific.</summary>
-public enum Platform
+public enum HostPlatform
 {
     Windows,
     MacOS,
@@ -10,5 +10,5 @@ public enum Platform
 public static class PlatformInfo
 {
     /// <summary>The platform the current process runs on.</summary>
-    public static Platform Current => OperatingSystem.IsWindows() ? Platform.Windows : Platform.MacOS;
+    public static HostPlatform Current => OperatingSystem.IsWindows() ? HostPlatform.Windows : HostPlatform.MacOS;
 }

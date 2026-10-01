@@ -18,7 +18,7 @@ public class PickerMessagesTests
         var config = Sample();
         var decision = Decide(config, "https://login.microsoftonline.com/common");
 
-        var request = PickerMessages.CreateRequest(config, decision, Platform.MacOS, message: null);
+        var request = PickerMessages.CreateRequest(config, decision, HostPlatform.MacOS, message: null);
 
         Assert.Equal("https://login.microsoftonline.com/common", request.Url);
         Assert.Equal(["edge", "chrome-work", "chrome-default"], request.Candidates.Select(c => c.ProfileId));
@@ -38,7 +38,7 @@ public class PickerMessagesTests
         var config = Sample();
         var decision = new RoutingDecision.Open(RoutingUrl.Parse("https://x.example.com/"), ["system-browser", "edge-private"], OpenSource.Explicit, null);
 
-        var request = PickerMessages.CreateRequest(config, decision, Platform.MacOS, message: "設定ファイルを読み込めませんでした");
+        var request = PickerMessages.CreateRequest(config, decision, HostPlatform.MacOS, message: "設定ファイルを読み込めませんでした");
 
         Assert.Equal("safari", request.Candidates[0].Browser);
         Assert.True(request.Candidates[1].Private);
@@ -49,7 +49,7 @@ public class PickerMessagesTests
     public void Request_round_trips_through_json()
     {
         var config = Sample();
-        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), Platform.Windows, null);
+        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.Windows, null);
 
         var json = PickerMessages.Serialize(request);
         var parsed = PickerMessages.DeserializeRequest(json);
@@ -65,7 +65,7 @@ public class PickerMessagesTests
     public void A_valid_selection_is_accepted()
     {
         var config = Sample();
-        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), Platform.Windows, null);
+        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.Windows, null);
 
         var response = PickerMessages.TryParseResponse("""{ "result": "selected", "profileId": "chrome-work", "remember": true }""", request);
 
@@ -79,7 +79,7 @@ public class PickerMessagesTests
     public void Cancellation_is_accepted()
     {
         var config = Sample();
-        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), Platform.Windows, null);
+        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.Windows, null);
 
         var response = PickerMessages.TryParseResponse("""{ "result": "cancelled" }""", request);
 
@@ -97,7 +97,7 @@ public class PickerMessagesTests
     public void Invalid_responses_are_rejected(string json)
     {
         var config = Sample();
-        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), Platform.Windows, null);
+        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.Windows, null);
 
         Assert.Null(PickerMessages.TryParseResponse(json, request));
     }

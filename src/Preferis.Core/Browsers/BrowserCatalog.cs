@@ -3,7 +3,7 @@ namespace Preferis.Core.Browsers;
 /// <summary>
 /// The known browsers. Ids are the only form a configuration may reference a browser by, apart from the
 /// platform specific escape hatches <c>win:&lt;StartMenuInternet key&gt;</c> and <c>mac:&lt;bundle id&gt;</c>.
-/// Exact values are verified on real machines and recorded in docs/Platform.md.
+/// Exact values are verified on real machines and recorded in docs/HostPlatform.md.
 /// </summary>
 public static class BrowserCatalog
 {

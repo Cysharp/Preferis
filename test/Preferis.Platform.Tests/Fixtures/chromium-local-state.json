@@ -1,0 +1,31 @@
+{
+  "browser": { "enabled_labs_experiments": [], "last_redirect_origin": "" },
+  "profile": {
+    "info_cache": {
+      "Default": {
+        "active_time": 1759300000.0,
+        "avatar_icon": "chrome://theme/IDR_PROFILE_AVATAR_26",
+        "gaia_name": "",
+        "gaia_picture_file_name": "Google Profile Picture.png",
+        "name": "Mayuki",
+        "user_name": ""
+      },
+      "Profile 1": {
+        "active_time": 1759310000.0,
+        "avatar_icon": "chrome://theme/IDR_PROFILE_AVATAR_3",
+        "gaia_name": "Mayuki (Work)",
+        "name": "Work",
+        "user_name": "me@work.example.com"
+      },
+      "Profile 2": {
+        "avatar_icon": "chrome://theme/IDR_PROFILE_AVATAR_0",
+        "gaia_name": "Gaia Only",
+        "name": "",
+        "user_name": "gaia@example.com"
+      }
+    },
+    "last_active_profiles": [ "Profile 1" ],
+    "profiles_order": [ "Profile 1", "Default", "Profile 2" ]
+  },
+  "user_experience_metrics": { "stability": { "exited_cleanly": true } }
+}

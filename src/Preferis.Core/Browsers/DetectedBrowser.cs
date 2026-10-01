@@ -20,7 +20,7 @@ public sealed record DetectedBrowser(
 /// <param name="AvatarPath">Picture file for the picker, when available.</param>
 public sealed record BrowserProfileInfo(string Directory, string? Name, string? Email, string? AvatarPath = null);
 
-/// <summary>Resolves one browser id to its installation. Implemented by the Platform layer; kept cheap for the fast path.</summary>
+/// <summary>Resolves one browser id to its installation. Implemented by the HostPlatform layer; kept cheap for the fast path.</summary>
 public interface IBrowserLocator
 {
     DetectedBrowser? TryResolve(string browserId);

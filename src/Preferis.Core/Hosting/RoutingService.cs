@@ -30,7 +30,7 @@ public sealed class RoutingService
             Log(LogLevel.Warning, loaded.Error);
         }
 
-        var context = new Context(url, loaded, new ProfileResolver(_services.Platform, _services.Browsers, _services.BrowserProfiles, _services.GetEnvironmentVariable, _services.HomeDirectory));
+        var context = new Context(url, loaded, new ProfileResolver(_services.HostPlatform, _services.Browsers, _services.BrowserProfiles, _services.GetEnvironmentVariable, _services.HomeDirectory));
         var result = new Router(loaded.Config).Route(url);
         foreach (var entry in result.Trace)
         {
@@ -127,7 +127,7 @@ public sealed class RoutingService
     private HandleResult? ShowProfilePicker(Context context, IReadOnlyList<string> profileIds, string? ruleId, string? message, bool allowFallbackPicker)
     {
         var decision = new RoutingDecision.Open(context.Url, profileIds, OpenSource.Explicit, ruleId);
-        var request = PickerMessages.CreateRequest(context.Config, decision, _services.Platform, message);
+        var request = PickerMessages.CreateRequest(context.Config, decision, _services.HostPlatform, message);
         var response = _services.Picker.Show(request);
         if (response is null)
         {
@@ -201,7 +201,7 @@ public sealed class RoutingService
             }
             if (response?.ProfileId is { } chosen && browsers.FirstOrDefault(b => DetectedBrowserPrefix + b.Id == chosen) is { } browser)
             {
-                var plan = ProfileResolver.PlanForBrowser(browser, context.Url, _services.Platform);
+                var plan = ProfileResolver.PlanForBrowser(browser, context.Url, _services.HostPlatform);
                 if (TryLaunch(plan, chosen, out var error))
                 {
                     return Launched(chosen);

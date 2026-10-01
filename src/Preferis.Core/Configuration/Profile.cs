@@ -56,10 +56,10 @@ public sealed class BrowserReference
     public bool IsPlain => Windows is null && MacOS is null;
 
     /// <summary>The browser id to use on <paramref name="platform"/>, or null when none applies.</summary>
-    public string? For(Platform platform) => platform switch
+    public string? For(HostPlatform platform) => platform switch
     {
-        Platform.Windows => Windows ?? Default,
-        Platform.MacOS => MacOS ?? Default,
+        HostPlatform.Windows => Windows ?? Default,
+        HostPlatform.MacOS => MacOS ?? Default,
         _ => Default,
     };
 }
@@ -91,10 +91,10 @@ public sealed class CommandTarget
     [JsonPropertyName("macos")]
     public CommandSpec? MacOS { get; set; }
 
-    public CommandSpec? For(Platform platform) => platform switch
+    public CommandSpec? For(HostPlatform platform) => platform switch
     {
-        Platform.Windows => Windows,
-        Platform.MacOS => MacOS,
+        HostPlatform.Windows => Windows,
+        HostPlatform.MacOS => MacOS,
         _ => null,
     };
 

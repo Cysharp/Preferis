@@ -25,7 +25,7 @@ internal static class DryRunCommand
         {
             output.WriteLine($"Warning:  {loaded.Error}");
         }
-        output.WriteLine($"Platform: {PlatformInfo.Current}");
+        output.WriteLine($"HostPlatform: {PlatformInfo.Current}");
         output.WriteLine($"URL:      {url.AbsoluteUri}");
         output.WriteLine($"Host:     {url.Host}{(url.IdnHost != url.Host ? $" ({url.IdnHost})" : "")}");
         output.WriteLine();

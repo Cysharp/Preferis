@@ -11,7 +11,7 @@ public enum LaunchKind
     OpenWithApplication,
 }
 
-/// <summary>What the Platform layer must do to open a URL with a resolved profile.</summary>
+/// <summary>What the HostPlatform layer must do to open a URL with a resolved profile.</summary>
 public sealed record LaunchPlan(
     LaunchKind Kind,
     string Path,

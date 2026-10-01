@@ -114,19 +114,21 @@ src/
                               macOS の Apple Event 受信 (objc 直接呼び出し) を含む。
   Preferis.Picker.Windows/    WinUI 3。net10.0-windows10.0.xxxxx。Windows でのみビルド。
   Preferis.Picker.MacOS/      AppKit (Microsoft.macOS)。net10.0-macos。macOS でのみビルド。
-  Preferis.Settings/          Avalonia 設定 UI。net10.0。
+  Preferis.Settings/          Avalonia 設定 UI。net10.0。ViewModel (CommunityToolkit.Mvvm) と View、OS 固有部分は
+                              Services/ISettingsPlatform の実装 (macOS: MacSettingsPlatform)。
 test/
   Preferis.Core.Tests/
-  Preferis.Platform.Tests/    フィクスチャ (Local State, profiles.ini) を使った解析テスト
-  Preferis.Settings.Tests/    ViewModel テスト (必要なら Avalonia.Headless)
+  Preferis.Platform.Tests/    フィクスチャ (Local State, profiles.ini) を使った解析テスト、macOS 実機 API の小さな結合テスト
+  Preferis.Settings.Tests/    ViewModel テスト。実ファイル (一時ディレクトリ) の ConfigLoader とフェイクの OS / ダイアログで検証
 tools/
   bench/                      起動時間計測スクリプト
 docs/
 ```
 
-OS 固有のピッカープロジェクトは、ソリューションフィルター (`Preferis.Windows.slnf`, `Preferis.MacOS.slnf`)
-または `Condition` 付きの参照で、ビルド可能な OS 上でのみ対象にします。これにより Guidelines の
-「常にビルドできる状態を保つ」を OS ごとに満たします。
+`Preferis.slnx` はすべてのプロジェクトを含み、OS ごとにソリューションフィルター (`Preferis.MacOS.slnf`,
+`Preferis.Windows.slnf`) でビルド可能なものだけを対象にします (`dotnet test Preferis.MacOS.slnf`)。
+`Preferis.Windows.slnf` は `Preferis.Picker.MacOS` を除いた構成で、M4 で WinUI 3 ピッカーを加えます。
+これにより Guidelines の「常にビルドできる状態を保つ」を OS ごとに満たします。
 
 Platform 層は単一プロジェクトとし、`OperatingSystem.IsWindows()` 等による実行時分岐と
 `[SupportedOSPlatform]` 注釈で実装します。
@@ -136,8 +138,9 @@ Platform 層は単一プロジェクトとし、`OperatingSystem.IsWindows()` �
 | 起動 | 動作 |
 | --- | --- |
 | `Preferis <url> [<url> ...]` | Router。Windows では OS シェルからの起動 (最速経路)。macOS でもシェルから直接渡せる |
-| `Preferis` (引数なし、Launch Services から起動) | macOS。NSApplication を起動し、Apple Event で届く URL を処理して終了する |
-| `Preferis` (引数なし、シェルから) | 使い方を表示。将来は `Preferis.Settings` を起動 |
+| `Preferis` (引数なし、Launch Services から起動) | macOS。NSApplication を起動し、Apple Event で届く URL を処理して終了する。URL が届かなければ (Finder や Spotlight から `Preferis.app` 自体を開いた場合) 設定 UI を開いて終了する |
+| `Preferis` (引数なし、シェルから) | 使い方を表示 |
+| `Preferis --settings` | 設定 UI (`Preferis Settings.app`) を開く |
 | `Preferis --status` | OS への登録状態、既定ブラウザー、設定ファイルの場所を表示 |
 | `Preferis --dry-run <url> [--config <path>]` | 設定を読み、ルーティングの過程 (トレース) と決定、候補プロファイルを標準出力に表示して終了 (起動しない)。デバッグ・テスト用。終了コードは決定できれば 0、失敗なら 2 |
 | `Preferis --register` / `--unregister` | OS への登録/解除 |
@@ -218,7 +221,7 @@ argv / Apple Event
 | --- | --- | --- |
 | プロセス起動 → URL 受信 | argv なので実質 0 | 200 ms 以下 (ウォーム)。スパイク 1 で計測済み。内訳は LS 起動の床 35〜65 ms、NativeAOT 初期化、AppKit ロード 15 ms、`NSApplication` 初期化 50〜60 ms、イベント配送 20 ms (Platform.md §5)。Preferis 側で削れるのは AppKit 以降の約 85 ms のみで、NSApplication なしでは受信できない |
 | URL 受信 → ブラウザー起動 API 呼び出し (Preferis 自身の処理) | 20 ms 以下 | 10 ms 以下 |
-| プロセス起動 → ピッカー表示 | 300 ms 以下 (WinUI 3 がこれを超えるなら TaskDialog) | 350 ms 以下 (URL 受信 200 ms + ヘルパー起動) |
+| プロセス起動 → ピッカー表示 | 300 ms 以下 (WinUI 3 がこれを超えるなら TaskDialog) | 350 ms 以下 (URL 受信 200 ms + ヘルパー起動)。M3 で計測: Router が起動したヘルパーのプロセス起動 → ウィンドウ表示が 120 ms (ウォーム、Platform.md §5) |
 
 ### 5.3 macOS における URL 受信
 
@@ -266,6 +269,10 @@ URL ごとに新しいプロセスが起動します。単一インスタンス�
    プロファイル未指定と同じ扱い (デフォルトプロファイル、なければ全プロファイル) になる。
 6. 未知の `type` を持つ条件は決してマッチしない。未知の `type` を持つアクションに到達した場合は、
    新しいバージョンの設定が意図した先を推測せず、ルーティング失敗として §8 のフォールバックへ進む。
+7. 開く URL は決定時点の (書き換え後の) URL である。ピッカーへの表示、「記憶する」で作るルールのホスト、
+   フォールバック先で開く URL もすべてこれを使う。受け取ったままの URL は履歴にだけ残る。
+8. 決定を下したルール (終端アクションを実行したルール) を結果として返す。書き換えだけで素通りしたルールではなく、
+   キャッチオールが決めた場合はなし。履歴とテストページはこれを表示する。
 
 ### 6.2 条件 (Condition)
 
@@ -331,6 +338,12 @@ ProfileResolver      Resolve(Profile, IBrowserDetector) -> LaunchPlan | ResolveF
 LaunchPlan           { ExecutablePath, Arguments[], Kind }   // Platform 層が実行する
 PickerRequest        { Url, Candidates[], Options }           // §9.3
 PickerResponse       { Result, ProfileId?, Remember }
+PickerSession        ピッカーの振る舞い (選択、キー操作、記憶、自動選択タイマー)。UI 非依存で各 OS のピッカーが共有 (§9.2)
+PickerDisplay        URL のホスト強調用の分割、候補の 2 行目 (ブラウザープロファイル名・アカウント・プライベート)
+BrowserProfileMatcher 保存済みの BrowserProfileRef と検出したブラウザープロファイルの照合 (§7.2)。解決・ピッカー・設定 UI で共通
+ConfigValidator      設定の静的検査 (設定 UI の警告表示用)。保存は妨げない
+IdGenerator          プロファイル・ルールの ID (slug) 生成 (Configuration.md §2.3)
+RoutingHistory       オプトインのルーティング履歴 (§8)
 ```
 
 `Router` と `ProfileResolver` は純粋関数的に設計し、OS 依存部分はインターフェース経由で注入します。
@@ -394,7 +407,10 @@ Chromium 系のプロファイルディレクトリ名 (`Default`, `Profile 1`) 
 
 - 既定はエラーのみ。ログの保存先は OS のローカルログディレクトリ (同期対象には置かない)。
 - 「履歴」(直近 N 件の URL とマッチしたルール) は設定 UI でルールを調整するために有用だが、
-  URL は機微情報なのでオプトインとし、ローカルにのみ保存する。
+  URL は機微情報なのでオプトインとし、ローカルにのみ保存する。`local.json` の `logging.history` が `true` の時だけ
+  Router が起動処理の後 (起動を遅らせないため) にログディレクトリの `history.jsonl` へ追記し、`historySize` 件に切り詰める。
+  設定 UI のテストページが一覧表示し、クリックでその URL を再テストできる。1 つの Router 内の追記は直列化するが、
+  複数の Router プロセスが同時に切り詰めるとまれに 1 件落ちることがある。履歴の用途では許容する。
 
 ## 9. UI
 
@@ -411,7 +427,29 @@ Avalonia (Fluent テーマ) のシングルウィンドウ、左にナビゲー�
 
 設定 UI は起動速度の制約を受けないため、全ブラウザーと全ブラウザープロファイルの列挙、
 アイコンの読み込みはここで行います。OS への登録は Router の `--register` を呼び出して行います
-(登録情報が Router の実行ファイルパスを指すため)。
+(登録情報が Router の実行ファイルパスを指すため)。登録状態の表示は Platform 層を直接使います。
+
+M3 での実装の要点:
+
+- **保存は明示的**。編集は `config.json` / `local.json` のモデルをその場で書き換え (未知プロパティを保持するため)、
+  「Save」(⌘S) で書き込む。「Revert」で読み直す。未保存のまま閉じると保存するか確認する。自動保存にしないのは、
+  入力途中のパターンや一時的に壊れた設定を Router が読んでしまうのを避けるため。
+- **外部の変更を上書きしない**。Router の「記憶する」や同期クライアントが `config.json` を書き換えることがあるため、
+  読み込み時の内容と保存直前・ウィンドウのアクティブ化時・ファイル移動前のディスク上の内容を比較する。`config.json` を
+  ここで編集していなければ黙って読み直し (`local.json` の未保存の編集は残す)、編集中なら「Reload / Save Anyway」の帯を出す。
+  `local.json` だけの編集は衝突しないのでそのまま保存する。壊れた `config.json` は実際に書き直すまで「読めない」表示を残す。
+- **検証**: `ConfigValidator` の結果を、該当するプロファイル・ルールの横 (赤い点) と編集画面、サイドバーの件数に表示する。
+- **プロファイル**: 検出したブラウザーとそのブラウザープロファイルから 1 クリックで作成 (「Add All」で未作成のものを一括)。
+  Chromium は `directory` / `name` / `email` をすべて、Firefox は `name` を保存する。最初に作ったプロファイルが既定になる。
+  削除時に参照 (既定、フォールバック、`open` アクション) があれば一覧を示して確認し、参照も取り除く。
+  コマンドで `.app` を選ぶと `/usr/bin/open -a <app> {url}` に変換する。
+- **ルール**: 並べ替えはボタン (↑↓) で行う。ドラッグ並べ替えは未実装。条件ツリーの `not` は独立した階層ではなく
+  各ノードの「Not」チェックとして表示する (`not not x` は `x` に畳まれる)。`open` は全プロファイルのチェックリストで、
+  チェックした順がピッカーの並び順になる。存在しない ID は「(missing)」として外すまで残す。未知の条件・アクションは
+  読み取り専用で表示し、そのまま書き戻す。
+- **テスト**: 編集中 (未保存を含む) の設定でルーティングし、各候補がこのマシンで実際に何を実行するか
+  (フォールバックした場合はその理由も) を表示する。
+- **言語**: M3 の UI は英語のみ。`settings.language` は保存するが表示には未反映 (多言語化は §12 のユーザー判断事項)。
 
 ### 9.2 ピッカー UI (`Preferis.Picker`)
 
@@ -425,10 +463,17 @@ Windows の「アプリを選択」ダイアログに近い小さなダイアロ
 - 「このホストには今後この選択を使う」チェックボックス。オンにすると応答の `remember` が `true` になり、
   **Router が** `host equals <host>` → `open <選択プロファイル>` のルールを生成して、ピッカーを出した
   ルールの直前に挿入する (末尾に追加するとピッカーを出した元ルールが先にマッチしてしまうため)。
-  設定ファイルへの書き込みはピッカーでは行わない。
+  設定ファイルへの書き込みはピッカーでは行わない。ピッカーは数分開いたままのこともあるため、Router は挿入の直前に
+  `config.json` を読み直し、その間に保存された変更を残す。読み直せない (壊れた、場所が変わった) 場合は記憶しない。
 - 「URL をコピー」ボタン。
 - 既定で最前面、マウスカーソル位置付近またはスクリーン中央に表示 (設定で選択)。
-- 任意: N 秒無操作で既定候補を自動選択。
+- 任意: N 秒無操作で選択中の候補 (初期状態は先頭) を自動選択。キー入力やマウス操作のたびにカウントはやり直し、
+  残り秒数を「Open (3)」のように表示する。自動選択は「記憶する」がオンでも記憶しない (誰も選んでいないため)。
+- ウィンドウを閉じる操作はキャンセル (`none`) と同じ。候補一覧にフォーカスがある時の ⌘C は URL をコピーする。
+- 「記憶する」は、ホストのない URL (`file:`) と、設定がなく検出したブラウザーを並べたフォールバック時には出さない
+  (リクエストの `options.allowRemember`)。
+- 振る舞い (選択、キー、記憶、自動選択) は Core の `PickerSession` にあり、AppKit / WinUI 3 のピッカーは表示と入力の
+  受け渡しだけを行う。
 - 別プロセスであるため、Router がフォアグラウンド権限を移譲する (Windows: `AllowSetForegroundWindow`、
   macOS: アクティベーションの譲渡)。詳細は Platform.md。
 
@@ -448,7 +493,7 @@ Router がピッカーを子プロセスとして起動し、標準入力にリ�
       "browserProfile": { "directory": "Profile 1", "name": "Work" } },
     { "profileId": "edge-private", "name": "Edge (InPrivate)", "browser": "edge", "private": true }
   ],
-  "options": { "position": "cursor", "autoSelectSeconds": 0, "rememberChoiceDefault": false },
+  "options": { "position": "cursor", "autoSelectSeconds": 0, "rememberChoiceDefault": false, "allowRemember": true },
   "message": null
 }
 ```
@@ -456,6 +501,7 @@ Router がピッカーを子プロセスとして起動し、標準入力にリ�
 - `candidates[].browser` / `browserProfile` はアイコン・アバター解決用。`browserProfile.directory` は
   起動に使うものと同じ値。
 - `message` はフォールバック時の説明 (「設定ファイルを読み込めませんでした」など)。通常は `null`。
+- `options.allowRemember` が `false` の時、ピッカーは「記憶する」を出さず、応答の `remember` は常に `false`。
 
 応答:
 
@@ -497,9 +543,12 @@ Guidelines に従い TDD (Red → Green) で進めます。
 - **Platform**: `Local State` / `profiles.ini` のフィクスチャ解析。レジストリと Launch Services は
   薄いインターフェースで包み、フェイクで検出ロジックを検証。`LaunchPlan` 生成 (引数の組み立て) を
   OS ごとに検証。`IPickerLauncher` はフェイクで差し替え、Router のフォールバック順序を検証。
-- **Settings**: ViewModel テスト。
+- **Settings**: ViewModel テスト。一時ディレクトリの実ファイルに対する `ConfigLoader` と、OS・ダイアログのフェイクで、
+  保存・外部変更・各ページの編集がモデルにどう書かれるかを検証する。
 - **Picker**: `--request <path>` で起動する手動確認を基本とし、ロジック (キー操作による選択、
-  自動選択タイマー) は UI から切り離した状態機械としてテストする。
+  自動選択タイマー) は UI から切り離した状態機械 (`PickerSession`) としてテストする。
+- **画面の確認**: 画面収録の権限やディスプレイがなくても見た目を確認できるよう、ピッカーは `PREFERIS_PICKER_SNAPSHOT=<png>`、
+  設定 UI は `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で描画結果を PNG に書き出す (開発用。Platform.md §3.7, §3.8)。
 - **E2E / 手動**: OS ごとのチェックリスト (既定ブラウザー登録、URL 受信、プロファイル指定起動、
   既に起動中のブラウザーへの受け渡し、ピッカーのフォーカス) と `tools/bench` による起動時間計測。
 
@@ -535,14 +584,15 @@ macOS:
    (`spikes/UrlActivation/ls-query.swift`)、システム設定「デフォルトの Web ブラウザ」の一覧にも表示されることを
    目視で確認した。一覧の表示名は `CFBundleDisplayName` ではなく `.app` のファイル名が使われる
    (「Preferis Spike」ではなく「UrlActivation」と表示された) ため、製品のバンドル名は `Preferis.app` にする。
-   ヘルパーバンドル同梱時の再確認は M2 で行う。
+   ヘルパーバンドル同梱時の再確認は M3 で行った: ヘルパー 2 つを `Contents/Helpers/` に置いた `Preferis.app` だけが
+   https / public.html のハンドラーに列挙され、ヘルパーは列挙されない。
 5. **Microsoft.macOS ピッカーの NativeAOT ビルドとバンドル化** — ヘルパーバンドルとして
    `Contents/Helpers/` に配置し、内側から署名して動作すること。
    **結果 (2026-10-01, 部分)**: `net10.0-macos` + `PublishAot=true` でビルドでき、実行ファイル 3.6 MB、バンドル 4.9 MB、
    ad-hoc 署名は自動。ウォームでプロセス起動 → Main 40〜60 ms、→ ウィンドウ表示 190〜235 ms。
    Microsoft.macOS 固有の注意: `.app` は `$(PublishDir)` ではなく `$(OutDir)` にできる、既定で `.pkg` も作る
    (`CreatePackage=false` で抑止)、バンドル名は `ApplicationTitle` に従う。`Contents/Helpers/` へのネスト配置と
-   内側からの署名は Router のバンドル組み立て (M2) で確認する。
+   内側からの署名は M3 で確認した (`codesign --verify --strict --deep` が通り、Router の子プロセスとして動作する)。
 
 Windows:
 
@@ -572,6 +622,14 @@ Windows:
 | 2026-10-01 | macOS で先に機能を完成させ、Windows 対応はその後に行う | 開発環境が macOS であり、Apple Event 受信やヘルパーバンドルなど macOS 固有のリスクを早期に潰す。Core と設定 UI は OS 非依存なので Windows 対応は Platform と ピッカーの追加で済む |
 | 2026-10-01 | Platform 層が実装する抽象 (ブラウザー検出、起動、ピッカー、通知、登録) は Core の `Hosting` 名前空間に置き、Router のオーケストレーション (`RoutingService`) も Core に置く | フォールバック連鎖をフェイクでテストできるようにする。Platform は実装だけを持つ |
 | 2026-10-01 | ブラウザー ID はカタログの既知 ID のみ。チャネル (Stable / Beta / Dev / Canary) は別 ID とし、同系統の別チャネルで開くフォールバックは設けない | チャネルごとにプロファイルが別物であり、暗黙に別チャネルで開くと意図から外れる。マシン差は OS ごとの指定と `fallback` で明示する |
+| 2026-10-01 | ピッカーの振る舞いは Core の `PickerSession` に置き、AppKit / WinUI 3 は描画と入力の受け渡しだけにする | 両 OS で同じ規則にし、UI なしでテストできるようにする |
+| 2026-10-01 | 自動選択は「N 秒無操作で選択中の候補」。操作のたびにカウントをやり直し、記憶はしない | 先頭固定だと、別の候補に移動して待った利用者の意図と違うものが開く。無人のタイムアウトから恒久的なルールを作らない |
+| 2026-10-01 | 書き換え後の URL を開く (ピッカー、記憶、フォールバックも同様)。M1/M2 では受け取った URL を開いていた不具合を M3 で修正 | Safe Links の展開のように、書き換えの目的は開く URL を変えること |
+| 2026-10-01 | ピッカー IPC の `options` に `allowRemember` を追加 (バージョン番号は引き続き持たない) | ホストのない URL や検出ブラウザーの一覧では「記憶する」が意味を持たない。古いピッカーは未知プロパティを無視するので互換 |
+| 2026-10-01 | 設定 UI は明示的な保存とし、外部での変更を検出して上書き前に知らせる | Router の「記憶する」と同期クライアントが同じファイルを書く。入力途中の設定を Router に読ませない |
+| 2026-10-01 | 設定 UI の `not` は各条件ノードの「Not」フラグとして表示する | 否定のための 1 階層が減り、読みやすい。`not not x` は `x` と同じ意味なので畳んでも意味は変わらない |
+| 2026-10-01 | M3 の UI (ピッカー、設定) は英語のみ。`settings.language` は保存だけ行う | 対応言語はユーザー判断事項 (§12) で未決。文字列を後から差し替えられるよう UI 文字列は View と ViewModel に集める |
+| 2026-10-01 | ルーティング履歴は JSON Lines でローカルのログディレクトリに置く | URL を含むため同期対象に置かない。追記と切り詰めが単純 |
 
 ## 14. マイルストーンと現在の状態
 
@@ -585,7 +643,7 @@ Windows 対応で追加するのは Platform の Windows 実装、Router の Win
 | M0 | スパイク (§12 の macOS 項目 1〜5) と計測方法の確立 | macOS 起動経路とピッカー構成の方式が確定している | 完了 (2026-10-01)。残件はヘルパーのネスト配置時の再確認で、M2 で行う。`tools/bench` は測る対象の Router ができる M2 で作る |
 | M1 | Core: 設定モデル、JSON、条件、ルーティング、プロファイル解決、IPC メッセージ、`--dry-run` | ユニットテストで §6〜§7 の仕様を網羅。`--dry-run` で設定ファイルの評価結果を確認できる | 完了 (2026-10-01)。`Preferis.Core` + 111 テスト、`Preferis.Router` は `--dry-run` のみ。NativeAOT publish 確認済み |
 | M2 | macOS Platform + Router 高速経路: Launch Services 検出、プロファイル列挙、LaunchPlan 実行、既定ブラウザー登録、Apple Event 受信。**`PublishMacOS` ターゲットで ad-hoc 署名済みの `Preferis.app` 一式を生成** | `artifacts/` の `Preferis.app` を既定ブラウザーにし、単一候補のルールで日常利用できる | 完了 (2026-10-01)。`open -a` 経由と argv 経由で Chrome / Edge Dev への振り分けを確認。既定ブラウザー化は `--register` をユーザーが実行して確認する。ピッカー不在時は既定プロファイルへフォールバック。Platform.md §5 に計測値 |
-| M3 | macOS ピッカー (AppKit, ヘルパーバンドル) + 設定 UI (Avalonia, macOS で検証)。両者を `Preferis.app` に同梱 | macOS で全機能が揃い、設定ファイルを手で編集せずに運用できる | 未着手 |
+| M3 | macOS ピッカー (AppKit, ヘルパーバンドル) + 設定 UI (Avalonia, macOS で検証)。両者を `Preferis.app` に同梱 | macOS で全機能が揃い、設定ファイルを手で編集せずに運用できる | 実装完了 (2026-10-01)、目視確認待ち。`Preferis Picker.app` (AppKit, NativeAOT, 4.6 MB) と `Preferis Settings.app` (Avalonia 12, NativeAOT, 26 MB) を `Contents/Helpers/` に同梱し内側から署名。Router 経由でピッカー表示まで 120 ms、「記憶する」、オプトイン履歴、`Preferis.app` を直接開くと設定 UI。テスト 333 件 (Core 221, Platform 28, Settings 84)。描画は PNG 書き出しで確認済みだが、実際のリンククリックからのピッカーの前面表示と設定 UI の手操作は開発者の目視確認が必要。未実装: UI の日本語化、ルールのドラッグ並べ替え、アプリアイコン |
 | M4 | Windows: スパイク (§12 の 6〜9)、Platform の Windows 実装、Router の Windows 経路、WinUI 3 ピッカー、設定 UI の Windows 検証。**`PublishWindows` ターゲットで exe 一式のフォルダーを生成** | `artifacts/` の `Preferis.exe` を既定ブラウザーにし、M3 と同等の機能が揃う。同一の設定ファイルを両 OS で共有できる | 未着手 |
 | M5 | リリース: Developer ID 署名と公証、インストーラー (macOS: dmg / Homebrew cask、Windows: zip / winget 等)、ベンチ結果の記録、利用者向けドキュメント | 配布物を第三者が導入できる | 未着手 |
 

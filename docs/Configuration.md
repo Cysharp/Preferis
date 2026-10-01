@@ -16,8 +16,11 @@ Preferis の設定は 2 つの JSON ファイルに分かれます。
 
 `local.json` の `configPath` が設定されていればそちらを `config.json` として読みます
 (例: OneDrive や Google Drive 配下)。シンボリックリンクはクラウドストレージとの相性が悪いため、
-ポインター方式を採用します。設定 UI の「クラウドストレージへ移動」はファイルを移動して
-`configPath` を書き換えます。
+ポインター方式を採用します。設定 UI の「Move To…」(クラウドストレージへの移動) は、編集中の設定を新しい場所に
+書き出して `configPath` を書き換えます。元のファイルを消すのはそれがこのマシンの既定の場所だった場合だけで、
+それ以外 (クラウドストレージ上など) は他のマシンが使っている可能性があるため残します。移動先に既に `config.json` が
+あれば、それを使う (別のマシンで同期済みの設定を採用する) か置き換えるかを選ばせます。「Use Existing File…」は
+既存のファイルを変更せずに `configPath` だけを向けます。
 
 書き込みは一時ファイルに書いてから置き換える (アトミック書き込み) こととし、同期ツールが
 中途半端な状態のファイルを拾わないようにします。読み込み時に JSON が壊れていた場合は
@@ -121,7 +124,7 @@ Preferis の設定は 2 つの JSON ファイルに分かれます。
 
 | プロパティ | 型 | 説明 |
 | --- | --- | --- |
-| `id` | string | 一意な識別子。ルールから参照する。UI が生成する (人間可読な slug) |
+| `id` | string | 一意な識別子。ルールから参照する。UI が名前から生成する (人間可読な slug、§2.10)。名前を変えても変わらない |
 | `name` | string | 表示名 |
 | `browser` | string \| { windows?, macos? } | ブラウザー ID (§2.4)。`command` と排他 |
 | `browserProfile` | BrowserProfileRef | ブラウザープロファイル参照 (§2.5)。`browser` 指定時のみ |
@@ -189,6 +192,7 @@ Chromium 系ではブラウザープロファイルの集合も共有されな�
 | `directory` | chromium | ディレクトリ名。最後の手段であり、プロファイルデータが読めない環境ではこれをそのまま渡す |
 
 解決順序は `email` → `name` → `directory`。設定 UI は検出結果から選択した時に取得できる値をすべて保存します。
+Firefox のプロファイルは `-P <name>` で選ぶため `name` だけを保存します (`directory` はマシン固有のパスになるため)。
 
 ### 2.6 Rule
 
@@ -215,7 +219,7 @@ Chromium 系ではブラウザープロファイルの集合も共有されな�
 ### 2.8 Action
 
 ```json
-{ "type": "open", "profiles": ["chrome-work"] }         // profiles 省略または空 = デフォルトプロファイル
+{ "type": "open", "profiles": ["chrome-work"] }         // profiles 省略または空 = デフォルトプロファイル。複数ならこの順でピッカーに並ぶ
 { "type": "system" }
 { "type": "none" }
 { "type": "rewrite", "mode": "regex", "pattern": "^http://", "replacement": "https://" }
@@ -232,9 +236,20 @@ Chromium 系ではブラウザープロファイルの集合も共有されな�
 | プロパティ | 既定 | 説明 |
 | --- | --- | --- |
 | `picker.position` | `cursor` | `cursor` / `center` |
-| `picker.autoSelectSeconds` | `0` | 0 で無効。N 秒無操作で先頭候補を選択 |
+| `picker.autoSelectSeconds` | `0` | 0 で無効。N 秒無操作で選択中の候補 (初期状態は先頭) を選択。キーやマウスの操作でカウントはやり直し。自動選択では「記憶する」は働かない |
 | `picker.rememberChoiceDefault` | `false` | 「記憶する」チェックの初期状態 |
-| `language` | `auto` | `auto` / `en` / `ja` |
+| `language` | `auto` | `auto` / `en` / `ja`。M3 時点の UI は英語のみで、値は保存されるだけ |
+
+### 2.10 ID の生成
+
+設定 UI がプロファイル・ルールを作る時の `id` は、名前から次の規則で作ります。手で書く場合はこの形に従う必要はなく、
+一意であれば何でも構いません。
+
+- ASCII の英数字は小文字にして残し、それ以外の文字の並びは `-` 1 つにする。先頭と末尾の `-` は除く。最大 48 文字
+  (`Chrome (Work)` → `chrome-work`)
+- 何も残らなければ (日本語だけの名前など) `profile` / `rule` / `command`
+- 既に使われていれば `-2`, `-3` ... を付ける
+- ピッカーの「記憶する」が作るルールは `remember-<host>-<ランダム 8 桁>`
 
 ## 3. `local.json`
 
@@ -253,7 +268,8 @@ Chromium 系ではブラウザープロファイルの集合も共有されな�
 | `configPath` | `config.json` の場所。環境変数と `~` を展開。未設定なら既定の場所 |
 | `browserOverrides` | ブラウザー ID → `{ path, userDataDir? }`。検出より優先する。ポータブル版や特殊なインストール先向け |
 | `logging.level` | `off` / `error` / `info` / `trace` |
-| `logging.history` | ルーティング履歴 (URL を含む) をローカルに保存するか。オプトイン |
+| `logging.history` | ルーティング履歴 (URL を含む) をローカルに保存するか。オプトイン。保存先はログディレクトリの `history.jsonl` (macOS: `~/Library/Logs/Preferis/`、Windows: `%LOCALAPPDATA%\Preferis\Logs\`) |
+| `logging.historySize` | 履歴に残す件数 (既定 50)。古いものから消す |
 
 ## 4. 互換性方針
 

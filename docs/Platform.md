@@ -28,14 +28,16 @@ Preferis.Core.Hosting.IRoutingLog             Write(level, message)
 | `Browsers.BrowserProfileEnumerator` | 共通 | `ChromiumLocalStateReader` / `FirefoxProfilesIniReader` を使う。読めなければ null |
 | `Launching.LaunchPlanExecutor` | 共通 | `ProcessStartInfo.ArgumentList` に要素単位で渡す。macOS の `OpenWithApplication` は `open -a` |
 | `Launching.ProcessPickerLauncher` | 共通 | stdin/stdout JSON、タイムアウト、stderr をログへ転送。実行ファイルが無ければ null |
-| `MacOS.MacBrowserDetector` | macOS | `NSWorkspace` の bundle id 解決と https ハンドラー列挙 |
+| `MacOS.MacBrowserDetector` | macOS | `NSWorkspace` の bundle id 解決と https ハンドラー列挙。Preferis 自身とヘルパー (`net.mayuki.Preferis` とその配下の bundle id) は、どのプロセスから呼んでも除外 |
 | `MacOS.MacSystemOpener` | macOS | 既定ハンドラーの bundle id を自分と比較。委譲は `open <url>` |
-| `MacOS.MacDefaultBrowserRegistrar` | macOS | `LSRegisterURL` + `setDefaultApplicationAtURL:toOpenURLsWithScheme:completionHandler:` (ブロック) 。失敗時は `LSSetDefaultHandlerForURLScheme` |
+| `MacOS.MacDefaultBrowserRegistrar` | macOS | `LSRegisterURL` + `setDefaultApplicationAtURL:toOpenURLsWithScheme:completionHandler:` (ブロック) 。失敗時は `LSSetDefaultHandlerForURLScheme`。対象の `Preferis.app` をパスで受け取る (Router は `ForMainBundle()`、設定 UI は自分を含む `Preferis.app`) |
+| `MacOS.MacApplicationIcons` | macOS | `iconForFile:` → `CGImageForProposedRect:` → PNG。AppKit を使わない UI (Avalonia の設定 UI) 向け |
 | `MacOS.MacUrlActivationSource` | macOS | NSApplication + `application:openURLs:` デリゲート (スパイク 1 の製品版) |
 | `MacOS.MacUserNotifier` | macOS | 暫定で `osascript` の `display dialog` (「Copy URL」ボタンつき)。後で NSAlert に置換可 |
 | `MacOS.ObjC` | macOS | objc ランタイム / Foundation / AppKit / Launch Services への最小限の P/Invoke。グローバルブロック生成を含む |
 
 Router 実行ファイル (`Preferis.Router`) は `RouterHost` でこれらを配線し、`FileLog` でログを書きます。
+設定 UI は `Preferis.Settings.Services.ISettingsPlatform` を通して同じ実装を使います (macOS は `MacSettingsPlatform`、§3.8)。
 
 ## 2. Windows
 
@@ -198,13 +200,15 @@ Preferis.app/
     Info.plist                       Router の plist。CFBundleURLTypes を宣言する唯一のバンドル
     MacOS/Preferis                   Router (NativeAOT, net10.0)
     Helpers/
-      Preferis Picker.app/           bundle id: net.mayuki.Preferis.Picker (仮)。CFBundleURLTypes なし
-        Contents/Info.plist
+      Preferis Picker.app/           bundle id: net.mayuki.Preferis.Picker。CFBundleURLTypes なし。LSUIElement
+        Contents/Info.plist          Microsoft.macOS が生成 (src/Preferis.Picker.MacOS/Info.plist をマージ)
         Contents/MacOS/Preferis Picker
-      Preferis Settings.app/         bundle id: net.mayuki.Preferis.Settings (仮)。CFBundleURLTypes なし
-        Contents/Info.plist
-        Contents/MacOS/Preferis Settings
-    Resources/Preferis.icns
+        Contents/MonoBundle/         NativeAOT でも .NET のネイティブライブラリ数個と runtimeconfig.bin が置かれる
+      Preferis Settings.app/         bundle id: net.mayuki.Preferis.Settings。CFBundleURLTypes なし。通常のアプリ (Dock に出る)
+        Contents/Info.plist          src/Preferis.Settings/macOS/Info.plist
+        Contents/MacOS/Preferis.Settings
+        Contents/MacOS/libAvaloniaNative.dylib, libSkiaSharp.dylib, libHarfBuzzSharp.dylib
+    Resources/                       アイコン (Preferis.icns) は未作成
 ```
 
 - ヘルパーに独自の bundle id と Info.plist を持たせることで、Launch Services が URL の配送先を
@@ -214,8 +218,11 @@ Preferis.app/
   `PublishMacOS` ターゲットでバンドルを組み立てる (Design.md §4.4)。M2 の時点から `artifacts/osx-arm64/Preferis.app`
   として一式を生成し、ローカルテストはこれを `open` して Launch Services に登録して行う。
   NativeAOT ではユニバーサルバイナリが作れない既知の問題があるため、arm64 と x64 を別々に publish する。
-- 署名は内側 (ヘルパー) から順に行い、`--deep` は使わない。開発中は ad-hoc 署名 (`codesign -s -`)、
-  リリース (M5) では `SigningIdentity` プロパティで Developer ID に切り替え、公証を追加する。
+- 署名は内側から順に行い、`--deep` は使わない: ヘルパー内の `.dylib` → 各ヘルパー → `Preferis.app`。最後に
+  `codesign --verify --strict` で確かめる。開発中は ad-hoc 署名 (`codesign -s -`)、リリース (M5) では
+  `SigningIdentity` プロパティで Developer ID に切り替え、公証 (と hardened runtime) を追加する。
+- Avalonia の依存 (SkiaSharp, HarfBuzzSharp, Avalonia.Native) のネイティブライブラリはユニバーサルで配布されるため、
+  `lipo -thin` で RID のアーキテクチャだけを残す (設定 UI が 36 MB → 26 MB)。
 - 同じ bundle id のバンドルが複数登録されていると URL の配送先が不定になるため、テスト中は `artifacts/`
   の 1 つだけを登録しておく。古い登録は `lsregister -u <path>` で解除する。
 
@@ -259,6 +266,11 @@ Router の `Info.plist` の要点:
 - `NSWorkspace.shared.setDefaultApplication(at: <Preferis.app の URL>, toOpenURLsWithScheme: "http")` (macOS 12+)。
   呼ぶと OS が確認ダイアログを表示する。`https` も同様に呼ぶ。
 - 旧 API `LSSetDefaultHandlerForURLScheme` は非推奨。最低対応を macOS 12 とすることで新 API のみ使う。
+- 実機確認 (2026-10-01, macOS 26): http の確認ダイアログで承認すると、https を含めて既定のブラウザーがまとめて切り替わる。
+  その後の https への要求は「The file couldn't be opened.」のエラーを返し、旧 API のフォールバックも -54 で拒否されるが、
+  https は既に Preferis になっている。そのため成否は呼び出しの戻り値ではなく各スキームの実際のハンドラーで判定する
+  (`DefaultHandlerRequest`): 既に Preferis ならそのスキームは要求しない、エラーなく完了した要求は成功とみなす、
+  エラーでも直後に Preferis になっていれば成功、それ以外は旧 API を試し、それでも変わらなければ失敗を返す。
 - 自分が既定かどうかは `NSWorkspace.shared.urlForApplication(toOpen: URL("https://example.com"))` の
   bundle id が自分かで判定する。
 - 失敗時は「システム設定 > デスクトップとDock > デフォルトのWebブラウザ」を案内する
@@ -341,8 +353,9 @@ NSApplication を使わずその場で処理します。
 4. 処理中の URL 件数をカウントし、ピッカー待ちを含めてすべて完了したら 300 ms の猶予の後に
    `performSelectorOnMainThread:` 経由で `terminate:` を呼ぶ。URL ごとの処理はスレッドプールで行い、
    ランループは次のイベントを受け続ける。
-5. `applicationDidFinishLaunching:` から 750 ms 以内に URL が届かなければ「アプリ自体が開かれた」とみなす。
-   設定 UI (M3) ができるまでは何もせず終了する。
+5. `applicationDidFinishLaunching:` から 750 ms 以内に URL が届かなければ「アプリ自体が開かれた」とみなし、
+   `open "Contents/Helpers/Preferis Settings.app"` で設定 UI を開いて終了する。起動中の設定 UI があれば
+   Launch Services がそれを前面に出す (二重起動しない)。シェルからは `Preferis --settings` で同じことをする。
 
 スパイク 1 (`spikes/UrlActivation`) でこの手順どおりに動作することを確認しました。必要な objc 呼び出しは
 `objc_getClass`, `sel_registerName`, `objc_allocateClassPair`, `class_addMethod`, `objc_registerClassPair` と
@@ -353,21 +366,53 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 ### 3.7 ピッカー (`Preferis Picker.app`, AppKit)
 
 - Microsoft.macOS (`net10.0-macos`) で AppKit を直接使う。`PublishAot=true`。NativeAOT は .NET 9 以降正式サポート。
-- NSPanel 上に NSTableView または NSStackView で候補を並べ、アイコンは `NSWorkspace.icon(forFile:)`、
-  アバターは Chromium プロファイルディレクトリ内の画像から読む。
+  プロジェクトは `src/Preferis.Picker.MacOS`。Core (リクエスト・応答、`PickerSession`) と Platform (アイコン解決) を参照する。
+- UI はコードで組み立てる (nib は ibtool が必要になるだけで利点がない)。浮動 (`FloatingPanel`) の NSPanel に、
+  URL (ホストを太字、長ければ中央を省略)、`NSTableViewStyle.Inset` の候補一覧 (アイコン、名前、2 行目、ショートカット番号)、
+  「記憶する」チェック、「Copy URL」「Cancel」(Esc)「Open」(Enter) を縦に並べる。`HidesOnDeactivate=false` にして、
+  他のアプリをクリックしても消えないようにし、`MoveToActiveSpace | FullScreenAuxiliary` で現在のスペースに出す。
+- アイコンは `MacBrowserDetector.TryResolve` で `.app` を引いて `NSWorkspace.icon(forFile:)`。コマンドは `terminal`、
+  見つからないブラウザーは `globe` のシステムシンボル。アバターは `BrowserProfileEnumerator` で Chromium の
+  `Local State` を読み、`BrowserProfileMatcher` で照合したプロファイルの `gaia_picture_file_name` を角の丸いバッジとして重ねる。
+- 数字キー 1〜9 は `NSEvent` のローカルモニターで拾う。マウス移動・スクロール・キー入力は `PickerSession.NoteActivity`
+  として自動選択のカウントをやり直す。`DidFinishLaunching` で例外が起きた場合は AppKit に握りつぶされて見えないプロセスが
+  残るため、標準エラーに書いて終了コード 1 で終える (Router がフォールバックする)。
+- `PREFERIS_TRACE=1` で起動からの経過時間 (main, appkit, shown) を標準エラーに書く。Router はこれを trace ログに転送する。
+  `PREFERIS_PICKER_SNAPSHOT=<png>` で表示 0.5 秒後のパネル内容を PNG に書き出す (画面収録の権限なしで見た目を確認するための開発用)。
 - Router は `Contents/Helpers/Preferis Picker.app/Contents/MacOS/Preferis Picker` を直接 `posix_spawn` し、
   標準入出力でリクエストと応答をやり取りする (Design.md §9.3)。`open` 経由だと標準入出力を
   つなげないため使わない。
 - **アクティベーション**: ヘルパーは `LSUIElement=true` のまま `NSApp.activate(ignoringOtherApps: true)`
   で前面化する。スパイク 2 で、LS が起動した Router の子プロセスとして起動したヘルパーがこの呼び出しだけで
   アクティブになることを確認した (macOS 26、§5)。`activateIgnoringOtherApps:` は macOS 14 で非推奨なので、
-  実装では `activate` を試してから非推奨 API にフォールバックし、Router 側の `NSRunningApplication
-  activateWithOptions:` も保険として呼ぶ。
-- **Microsoft.macOS のビルド挙動**: `.app` は `$(OutDir)` に組み立てられ `$(PublishDir)` には出ない。既定で
-  インストーラー `.pkg` も生成するため `CreatePackage=false` にする。バンドル名は `ApplicationTitle`。
-  `Contents/MonoBundle/` には NativeAOT でもランタイムのネイティブ dylib が数個置かれる。
-- 設定 UI (`Preferis Settings.app`) は Avalonia の実行ファイルを同じ形式でバンドル化し、Router が
-  引数なしで起動された時に `open` で起動する。
+  実装では macOS 14 以降で協調型の `activate` を呼び、50 ms 後にまだアクティブでなければ非推奨 API を呼ぶ。
+  Router 側の `NSRunningApplication activateWithOptions:` は、ヘルパーのウィンドウサーバー登録を待つ必要があり
+  (スパイクでは 400 ms 待った)、スパイク 2 で不要と分かったため実装していない。前面に出ない事例が見つかったら追加する。
+- **Microsoft.macOS のビルド挙動**: `.app` は `bin/<Configuration>/net10.0-macos/<RID>/` に組み立てられ、
+  `$(OutDir)` や `$(PublishDir)` を変えても動かない。既定でインストーラー `.pkg` も生成するため `CreatePackage=false` にする。
+  バンドル名は `ApplicationTitle`、実行ファイル名は `AssemblyName` (`Preferis Picker`)。`Contents/MonoBundle/` には NativeAOT でも
+  ランタイムのネイティブ dylib が数個置かれ、実行ファイルがそれらをリンクする。RID を指定しないとユニバーサルビルドに
+  なるため、プロジェクトの既定 RID を SDK の RID にしている。
+- **`AppBundleDir` をプロジェクト外に向けない**: SDK 26.5 では、ネストしたライブラリの署名用の引数ファイルが dylib 自体に
+  上書きされ、187 バイトのテキストになった。`build/Preferis.Build.proj` は既定の場所に作らせてからコピーする。
+
+### 3.8 設定 UI (`Preferis Settings.app`, Avalonia)
+
+- `src/Preferis.Settings` を NativeAOT で publish すると、実行ファイル `Preferis.Settings` (17 MB) と Avalonia のネイティブライブラリ 3 つが
+  出力される。`Preferis.Build.proj` がこれを `Contents/MacOS/` にまとめ、`src/Preferis.Settings/macOS/Info.plist` を置いてバンドルにする。
+  コンパイル済みバインディング (`AvaloniaUseCompiledBindingsByDefault`) なので、トリミングの警告なしで動く。
+- 自分の場所 (`AppContext.BaseDirectory` から 5 階層上) が `.app` なら、それを `Preferis.app` とみなす。`MacDefaultBrowserRegistrar` に
+  そのパスを渡して登録状態を表示し、「既定のブラウザーにする」では `Contents/MacOS/Preferis --register` を実行する。
+  `dotnet run` で単体起動した場合は登録できない旨を表示する。
+- ブラウザー検出 (`MacBrowserDetector.DetectBrowsers`)、ブラウザープロファイル列挙、アイコン (`MacApplicationIcons`, 64 px) は起動時に
+  1 回行い、プロファイル画面の更新ボタンでやり直す。フォルダー・ファイルの選択は Avalonia の `StorageProvider` (ネイティブのパネル)。
+- macOS 27 で Chromium のプロファイルデータが読めない場合 (§3.4) は、検出一覧に「フルディスクアクセスを与える」旨を表示する。
+- Launch Services 経由で開いた場合 `HOME` などの環境変数はシェルのものではない。開発中に別の設定で試すときは、
+  実行ファイルを直接 `HOME=<dir>` 付きで起動する。
+- `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で各ページ (とルール画面のいくつかの状態) を PNG に書き出して終了する。
+  `PREFERIS_SETTINGS_SNAPSHOT_URL=<url>` を併せて指定するとテストページでその URL を試した状態を描く。開発用。
+- 終了 (⌘Q、AppleScript の quit) は未保存の変更がなければそのまま終わる。`osascript -e 'tell application id
+  "net.mayuki.Preferis.Settings" to quit'` は終了したにもかかわらず -128 (ユーザーによるキャンセル) を返すことがある。
 
 ## 4. 共通: 起動時間の計測
 
@@ -383,6 +428,22 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 計測結果は本書末尾に記録し、Design.md §5.2 の目標値と比較します。
 
 ## 5. 計測記録
+
+### 2026-10-01 M3: ピッカーと設定 UI (`artifacts/osx-arm64/Preferis.app` 37 MB, ad-hoc 署名)
+
+| 項目 | 結果 |
+| --- | --- |
+| バンドルの内訳 | Router 4.9 MB、`Preferis Picker.app` 4.6 MB (実行ファイル 4.6 MB)、`Preferis Settings.app` 26 MB (実行ファイル 17 MB + Skia 等 9 MB、arm64 のみ) |
+| ピッカー単体 (`--request`、シェルから) | プロセス起動 → main 18〜35 ms、→ ウィンドウ表示 128〜150 ms (ウォーム)。初回 (再ビルド直後) 517 ms |
+| Router → ピッカー (シェルから `Preferis <url>`、2 候補、自動選択 0.5 秒) | ピッカーのプロセス起動 → main 24〜26 ms、→ ウィンドウ表示 119〜122 ms。URL 受け取り → 自動選択 → 起動まで 636〜641 ms (うち 500 ms が自動選択の待ち) |
+| 「記憶する」 | `host equals` のルールが、ピッカーを出したルールの直前に挿入され、同じホストの次の URL はピッカーなしで起動 |
+| 履歴 (`logging.history: true`) | 1 URL につき 1 行 `history.jsonl` に追記 |
+| `open -a Preferis.app` (URL なし) | Router が設定 UI を開いて終了 |
+| Launch Services のハンドラー一覧 | https / public.html とも `Preferis.app` だけが列挙され、ヘルパーは列挙されない |
+
+画面収録の権限がない (かつディスプレイがスリープ中の) 環境で行ったため、見た目は `PREFERIS_PICKER_SNAPSHOT` /
+`PREFERIS_SETTINGS_SNAPSHOT` の PNG で確認した。リンクのクリックから Launch Services 経由でピッカーが前面に出ることの
+目視確認はスパイク 2 の結果に依っている。
 
 ### 2026-10-01 M2: Router 実機確認 (`artifacts/osx-arm64/Preferis.app`, NativeAOT 5.0 MB, ad-hoc 署名)
 

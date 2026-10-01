@@ -367,10 +367,17 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 
 - Microsoft.macOS (`net10.0-macos`) で AppKit を直接使う。`PublishAot=true`。NativeAOT は .NET 9 以降正式サポート。
   プロジェクトは `src/Preferis.Picker.MacOS`。Core (リクエスト・応答、`PickerSession`) と Platform (アイコン解決) を参照する。
-- UI はコードで組み立てる (nib は ibtool が必要になるだけで利点がない)。浮動 (`FloatingPanel`) の NSPanel に、
-  URL (ホストを太字、長ければ中央を省略)、`NSTableViewStyle.Inset` の候補一覧 (アイコン、名前、2 行目、ショートカット番号)、
-  「記憶する」チェック、「Copy URL」「Cancel」(Esc)「Open」(Enter) を縦に並べる。`HidesOnDeactivate=false` にして、
+- UI はコードで組み立てる (nib は ibtool が必要になるだけで利点がない)。見た目は Spotlight に合わせ、タイトルバーのない
+  浮動パネルに、ホストを大きく示すヘッダー (リンクのシンボル、ホスト、その下に URL 全体、右端にコピーボタン)、
+  候補一覧 (アイコン、名前、2 行目、キーキャップ風のショートカット番号。選択は角丸の無彩色の塗り)、
+  「記憶する」チェックと「Cancel」(Esc)「Open」(Enter) を縦に並べる。`HidesOnDeactivate=false` にして、
   他のアプリをクリックしても消えないようにし、`MoveToActiveSpace | FullScreenAuxiliary` で現在のスペースに出す。
+- **Liquid Glass (macOS 26)**: ボーダーレスの透明な NSPanel (`CanBecomeKeyWindow` を上書きしてキー入力を受ける、
+  背景ドラッグで移動) の中に `NSGlassEffectView` (角丸 26) を置く。ガラスは形状の外側に自前の影を描くため、ガラスを
+  ウィンドウいっぱいに置くと影がウィンドウの矩形で切れて四角い枠が見える。ガラスの周りに 32 pt の透明な余白を取り、
+  ウィンドウの影はオフにする (余白はクリックを背後へ通す)。ガラスの色付け (`TintColor`) はほぼ差が出なかったため
+  システム既定のまま。macOS 25 以前は `NSVisualEffectView` (Popover マテリアル、角丸マスク) とウィンドウの影で代える。
+  `PREFERIS_PICKER_SNAPSHOT` の PNG にはガラス (ウィンドウサーバーが合成する) は写らず、レイアウトだけが写る。
 - アイコンは `MacBrowserDetector.TryResolve` で `.app` を引いて `NSWorkspace.icon(forFile:)`。コマンドは `terminal`、
   見つからないブラウザーは `globe` のシステムシンボル。アバターは `BrowserProfileEnumerator` で Chromium の
   `Local State` を読み、`BrowserProfileMatcher` で照合したプロファイルの `gaia_picture_file_name` を角の丸いバッジとして重ねる。

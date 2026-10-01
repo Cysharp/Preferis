@@ -192,6 +192,18 @@ public sealed class ProfilesPageTests : IDisposable
     }
 
     [Fact]
+    public void A_profile_can_be_moved_to_any_position()
+    {
+        var settings = _harness.WithSample().Create();
+        var page = settings.Profiles;
+
+        page.MoveProfile(page.Profiles[5], 1);
+
+        Assert.Equal(["edge", "custom-tool", "chrome-default", "chrome-work", "edge-private", "system-browser"], settings.Config.Profiles.Select(p => p.Id));
+        Assert.Equal(settings.Config.Profiles.Select(p => p.Id), page.Profiles.Select(p => p.Id));
+    }
+
+    [Fact]
     public void Set_default_marks_the_selected_profile()
     {
         var settings = _harness.WithSample().Create();

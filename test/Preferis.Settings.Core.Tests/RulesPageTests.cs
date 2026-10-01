@@ -81,6 +81,23 @@ public sealed class RulesPageTests : IDisposable
     }
 
     [Fact]
+    public void A_rule_can_be_moved_to_any_position()
+    {
+        var page = Page(out var settings);
+        page.SelectedRule = Rule(page, "ms-login");
+
+        page.MoveRule(page.SelectedRule, 0);
+
+        Assert.Equal(["ms-login", "unwrap-safelinks", "google-admin", "app-split"], settings.Config.Rules.Select(r => r.Id));
+        Assert.Equal(["ms-login", "unwrap-safelinks", "google-admin", "app-split"], page.Rules.Select(r => r.Id));
+        Assert.False(page.MoveRuleUpCommand.CanExecute(null));
+        Assert.True(settings.IsDirty);
+
+        page.MoveRule(Rule(page, "unwrap-safelinks"), 3);
+        Assert.Equal(["ms-login", "google-admin", "app-split", "unwrap-safelinks"], settings.Config.Rules.Select(r => r.Id));
+    }
+
+    [Fact]
     public void Enabling_and_renaming_write_through()
     {
         var page = Page(out var settings);

@@ -173,11 +173,17 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
         ProfilesChanged();
     }
 
-    private void Move(int delta)
+    private void Move(int delta) => MoveProfile(SelectedProfile!, Profiles.IndexOf(SelectedProfile!) + delta);
+
+    /// <summary>Moves a profile to <paramref name="index"/> (drag and drop in the list). The order is the picker's order.</summary>
+    public void MoveProfile(ProfileViewModel profile, int index)
     {
-        var profile = SelectedProfile!;
         var from = Profiles.IndexOf(profile);
-        var to = from + delta;
+        var to = Math.Clamp(index, 0, Profiles.Count - 1);
+        if (from < 0 || from == to)
+        {
+            return;
+        }
         Profiles.Move(from, to);
         Settings.Config.Profiles.RemoveAt(from);
         Settings.Config.Profiles.Insert(to, profile.Model);

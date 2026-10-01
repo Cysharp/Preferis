@@ -119,6 +119,23 @@ public sealed partial class RulesPageViewModel : PageViewModel
     [RelayCommand]
     private void SelectCatchAll() => IsCatchAllSelected = true;
 
+    /// <summary>Moves a rule to <paramref name="index"/> (drag and drop in the list).</summary>
+    public void MoveRule(RuleViewModel rule, int index)
+    {
+        var from = Rules.IndexOf(rule);
+        var to = Math.Clamp(index, 0, Rules.Count - 1);
+        if (from < 0 || from == to)
+        {
+            return;
+        }
+        Rules.Move(from, to);
+        Settings.Config.Rules.RemoveAt(from);
+        Settings.Config.Rules.Insert(to, rule.Model);
+        MoveRuleUpCommand.NotifyCanExecuteChanged();
+        MoveRuleDownCommand.NotifyCanExecuteChanged();
+        Settings.MarkChanged();
+    }
+
     internal void UpdateIssues(IReadOnlyList<ConfigIssue> issues)
     {
         foreach (var rule in Rules)
@@ -137,18 +154,7 @@ public sealed partial class RulesPageViewModel : PageViewModel
         Settings.MarkChanged();
     }
 
-    private void Move(int delta)
-    {
-        var rule = SelectedRule!;
-        var from = Rules.IndexOf(rule);
-        var to = from + delta;
-        Rules.Move(from, to);
-        Settings.Config.Rules.RemoveAt(from);
-        Settings.Config.Rules.Insert(to, rule.Model);
-        MoveRuleUpCommand.NotifyCanExecuteChanged();
-        MoveRuleDownCommand.NotifyCanExecuteChanged();
-        Settings.MarkChanged();
-    }
+    private void Move(int delta) => MoveRule(SelectedRule!, Rules.IndexOf(SelectedRule!) + delta);
 }
 
 /// <summary>Editor of one rule. Condition and action edits rebuild the corresponding part of <see cref="Model"/>.</summary>
@@ -219,6 +225,14 @@ public sealed partial class RuleViewModel : ObservableObject, IConditionOwner
         leaf.MarkReady();
         Condition = leaf;
         ConditionChanged();
+    }
+
+    /// <summary>Replaces the whole condition, for editors that produce a condition tree at once (NSPredicateEditor).</summary>
+    public void SetCondition(Condition? condition)
+    {
+        Condition = condition is null ? null : ConditionNodeViewModel.FromModel(condition, this, null);
+        Model.Condition = condition;
+        Changed();
     }
 
     public void ConditionChanged()

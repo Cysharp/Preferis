@@ -378,6 +378,17 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
   ウィンドウの影はオフにする (余白はクリックを背後へ通す)。ガラスの色付け (`TintColor`) はほぼ差が出なかったため
   システム既定のまま。macOS 25 以前は `NSVisualEffectView` (Popover マテリアル、角丸マスク) とウィンドウの影で代える。
   `PREFERIS_PICKER_SNAPSHOT` の PNG にはガラス (ウィンドウサーバーが合成する) は写らず、レイアウトだけが写る。
+- **表示と終了のアニメーション** (Spotlight 風): 表示時はウィンドウの不透明度を 0.18 秒でフェードインしつつ、ガラスの
+  レイヤーを 94% からスプリング (質量 1、剛性 320、減衰 24) で等倍に戻す。終了時は応答を書いて標準出力を `close(1)` で
+  閉じてから、0.15 秒でフェードアウトしつつ 97% に縮め、完了したら終了する (完了通知が来なくても 1 秒で終了する)。
+  レイヤー付きビューのレイヤーは角が基準点なので、中心で拡大縮小するよう平行移動を挟む。
+  「視差効果を減らす」(Reduce Motion) が有効な場合は拡大縮小をせず、短いフェードだけにする。
+- **NSObject のサブクラスには `NativeHandle` を受け取るコンストラクターが要る**: `Animator` はウィンドウとは別の
+  プロキシを返し、そのクラスはサブクラス (`KeyablePanel`) を名乗る。Microsoft.macOS はそれを包む C# オブジェクトを
+  作るのにこのコンストラクターを使うため、無いと「Failed to marshal the Objective-C object」で失敗する。
+  `NSAnimationContext.RunAnimation` のブロック内で同じ例外が起きると、例外がネイティブ境界を越えて
+  `EXC_BAD_ACCESS (EXC_ARM_SP_ALIGN)` でプロセスごと落ちた。フェードはブロックを使わない `BeginGrouping` /
+  `EndGrouping` で行い、終了後の処理は `NSTimer` で待つ。
 - アイコンは `MacBrowserDetector.TryResolve` で `.app` を引いて `NSWorkspace.icon(forFile:)`。コマンドは `terminal`、
   見つからないブラウザーは `globe` のシステムシンボル。アバターは `BrowserProfileEnumerator` で Chromium の
   `Local State` を読み、`BrowserProfileMatcher` で照合したプロファイルの `gaia_picture_file_name` を角の丸いバッジとして重ねる。

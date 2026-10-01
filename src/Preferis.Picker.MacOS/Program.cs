@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using AppKit;
 using Preferis.Core.Picker;
 
@@ -59,7 +60,7 @@ internal static class Program
     }
 }
 
-internal sealed class AppDelegate : NSApplicationDelegate
+internal sealed partial class AppDelegate : NSApplicationDelegate
 {
     private readonly PickerRequest _request;
     private PickerWindow? _window;
@@ -73,7 +74,7 @@ internal sealed class AppDelegate : NSApplicationDelegate
     {
         try
         {
-            _window = new PickerWindow(_request, Answer);
+            _window = new PickerWindow(_request, Answer, Quit);
             _window.Show();
             Program.Mark("shown");
         }
@@ -86,10 +87,20 @@ internal sealed class AppDelegate : NSApplicationDelegate
         }
     }
 
+    /// <summary>
+    /// Writes the answer and closes stdout: the Router reads it at end of file and opens the browser while the
+    /// window is still animating out, instead of waiting for this process to exit.
+    /// </summary>
     private static void Answer(PickerResponse response)
     {
         Console.Out.WriteLine(PickerMessages.Serialize(response));
         Console.Out.Flush();
-        NSApplication.SharedApplication.Terminate(NSApplication.SharedApplication);
+        close(1);
     }
+
+    private static void Quit() => NSApplication.SharedApplication.Terminate(NSApplication.SharedApplication);
+
+    // Disposing Console.Out does not close the descriptor; the Router needs the end of file.
+    [LibraryImport("/usr/lib/libSystem.B.dylib")]
+    private static partial int close(int fd);
 }

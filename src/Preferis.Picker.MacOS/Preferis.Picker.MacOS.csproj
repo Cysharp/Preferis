@@ -20,6 +20,7 @@
     <PublishAot>true</PublishAot>
     <!-- Microsoft.macOS creates an installer .pkg on publish by default; only the .app is wanted. -->
     <CreatePackage>false</CreatePackage>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>Preferis picker for macOS: asks which profile should open a URL.</Description>
   </PropertyGroup>
 

@@ -1,7 +1,9 @@
 using System.Globalization;
 using AppKit;
+using CoreAnimation;
 using CoreGraphics;
 using Foundation;
+using ObjCRuntime;
 using Preferis.Core.Picker;
 
 namespace Preferis.Picker.MacOS;
@@ -25,6 +27,7 @@ internal sealed class PickerWindow
 
     private readonly PickerSession _session;
     private readonly Action<PickerResponse> _answer;
+    private readonly Action _quit;
     private readonly CandidateImages _images = new();
     private readonly NSPanel _panel;
     private readonly NSView _content;
@@ -36,10 +39,13 @@ internal sealed class PickerWindow
     private NSTimer? _timer;
     private bool _answered;
 
-    public PickerWindow(PickerRequest request, Action<PickerResponse> answer)
+    /// <param name="answer">Delivers the answer to the Router.</param>
+    /// <param name="quit">Ends the process, called once the window has animated out.</param>
+    public PickerWindow(PickerRequest request, Action<PickerResponse> answer, Action quit)
     {
         _session = new PickerSession(request, TimeProvider.System);
         _answer = answer;
+        _quit = quit;
         _rows = request.Candidates.Select(BuildRow).ToList();
 
         var root = new NSStackView
@@ -120,6 +126,7 @@ internal sealed class PickerWindow
         var size = new CGSize(ContentWidth, root.FittingSize.Height);
 
         _content = Backdrop(root);
+        _content.WantsLayer = true;
         _content.Frame = new CGRect(ShadowMargin, ShadowMargin, size.Width, size.Height);
         var windowSize = new CGSize(size.Width + 2 * ShadowMargin, size.Height + 2 * ShadowMargin);
         var container = new NSView(new CGRect(CGPoint.Empty, windowSize));
@@ -150,7 +157,7 @@ internal sealed class PickerWindow
         {
             _table.SelectRow(_session.SelectedIndex, byExtendingSelection: false);
         }
-        _panel.MakeKeyAndOrderFront(null);
+        AnimateIn();
         _panel.MakeFirstResponder(_table);
         Activate();
 
@@ -282,7 +289,73 @@ internal sealed class PickerWindow
         {
             NSEvent.RemoveMonitor(_eventMonitor);
         }
+        // Answer first: the Router opens the browser while the window fades away.
         _answer(response);
+        AnimateOut();
+    }
+
+    // Like Spotlight: the panel fades in while growing slightly with a soft spring.
+    private void AnimateIn()
+    {
+        var reduceMotion = NSWorkspace.SharedWorkspace.AccessibilityDisplayShouldReduceMotion;
+        _panel.AlphaValue = 0;
+        _panel.MakeKeyAndOrderFront(null);
+        FadeTo(1, reduceMotion ? 0.12 : 0.18, CAMediaTimingFunction.EaseOut);
+        if (!reduceMotion && _content.Layer is { } layer)
+        {
+            var spring = new CASpringAnimation { KeyPath = "transform" };
+            spring.From = NSValue.FromCATransform3D(ScaledAroundCenter(0.94));
+            spring.To = NSValue.FromCATransform3D(CATransform3D.Identity);
+            spring.Mass = 1;
+            spring.Stiffness = 320;
+            spring.Damping = 24;
+            spring.Duration = spring.SettlingDuration;
+            layer.AddAnimation(spring, "appear");
+        }
+    }
+
+    // A quick fade while shrinking a little, then the process ends. The answer has already gone to the Router.
+    private void AnimateOut()
+    {
+        const double Duration = 0.15;
+        var reduceMotion = NSWorkspace.SharedWorkspace.AccessibilityDisplayShouldReduceMotion;
+        if (!reduceMotion && _content.Layer is { } layer)
+        {
+            var shrink = CABasicAnimation.FromKeyPath("transform");
+            shrink.From = NSValue.FromCATransform3D(CATransform3D.Identity);
+            shrink.To = NSValue.FromCATransform3D(ScaledAroundCenter(0.97));
+            shrink.Duration = Duration;
+            shrink.TimingFunction = CAMediaTimingFunction.FromName(CAMediaTimingFunction.EaseIn);
+            shrink.FillMode = CAFillMode.Forwards;
+            shrink.RemovedOnCompletion = false;
+            layer.AddAnimation(shrink, "disappear");
+        }
+        FadeTo(0, Duration, CAMediaTimingFunction.EaseIn);
+        NSTimer.CreateScheduledTimer(Duration + 0.03, _ =>
+        {
+            _panel.OrderOut(null);
+            _quit();
+        });
+    }
+
+    // Explicit grouping rather than NSAnimationContext.RunAnimation: an exception inside that block took the whole
+    // process down (EXC_ARM_SP_ALIGN in runAnimationGroup:) instead of reaching the handler in AppDelegate.
+    private void FadeTo(double alpha, double duration, NSString timing)
+    {
+        NSAnimationContext.BeginGrouping();
+        NSAnimationContext.CurrentContext.Duration = duration;
+        NSAnimationContext.CurrentContext.TimingFunction = CAMediaTimingFunction.FromName(timing);
+        ((NSWindow)_panel.Animator).AlphaValue = (nfloat)alpha;
+        NSAnimationContext.EndGrouping();
+    }
+
+    // A layer-backed view's layer is anchored at its corner; scale about the middle so the panel grows from its center.
+    private CATransform3D ScaledAroundCenter(double scale)
+    {
+        var center = new CGPoint(_content.Bounds.Width / 2, _content.Bounds.Height / 2);
+        return CATransform3D.MakeTranslation(-center.X, -center.Y, 0)
+            .Concat(CATransform3D.MakeScale((nfloat)scale, (nfloat)scale, 1))
+            .Concat(CATransform3D.MakeTranslation(center.X, center.Y, 0));
     }
 
     private void Position(string position)
@@ -470,9 +543,20 @@ internal sealed class PickerWindow
     }
 
     /// <summary>Borderless windows cannot become key by default; the picker needs the keyboard.</summary>
-    private sealed class KeyablePanel(CGRect frame)
-        : NSPanel(frame, NSWindowStyle.Borderless, NSBackingStore.Buffered, false)
+    private sealed class KeyablePanel : NSPanel
     {
+        public KeyablePanel(CGRect frame)
+            : base(frame, NSWindowStyle.Borderless, NSBackingStore.Buffered, false)
+        {
+        }
+
+        // Needed to wrap native objects of this class that were not created here: Animator returns a proxy that
+        // reports this class, and without this constructor reading it fails ("Failed to marshal the Objective-C object").
+        public KeyablePanel(NativeHandle handle)
+            : base(handle)
+        {
+        }
+
         public override bool CanBecomeKeyWindow => true;
 
         public override bool CanBecomeMainWindow => true;

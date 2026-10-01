@@ -1,0 +1,350 @@
+using System.Text.Json;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Preferis.Core.Configuration;
+using Preferis.Settings.Services;
+
+namespace Preferis.Settings.ViewModels;
+
+/// <summary>
+/// One editing session over <c>config.json</c> and <c>local.json</c>. The pages edit <see cref="Config"/> and
+/// <see cref="Local"/> in place (so properties this version does not know survive) and report each edit through
+/// <see cref="MarkChanged"/>. Nothing is written until Save. A file changed by someone else meanwhile (the
+/// Router's "remember", a sync client) is never overwritten silently.
+/// </summary>
+public sealed partial class SettingsViewModel : ObservableObject
+{
+    private readonly ConfigLoader _loader;
+
+    // config.json as it was on disk when we last read or wrote it (null: no file), to notice outside changes.
+    private string? _diskText;
+    private string _savedConfigJson = "";
+    private string _savedLocalJson = "";
+    private bool _loading;
+
+    public SettingsViewModel(ConfigLoader loader, ISettingsPlatform platform, IDialogService dialogs)
+    {
+        _loader = loader;
+        Platform = platform;
+        Dialogs = dialogs;
+        Browsers = platform.DetectBrowsers();
+        Load();
+    }
+
+    public ISettingsPlatform Platform { get; }
+
+    public IDialogService Dialogs { get; }
+
+    public ConfigLoader Loader => _loader;
+
+    /// <summary>Browsers installed on this machine, detected once per session (refreshable from the profiles page).</summary>
+    public IReadOnlyList<DetectedBrowserInfo> Browsers { get; private set; }
+
+    public PreferisConfig Config { get; private set; } = PreferisConfig.CreateDefault();
+
+    public LocalConfig Local { get; private set; } = new();
+
+    [ObservableProperty]
+    public partial string ConfigPath { get; private set; } = "";
+
+    [ObservableProperty]
+    public partial bool ConfigExists { get; private set; }
+
+    /// <summary>True when <c>config.json</c> exists but could not be parsed: saving replaces it, moving it is refused.</summary>
+    public bool ConfigUnreadable { get; private set; }
+
+    private bool LocalUnreadable { get; set; }
+
+    private bool ConfigEdited => ConfigSerializer.Serialize(Config) != _savedConfigJson;
+
+    [ObservableProperty]
+    public partial bool IsDirty { get; private set; }
+
+    [ObservableProperty]
+    public partial string? LoadError { get; private set; }
+
+    [ObservableProperty]
+    public partial bool HasExternalChanges { get; private set; }
+
+    /// <summary>The outcome of the last operation that failed (saving, moving the file, registering), for the status bar.</summary>
+    [ObservableProperty]
+    public partial string? StatusMessage { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IssueSummary))]
+    public partial IReadOnlyList<ConfigIssue> Issues { get; private set; } = [];
+
+    [ObservableProperty]
+    public partial ProfilesPageViewModel Profiles { get; private set; } = null!;
+
+    [ObservableProperty]
+    public partial RulesPageViewModel Rules { get; private set; } = null!;
+
+    [ObservableProperty]
+    public partial TestPageViewModel Test { get; private set; } = null!;
+
+    [ObservableProperty]
+    public partial GeneralPageViewModel General { get; private set; } = null!;
+
+    [ObservableProperty]
+    public partial IReadOnlyList<PageViewModel> Pages { get; private set; } = [];
+
+    [ObservableProperty]
+    public partial PageViewModel? SelectedPage { get; set; }
+
+    /// <summary>"2 errors, 1 warning"; empty when the configuration is clean.</summary>
+    public string IssueSummary
+    {
+        get
+        {
+            var errors = Issues.Count(i => i.Severity == IssueSeverity.Error);
+            var warnings = Issues.Count - errors;
+            var parts = new List<string>();
+            if (errors > 0)
+            {
+                parts.Add(errors == 1 ? "1 error" : $"{errors} errors");
+            }
+            if (warnings > 0)
+            {
+                parts.Add(warnings == 1 ? "1 warning" : $"{warnings} warnings");
+            }
+            return string.Join(", ", parts);
+        }
+    }
+
+    partial void OnSelectedPageChanged(PageViewModel? value) => value?.Activate();
+
+    /// <summary>Called by the pages after every edit of <see cref="Config"/> or <see cref="Local"/>.</summary>
+    internal void MarkChanged()
+    {
+        if (_loading)
+        {
+            return;
+        }
+        IsDirty = ConfigSerializer.Serialize(Config) != _savedConfigJson || ConfigSerializer.SerializeLocal(Local) != _savedLocalJson;
+        Issues = ConfigValidator.Validate(Config);
+        Profiles.UpdateIssues(Issues);
+        Rules.UpdateIssues(Issues);
+    }
+
+    [RelayCommand]
+    private void Save() => SaveCore(force: false);
+
+    /// <summary>Saves over a file that changed on disk since it was loaded.</summary>
+    [RelayCommand]
+    private void SaveAnyway() => SaveCore(force: true);
+
+    [RelayCommand]
+    private void Revert() => Load();
+
+    /// <summary>
+    /// Called when the window becomes active (and before moving the file): a <c>config.json</c> changed elsewhere is
+    /// reloaded when it has no edits here, and flagged otherwise. Pending <c>local.json</c> edits survive the reload.
+    /// </summary>
+    public void CheckForExternalChanges()
+    {
+        if (ReadDisk() == _diskText)
+        {
+            return;
+        }
+        if (ConfigEdited)
+        {
+            HasExternalChanges = true;
+        }
+        else
+        {
+            Load(keepLocalEdits: true);
+        }
+    }
+
+    /// <summary>Asks about unsaved changes. Returns false when the window should stay open.</summary>
+    public async Task<bool> CanCloseAsync()
+    {
+        if (!IsDirty)
+        {
+            return true;
+        }
+        var answer = await Dialogs.AskAsync("Do you want to save the changes?", "Your changes will be lost if you don't save them.", ["Save", "Don't Save", "Cancel"]);
+        return answer switch
+        {
+            0 => SaveCore(force: false),
+            1 => true,
+            _ => false,
+        };
+    }
+
+    /// <summary>Detects the installed browsers again (after installing one) and rebuilds the pages that show them.</summary>
+    internal void RedetectBrowsers()
+    {
+        Browsers = Platform.DetectBrowsers();
+        var selected = Profiles.SelectedProfile?.Id;
+        var current = SelectedPage;
+        Profiles = new ProfilesPageViewModel(this);
+        Profiles.SelectedProfile = Profiles.Profiles.FirstOrDefault(p => p.Id == selected) ?? Profiles.SelectedProfile;
+        ReplacePages(current is ProfilesPageViewModel ? Profiles : current);
+        MarkChanged();
+    }
+
+    /// <summary>"Move to cloud storage": writes the configuration being edited (including unsaved edits) to <paramref name="target"/>.</summary>
+    internal void Relocate(string target, bool overwrite)
+    {
+        _loader.RelocateConfig(Config, ConfigPath, target, overwrite);
+        var json = ConfigSerializer.Serialize(Config);
+        _savedConfigJson = json;
+        _diskText = json;
+        // local.json now points at the new place; other local edits stay pending until Save.
+        var onDisk = _loader.LoadLocal();
+        Local.ConfigPath = onDisk.ConfigPath;
+        _savedLocalJson = ConfigSerializer.SerializeLocal(onDisk);
+        ConfigPath = Path.GetFullPath(target);
+        ConfigExists = true;
+        HasExternalChanges = false;
+        General.OnConfigPathChanged();
+        MarkChanged();
+    }
+
+    /// <summary>Switches to a configuration that already exists elsewhere and reloads everything from it.</summary>
+    internal void Adopt(string path)
+    {
+        _loader.UseExistingConfig(path);
+        Load();
+    }
+
+    private bool SaveCore(bool force)
+    {
+        var configJson = ConfigSerializer.Serialize(Config);
+        var configEdited = configJson != _savedConfigJson;
+        var diskChanged = ReadDisk() != _diskText;
+        // Only edits of config.json can conflict with the file on disk; local.json belongs to this machine alone.
+        if (configEdited && diskChanged && !force)
+        {
+            HasExternalChanges = true;
+            return false;
+        }
+
+        try
+        {
+            if (configEdited)
+            {
+                _loader.Save(Config, ConfigPath);
+                _savedConfigJson = configJson;
+                _diskText = configJson;
+                ConfigUnreadable = false;
+            }
+            var localJson = ConfigSerializer.SerializeLocal(Local);
+            if (localJson != _savedLocalJson)
+            {
+                _loader.SaveLocal(Local);
+                _savedLocalJson = localJson;
+                LocalUnreadable = false;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            StatusMessage = $"Could not save: {ex.Message}";
+            return false;
+        }
+
+        HasExternalChanges = false;
+        StatusMessage = null;
+        if (!configEdited && diskChanged)
+        {
+            // Nothing of ours was in config.json: show what someone else saved there.
+            Load(keepLocalEdits: true);
+            return true;
+        }
+
+        ConfigExists = File.Exists(ConfigPath);
+        if (!ConfigUnreadable && !LocalUnreadable)
+        {
+            LoadError = null;
+        }
+        MarkChanged();
+        return true;
+    }
+
+    private void Load(bool keepLocalEdits = false)
+    {
+        var current = SelectedPage is null ? 0 : Math.Max(0, Pages.ToList().IndexOf(SelectedPage));
+        var result = _loader.Load();
+
+        _loading = true;
+        Config = result.Config;
+        ConfigPath = result.ConfigPath;
+        ConfigExists = result.Exists;
+        ConfigUnreadable = result.Exists && !IsParsable(result.ConfigPath, ConfigSerializer.Deserialize);
+        if (!keepLocalEdits)
+        {
+            Local = result.Local;
+            _savedLocalJson = ConfigSerializer.SerializeLocal(Local);
+            LocalUnreadable = File.Exists(_loader.Paths.LocalConfigPath) && !IsParsable(_loader.Paths.LocalConfigPath, ConfigSerializer.DeserializeLocal);
+        }
+        LoadError = result.Error;
+        HasExternalChanges = false;
+        _diskText = ReadDisk();
+        _savedConfigJson = ConfigSerializer.Serialize(Config);
+
+        Profiles = new ProfilesPageViewModel(this);
+        Rules = new RulesPageViewModel(this);
+        Test = new TestPageViewModel(this);
+        General = new GeneralPageViewModel(this);
+        _loading = false;
+
+        ReplacePages(null);
+        SelectedPage = Pages[current];
+        MarkChanged();
+    }
+
+    private void ReplacePages(PageViewModel? select)
+    {
+        Pages = [Profiles, Rules, Test, General];
+        if (select is not null)
+        {
+            SelectedPage = select;
+        }
+    }
+
+    private string? ReadDisk()
+    {
+        try
+        {
+            return File.Exists(ConfigPath) ? File.ReadAllText(ConfigPath) : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Unreadable right now (e.g. a sync client holds it): treat as unchanged rather than guess.
+            return _diskText;
+        }
+    }
+
+    private static bool IsParsable<T>(string path, Func<string, T> parse)
+    {
+        try
+        {
+            parse(File.ReadAllText(path));
+            return true;
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+}
+
+/// <summary>A page of the settings window.</summary>
+public abstract class PageViewModel : ObservableObject
+{
+    protected PageViewModel(SettingsViewModel settings)
+    {
+        Settings = settings;
+    }
+
+    public SettingsViewModel Settings { get; }
+
+    public abstract string Title { get; }
+
+    /// <summary>Called whenever the page is shown, so it can pick up edits made on other pages.</summary>
+    public virtual void Activate()
+    {
+    }
+}

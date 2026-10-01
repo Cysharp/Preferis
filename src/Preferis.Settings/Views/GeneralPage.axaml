@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Preferis.Settings.ViewModels"
+             x:Class="Preferis.Settings.Views.GeneralPage"
+             x:DataType="vm:GeneralPageViewModel">
+
+  <ScrollViewer>
+    <StackPanel Spacing="14" MaxWidth="720" HorizontalAlignment="Left" Margin="0,0,16,16">
+      <TextBlock Classes="heading" Text="General" />
+
+      <Border Classes="card">
+        <StackPanel Spacing="8">
+          <TextBlock Classes="section" Text="Default browser" Margin="0" />
+          <TextBlock Text="{Binding RegistrationText}" TextWrapping="Wrap" />
+          <WrapPanel ItemSpacing="6" LineSpacing="6">
+            <Button Classes="accent" Content="Make Preferis the Default Browser" Command="{Binding RegisterCommand}" IsVisible="{Binding !IsDefaultBrowser}" />
+            <Button Content="Open System Settings" Command="{Binding OpenSystemSettingsCommand}" />
+            <Button Content="Check Again" Command="{Binding RefreshRegistrationCommand}" />
+          </WrapPanel>
+          <TextBlock Classes="secondary small" TextWrapping="Wrap"
+                     Text="macOS asks you to confirm the change. Preferis then receives every link and opens it according to the rules." />
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel Spacing="8">
+          <TextBlock Classes="section" Text="Configuration file" Margin="0" />
+          <SelectableTextBlock Classes="code" Text="{Binding ConfigPath}" TextWrapping="Wrap" />
+          <TextBlock Classes="secondary small" Text="{Binding ConfigPathHint}" TextWrapping="Wrap" />
+          <WrapPanel ItemSpacing="6" LineSpacing="6">
+            <Button Content="Show in Finder" Command="{Binding RevealConfigCommand}" />
+            <Button Content="Move To…" Command="{Binding MoveConfigCommand}" ToolTip.Tip="Move config.json, for example into a cloud storage folder" />
+            <Button Content="Use Existing File…" Command="{Binding UseExistingConfigCommand}" ToolTip.Tip="Use a config.json another computer keeps in cloud storage" />
+            <Button Content="Move Back to the Default Location" Command="{Binding MoveToDefaultLocationCommand}" IsVisible="{Binding !IsAtDefaultLocation}" />
+          </WrapPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel Spacing="8">
+          <TextBlock Classes="section" Text="Picker" Margin="0" />
+          <TextBlock Classes="secondary small" TextWrapping="Wrap" Text="Shown when a rule offers several profiles. Shared with every computer using this configuration." />
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+            <TextBlock Text="Position" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" ItemsSource="{Binding PickerPositions}" SelectedItem="{Binding SelectedPickerPosition}" MinWidth="240" />
+            <TextBlock Grid.Row="1" Text="Choose automatically after" VerticalAlignment="Center" />
+            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+              <NumericUpDown Value="{Binding AutoSelectSeconds}" Minimum="0" Maximum="60" Increment="1" FormatString="0" Width="120" />
+              <TextBlock Classes="secondary" Text="seconds without input (0: never)" VerticalAlignment="Center" />
+            </StackPanel>
+            <CheckBox Grid.Row="2" Grid.ColumnSpan="2" Content="Check “Always open this host with this choice” by default" IsChecked="{Binding RememberChoiceDefault}" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel Spacing="8">
+          <TextBlock Classes="section" Text="Language" Margin="0" />
+          <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" MinWidth="240" />
+          <TextBlock Classes="secondary small" TextWrapping="Wrap" Text="Preferis is in English for now; the choice is kept for when other languages arrive." />
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel Spacing="8">
+          <TextBlock Classes="section" Text="This computer only" Margin="0" />
+          <TextBlock Classes="secondary small" TextWrapping="Wrap" Text="Kept in local.json, never synced." />
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+            <TextBlock Text="Log level" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+              <ComboBox ItemsSource="{Binding LogLevels}" SelectedItem="{Binding LogLevel}" MinWidth="120" />
+              <Button Content="Show Logs" Command="{Binding OpenLogFolderCommand}" />
+            </StackPanel>
+            <CheckBox Grid.Row="1" Grid.ColumnSpan="2" Content="Keep a history of opened URLs (shown on the Test page)" IsChecked="{Binding IsHistoryEnabled}" />
+            <TextBlock Grid.Row="2" Text="Entries to keep" VerticalAlignment="Center" IsEnabled="{Binding IsHistoryEnabled}" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding HistorySize}" Minimum="1" Maximum="10000" Increment="10" FormatString="0" Width="120"
+                           HorizontalAlignment="Left" IsEnabled="{Binding IsHistoryEnabled}" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <TextBlock Classes="secondary small" Text="{Binding Version, StringFormat='Preferis {0}'}" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

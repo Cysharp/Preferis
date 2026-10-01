@@ -1,0 +1,252 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Preferis.Settings.ViewModels"
+             xmlns:config="using:Preferis.Core.Configuration"
+             x:Class="Preferis.Settings.Views.RulesPage"
+             x:DataType="vm:RulesPageViewModel">
+
+  <UserControl.Resources>
+    <DataTemplate x:Key="IssueTemplate" x:DataType="config:ConfigIssue">
+      <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="{Binding Severity, Converter={StaticResource IssueBrush}}" />
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <!-- Templates of the editor parts, found by type. The condition templates nest into each other. -->
+  <UserControl.DataTemplates>
+    <DataTemplate DataType="vm:RuleViewModel">
+      <ScrollViewer>
+        <StackPanel Spacing="10" Margin="0,0,16,16">
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <TextBox Text="{Binding Name}" FontSize="18" PlaceholderText="Rule name" />
+            <ToggleSwitch Grid.Column="1" IsChecked="{Binding Enabled}" OnContent="Enabled" OffContent="Disabled" />
+          </Grid>
+          <SelectableTextBlock Classes="secondary small" Text="{Binding Id, StringFormat='Id: {0}'}" />
+          <ItemsControl ItemsSource="{Binding Issues}" ItemTemplate="{StaticResource IssueTemplate}" />
+
+          <TextBlock Classes="section" Text="When the URL matches" />
+          <ContentControl Content="{Binding Condition}" />
+          <StackPanel IsVisible="{Binding !HasCondition}" Spacing="6">
+            <TextBlock Classes="secondary" Text="Without a condition the rule never matches." />
+            <Button Content="Add Condition" Command="{Binding AddConditionCommand}" />
+          </StackPanel>
+
+          <TextBlock Classes="section" Text="Then" />
+          <ContentControl Content="{Binding Actions}" />
+        </StackPanel>
+      </ScrollViewer>
+    </DataTemplate>
+
+    <DataTemplate DataType="vm:CatchAllViewModel">
+      <ScrollViewer>
+        <StackPanel Spacing="10" Margin="0,0,16,16">
+          <TextBlock Classes="heading" Text="Catch-all rule" />
+          <TextBlock Classes="secondary" TextWrapping="Wrap"
+                     Text="Applies when no rule matches. It is always the last rule and cannot be removed; only its actions can be changed. Opening with no profile checked uses the default profile, or asks with the picker when there is none." />
+          <ItemsControl ItemsSource="{Binding Issues}" ItemTemplate="{StaticResource IssueTemplate}" />
+          <TextBlock Classes="section" Text="Then" />
+          <ContentControl Content="{Binding Actions}" />
+        </StackPanel>
+      </ScrollViewer>
+    </DataTemplate>
+
+    <!-- Conditions -->
+    <DataTemplate DataType="vm:GroupConditionViewModel">
+      <Border BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="2,0,0,0" Padding="10,2,0,2">
+        <StackPanel Spacing="6">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <CheckBox Content="Not" IsChecked="{Binding IsNegated}" ToolTip.Tip="Matches when this group does not" />
+            <ComboBox ItemsSource="{x:Static vm:GroupConditionViewModel.Kinds}" SelectedItem="{Binding SelectedKind}" />
+            <TextBlock Text="of these" VerticalAlignment="Center" />
+            <Button Content="+ Condition" Command="{Binding AddConditionCommand}" />
+            <Button Content="+ Group" Command="{Binding AddGroupCommand}" />
+            <Button Content="Group" Command="{Binding WrapInGroupCommand}" ToolTip.Tip="Put this group inside a new group" />
+            <Button Classes="icon" Content="✕" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove" />
+          </StackPanel>
+          <ItemsControl ItemsSource="{Binding Children}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="6" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate DataType="vm:LeafConditionViewModel">
+      <Border Classes="card" Padding="8">
+        <StackPanel Spacing="6">
+          <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" ColumnSpacing="6">
+            <CheckBox Content="Not" IsChecked="{Binding IsNegated}" ToolTip.Tip="Matches when this condition does not" />
+            <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:LeafConditionViewModel.Targets}" SelectedItem="{Binding SelectedTarget}" />
+            <ComboBox Grid.Column="2" ItemsSource="{x:Static vm:LeafConditionViewModel.Matches}" SelectedItem="{Binding SelectedMatch}" />
+            <CheckBox Grid.Column="3" Content="Ignore case" IsChecked="{Binding IgnoreCase}" IsVisible="{Binding IsIgnoreCaseAvailable}" Margin="6,0,0,0" />
+            <Button Grid.Column="4" Content="Group" Command="{Binding WrapInGroupCommand}" ToolTip.Tip="Put this condition into a group, to combine it with others" />
+            <Button Grid.Column="5" Classes="icon" Content="✕" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove" />
+          </Grid>
+          <TextBox Classes="code" Text="{Binding Pattern}" PlaceholderText="{Binding Placeholder}" />
+          <TextBlock Text="{Binding PatternError}" TextWrapping="Wrap" Foreground="#E5484D" Classes="small"
+                     IsVisible="{Binding PatternError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate DataType="vm:UnknownConditionViewModel">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel>
+          <TextBlock TextWrapping="Wrap" Text="{Binding Type, StringFormat='Condition “{0}” from a newer version of Preferis. It is kept as is and never matches here.'}" />
+          <SelectableTextBlock Classes="code secondary small" Text="{Binding Json}" TextWrapping="Wrap" />
+        </StackPanel>
+        <Button Grid.Column="1" Classes="icon" Content="✕" Command="{Binding RemoveCommand}" VerticalAlignment="Top" />
+      </Grid>
+    </DataTemplate>
+
+    <!-- Actions -->
+    <DataTemplate DataType="vm:ActionListViewModel">
+      <StackPanel Spacing="8">
+        <ItemsControl ItemsSource="{Binding Items}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Spacing="8" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ActionViewModel">
+              <Border Classes="card">
+                <StackPanel Spacing="8">
+                  <Grid ColumnDefinitions="Auto,*,Auto">
+                    <TextBlock Text="{Binding Number}" FontWeight="SemiBold" Margin="0,0,6,0" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                      <Button Classes="icon" Content="↑" Command="{Binding MoveUpCommand}" ToolTip.Tip="Run earlier" />
+                      <Button Classes="icon" Content="↓" Command="{Binding MoveDownCommand}" ToolTip.Tip="Run later" />
+                      <Button Classes="icon" Content="✕" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove" />
+                    </StackPanel>
+                  </Grid>
+                  <ContentControl Content="{Binding}" />
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <Button Content="Add Action">
+          <Button.Flyout>
+            <MenuFlyout Placement="BottomEdgeAlignedLeft">
+              <MenuItem Header="Open with profiles" Command="{Binding AddCommand}" CommandParameter="{x:Static vm:ActionKind.Open}" />
+              <MenuItem Header="Rewrite the URL" Command="{Binding AddCommand}" CommandParameter="{x:Static vm:ActionKind.Rewrite}" />
+              <MenuItem Header="Route again from the first rule" Command="{Binding AddCommand}" CommandParameter="{x:Static vm:ActionKind.Reroute}" />
+              <MenuItem Header="Hand to the system default" Command="{Binding AddCommand}" CommandParameter="{x:Static vm:ActionKind.System}" />
+              <MenuItem Header="Do nothing" Command="{Binding AddCommand}" CommandParameter="{x:Static vm:ActionKind.None}" />
+            </MenuFlyout>
+          </Button.Flyout>
+        </Button>
+      </StackPanel>
+    </DataTemplate>
+
+    <DataTemplate DataType="vm:OpenActionViewModel">
+      <StackPanel Spacing="4">
+        <ItemsControl ItemsSource="{Binding Profiles}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel ItemSpacing="12" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ProfileToggleViewModel">
+              <CheckBox Content="{Binding Name}" IsChecked="{Binding IsSelected}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Classes="secondary small" TextWrapping="Wrap"
+                   Text="One profile opens directly; several are offered in the picker in the order they were checked. None checked: the default profile." />
+      </StackPanel>
+    </DataTemplate>
+
+    <DataTemplate DataType="vm:RewriteActionViewModel">
+      <StackPanel Spacing="6">
+        <ComboBox ItemsSource="{x:Static vm:RewriteActionViewModel.Modes}" SelectedItem="{Binding SelectedMode}" MinWidth="300" />
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="6" IsVisible="{Binding IsRegex}">
+          <TextBlock Text="Pattern" VerticalAlignment="Center" />
+          <TextBox Grid.Column="1" Classes="code" Text="{Binding Pattern}" PlaceholderText="^http://" />
+          <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding PatternError}" Foreground="#E5484D" Classes="small" TextWrapping="Wrap"
+                     IsVisible="{Binding PatternError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+          <TextBlock Grid.Row="2" Text="Replace with" VerticalAlignment="Center" />
+          <TextBox Grid.Row="2" Grid.Column="1" Classes="code" Text="{Binding Replacement}" PlaceholderText="https://" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" IsVisible="{Binding IsQueryParameter}">
+          <TextBlock Text="Parameter" VerticalAlignment="Center" />
+          <TextBox Grid.Column="1" Classes="code" Text="{Binding Parameter}" PlaceholderText="url" />
+        </Grid>
+        <TextBlock Classes="secondary small" TextWrapping="Wrap"
+                   Text="The next action gets the rewritten URL. Add “Route again” after it to apply all rules to the new URL (for example to unwrap Outlook Safe Links)." />
+      </StackPanel>
+    </DataTemplate>
+
+    <DataTemplate DataType="vm:SimpleActionViewModel">
+      <TextBlock Classes="secondary" Text="{Binding Description}" TextWrapping="Wrap" />
+    </DataTemplate>
+
+    <DataTemplate DataType="vm:UnknownActionViewModel">
+      <StackPanel>
+        <TextBlock TextWrapping="Wrap" Text="This action comes from a newer version of Preferis. It is kept as is; routing stops with an error when it is reached." />
+        <SelectableTextBlock Classes="code secondary small" Text="{Binding Json}" TextWrapping="Wrap" />
+      </StackPanel>
+    </DataTemplate>
+  </UserControl.DataTemplates>
+
+  <Grid ColumnDefinitions="300,24,*">
+    <Grid RowDefinitions="Auto,Auto,*,Auto,Auto">
+      <TextBlock Classes="heading" Text="Rules" />
+      <TextBlock Grid.Row="1" Classes="secondary" TextWrapping="Wrap" Margin="0,2,0,8"
+                 Text="Checked from top to bottom; the first rule that matches decides." />
+
+      <ListBox Grid.Row="2" Classes="list" ItemsSource="{Binding Rules}" SelectedItem="{Binding SelectedRule}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:RuleViewModel">
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2">
+              <CheckBox IsChecked="{Binding Enabled}" VerticalAlignment="Center" ToolTip.Tip="Enabled" />
+              <StackPanel Grid.Column="1" Margin="2,0,0,0" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Classes="secondary small" Text="{Binding Summary}" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+              <Ellipse Grid.Column="2" Width="8" Height="8" Fill="#E5484D" IsVisible="{Binding HasIssues}" VerticalAlignment="Center" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+
+      <Button Grid.Row="3" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Margin="0,6,0,0"
+              Command="{Binding SelectCatchAllCommand}"
+              Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource CardBorderBrush}"
+              Classes.selected="{Binding IsCatchAllSelected}">
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel>
+            <TextBlock Text="Catch-all (when nothing matches)" />
+            <TextBlock Classes="secondary small" Text="{Binding CatchAll.Summary}" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+          <Ellipse Grid.Column="1" Width="8" Height="8" Fill="#E5484D" IsVisible="{Binding CatchAll.HasIssues}" VerticalAlignment="Center" />
+        </Grid>
+      </Button>
+
+      <Grid Grid.Row="4" Margin="0,8,0,0" ColumnDefinitions="*,Auto">
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <Button Content="Add Rule" Command="{Binding AddRuleCommand}" />
+          <Button Content="Duplicate" Command="{Binding DuplicateRuleCommand}" />
+          <Button Content="Delete" Command="{Binding DeleteRuleCommand}" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+          <Button Classes="icon" Content="↑" Command="{Binding MoveRuleUpCommand}" ToolTip.Tip="Check earlier" />
+          <Button Classes="icon" Content="↓" Command="{Binding MoveRuleDownCommand}" ToolTip.Tip="Check later" />
+        </StackPanel>
+      </Grid>
+    </Grid>
+
+    <ContentControl Grid.Column="2" Content="{Binding CurrentEditor}" />
+  </Grid>
+
+  <UserControl.Styles>
+    <Style Selector="Button.selected">
+      <Setter Property="Background" Value="{DynamicResource SelectedBrush}" />
+    </Style>
+  </UserControl.Styles>
+</UserControl>

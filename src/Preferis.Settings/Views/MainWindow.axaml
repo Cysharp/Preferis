@@ -1,0 +1,71 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Preferis.Settings.ViewModels"
+        xmlns:views="using:Preferis.Settings.Views"
+        x:Class="Preferis.Settings.Views.MainWindow"
+        x:DataType="vm:SettingsViewModel"
+        Title="Preferis Settings"
+        Width="1040" Height="720" MinWidth="860" MinHeight="560"
+        WindowStartupLocation="CenterScreen">
+
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Meta+S" Command="{Binding SaveCommand}" />
+    <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveCommand}" />
+  </Window.KeyBindings>
+
+  <DockPanel>
+    <!-- Status and save bar -->
+    <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource SeparatorBrush}" BorderThickness="0,1,0,0" Padding="16,10">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel VerticalAlignment="Center" Spacing="2">
+          <TextBlock TextWrapping="Wrap" IsVisible="{Binding HasExternalChanges}"
+                     Text="config.json was changed outside the settings (for example by “Always open this host with this choice” or a sync client). Reload to see those changes, or save yours over them." />
+          <TextBlock TextWrapping="Wrap" Text="{Binding LoadError}" Foreground="#E5484D"
+                     IsVisible="{Binding LoadError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+          <TextBlock TextWrapping="Wrap" Text="{Binding StatusMessage}" Foreground="#E5484D"
+                     IsVisible="{Binding StatusMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+          <TextBlock Classes="secondary" Text="Unsaved changes" IsVisible="{Binding IsDirty}" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Button Content="Reload" Command="{Binding RevertCommand}" IsVisible="{Binding HasExternalChanges}" />
+          <Button Content="Save Anyway" Command="{Binding SaveAnywayCommand}" IsVisible="{Binding HasExternalChanges}" />
+          <Button Content="Revert" Command="{Binding RevertCommand}" IsEnabled="{Binding IsDirty}" IsVisible="{Binding !HasExternalChanges}" />
+          <Button Content="Save" Classes="accent" Command="{Binding SaveCommand}" IsEnabled="{Binding IsDirty}" IsVisible="{Binding !HasExternalChanges}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- Navigation -->
+    <Border DockPanel.Dock="Left" Width="160" Background="{DynamicResource SidebarBrush}" Padding="8,12">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Bottom" Margin="8" TextWrapping="Wrap" Classes="small"
+                   Text="{Binding IssueSummary}" Foreground="#E5484D"
+                   IsVisible="{Binding IssueSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <ListBox ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage}" Background="Transparent">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:PageViewModel">
+              <TextBlock Text="{Binding Title}" FontSize="13" Margin="4,2" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+
+    <ContentControl Content="{Binding SelectedPage}" Margin="20,16,20,12">
+      <ContentControl.DataTemplates>
+        <DataTemplate DataType="vm:ProfilesPageViewModel">
+          <views:ProfilesPage />
+        </DataTemplate>
+        <DataTemplate DataType="vm:RulesPageViewModel">
+          <views:RulesPage />
+        </DataTemplate>
+        <DataTemplate DataType="vm:TestPageViewModel">
+          <views:TestPage />
+        </DataTemplate>
+        <DataTemplate DataType="vm:GeneralPageViewModel">
+          <views:GeneralPage />
+        </DataTemplate>
+      </ContentControl.DataTemplates>
+    </ContentControl>
+  </DockPanel>
+</Window>

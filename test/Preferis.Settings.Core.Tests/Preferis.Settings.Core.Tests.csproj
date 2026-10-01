@@ -3,7 +3,7 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <RootNamespace>Preferis.Settings.Tests</RootNamespace>
+    <RootNamespace>Preferis.Settings.Core.Tests</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/Preferis.Settings/Preferis.Settings.csproj" />
+    <ProjectReference Include="../../src/Preferis.Settings.Core/Preferis.Settings.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

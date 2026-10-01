@@ -18,16 +18,13 @@
     <PackageReference Include="Avalonia" Version="12.1.3" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.3" />
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../Preferis.Core/Preferis.Core.csproj" />
-    <ProjectReference Include="../Preferis.Platform/Preferis.Platform.csproj" />
+    <ProjectReference Include="../Preferis.Settings.Core/Preferis.Settings.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Preferis.Settings.Tests" />
     <None Include="macOS/Info.plist" />
   </ItemGroup>
 

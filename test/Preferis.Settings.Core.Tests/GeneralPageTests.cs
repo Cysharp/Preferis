@@ -2,7 +2,7 @@ using Preferis.Core.Configuration;
 using Preferis.Core.Hosting;
 using Preferis.Settings.ViewModels;
 
-namespace Preferis.Settings.Tests;
+namespace Preferis.Settings.Core.Tests;
 
 public sealed class GeneralPageTests : IDisposable
 {

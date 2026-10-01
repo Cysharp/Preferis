@@ -1,7 +1,7 @@
 using Preferis.Core.Configuration;
 using Preferis.Settings.ViewModels;
 
-namespace Preferis.Settings.Tests;
+namespace Preferis.Settings.Core.Tests;
 
 public sealed class RulesPageTests : IDisposable
 {

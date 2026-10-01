@@ -47,8 +47,8 @@ Preferis は OS の既定ブラウザーとして登録され、受け取った 
 | Router | UI フレームワークなし。macOS の Apple Event 受信は objc ランタイム直接呼び出し | 高速経路に余計な初期化を一切載せない |
 | ピッカー (Windows) | WinUI 3 (Windows App SDK 1.6+, MIT) | Windows 11 ネイティブの外観。NativeAOT 対応。表示時間が目標を超える場合は Win32 TaskDialog に切り替える |
 | ピッカー (macOS) | AppKit (Microsoft.macOS, `net10.0-macos`) | OS 標準の外観。NativeAOT は .NET 9 以降正式サポート |
-| 設定 UI | Avalonia 12.x (MIT) | 両 OS で 1 つの実装。使用頻度が低く、起動速度の制約を受けない。将来ネイティブ化する余地は残す |
-| MVVM | CommunityToolkit.Mvvm 8.x (MIT) | ソースジェネレーターベースで AOT 安全。WinUI 3 / Avalonia 共通 |
+| 設定 UI | macOS: AppKit (Microsoft.macOS)、Windows: WinUI 3。ViewModel は共通 (`Preferis.Settings.Core`) | OS 標準の外観にするため画面は OS ごとに作り、ロジックとテストは 1 つにする。M3 では Avalonia 12 で 1 つの実装にしていたが、macOS のアプリとして見た目が不自然なため置き換えた (§13) |
+| MVVM | CommunityToolkit.Mvvm 8.x (MIT) | ソースジェネレーターベースで AOT 安全。WinUI 3 は x:Bind で ViewModel に直接つなぎ、AppKit (データバインディングがない) は変更通知を受けて手で反映する |
 | 設定・IPC | System.Text.Json (ソース生成, `JsonPolymorphic`) | リフレクション不要、AOT 安全。Router とピッカー間の IPC にも同じコンテキストを使う |
 | 正規表現 | `System.Text.RegularExpressions` (`NonBacktracking` 優先) | ユーザー入力パターンによる破滅的バックトラックを防ぐ。AOT で動作 |
 | テスト | xunit (Apache 2.0) | FluentAssertions v8 は商用ライセンスのため使わない。必要なら Shouldly (BSD) |
@@ -69,12 +69,13 @@ Windows App SDK と Microsoft.macOS は Microsoft 製の SDK であり、Guideli
                              ▼               ▼
               ┌───────────────────┐  ┌───────────────────┐
               │ Preferis.Picker   │  │ Preferis.Settings │
-              │ WinUI 3 / AppKit  │  │ Avalonia          │
+              │ WinUI 3 / AppKit  │  │ WinUI 3 / AppKit  │
               └───────────────────┘  └───────────────────┘
 
  ────────────────────── 共有ライブラリ ──────────────────────
-  Preferis.Core      設定モデル / ルーティングエンジン / プロファイル解決 / IPC メッセージ
-  Preferis.Platform  ブラウザー検出 / プロファイル列挙 / 起動 / OS 登録 / パス (Windows, macOS)
+  Preferis.Core           設定モデル / ルーティングエンジン / プロファイル解決 / IPC メッセージ
+  Preferis.Platform       ブラウザー検出 / プロファイル列挙 / 起動 / OS 登録 / パス (Windows, macOS)
+  Preferis.Settings.Core  設定 UI の ViewModel とサービス (UI フレームワーク非依存)
 ```
 
 ### 4.1 実行ファイル構成
@@ -85,7 +86,7 @@ UI フレームワークを 1 つも含まない Router と、UI ごとの実行
 | --- | --- | --- |
 | `Preferis` (`Preferis.exe` / `Preferis.app` のメイン実行ファイル) | URL の受信、ルーティング、プロファイル解決、ブラウザー起動、ピッカーと設定 UI の子プロセス起動、OS 登録 | なし (最終フォールバックの OS メッセージボックスのみ) |
 | `Preferis.Picker` (`Preferis.Picker.exe` / `Preferis Picker.app`) | 候補からプロファイルを選ばせる | WinUI 3 / AppKit |
-| `Preferis.Settings` (`Preferis.Settings.exe` / `Preferis Settings.app`) | プロファイルとルールの編集 | Avalonia |
+| `Preferis.Settings` (`Preferis.Settings.exe` / `Preferis Settings.app`) | プロファイルとルールの編集 | WinUI 3 / AppKit |
 
 分離の理由:
 
@@ -114,12 +115,14 @@ src/
                               macOS の Apple Event 受信 (objc 直接呼び出し) を含む。
   Preferis.Picker.Windows/    WinUI 3。net10.0-windows10.0.xxxxx。Windows でのみビルド。
   Preferis.Picker.MacOS/      AppKit (Microsoft.macOS)。net10.0-macos。macOS でのみビルド。
-  Preferis.Settings/          Avalonia 設定 UI。net10.0。ViewModel (CommunityToolkit.Mvvm) と View、OS 固有部分は
-                              Services/ISettingsPlatform の実装 (macOS: MacSettingsPlatform)。
+  Preferis.Settings.Core/     設定 UI の ViewModel (CommunityToolkit.Mvvm) とサービスの抽象 (ISettingsPlatform,
+                              IDialogService)、macOS 実装の MacSettingsPlatform。net10.0。UI フレームワーク非依存。
+  Preferis.Settings.MacOS/    設定 UI の AppKit 実装 (Microsoft.macOS)。net10.0-macos。macOS でのみビルド。
+  Preferis.Settings.Windows/  設定 UI の WinUI 3 実装 (M4)。Windows でのみビルド。
 test/
   Preferis.Core.Tests/
   Preferis.Platform.Tests/    フィクスチャ (Local State, profiles.ini) を使った解析テスト、macOS 実機 API の小さな結合テスト
-  Preferis.Settings.Tests/    ViewModel テスト。実ファイル (一時ディレクトリ) の ConfigLoader とフェイクの OS / ダイアログで検証
+  Preferis.Settings.Core.Tests/ ViewModel テスト。実ファイル (一時ディレクトリ) の ConfigLoader とフェイクの OS / ダイアログで検証
 tools/
   bench/                      起動時間計測スクリプト
 docs/
@@ -615,7 +618,6 @@ Windows:
 - 配布形態 (Windows: zip / winget、macOS: zip / dmg / Homebrew cask) と Apple Developer ID の有無
 - Windows で `.html` 等のファイル関連付けも登録するか (既定は URL のみ)
 - 送信元アプリケーション (どのアプリが URL を開いたか) を条件に加えるか (将来拡張)
-- 設定 UI を将来 WinUI 3 / AppKit でネイティブ化するか (当面は Avalonia)
 
 ## 13. 決定事項の記録
 
@@ -637,11 +639,12 @@ Windows:
 | 2026-10-01 | 設定 UI の `not` は各条件ノードの「Not」フラグとして表示する | 否定のための 1 階層が減り、読みやすい。`not not x` は `x` と同じ意味なので畳んでも意味は変わらない |
 | 2026-10-01 | M3 の UI (ピッカー、設定) は英語のみ。`settings.language` は保存だけ行う | 対応言語はユーザー判断事項 (§12) で未決。文字列を後から差し替えられるよう UI 文字列は View と ViewModel に集める |
 | 2026-10-01 | ルーティング履歴は JSON Lines でローカルのログディレクトリに置く | URL を含むため同期対象に置かない。追記と切り詰めが単純 |
+| 2026-10-01 | 設定 UI は OS ごとにネイティブで作る (macOS: AppKit、Windows: WinUI 3)。ViewModel とサービスは `Preferis.Settings.Core` に分けて共通にし、Avalonia はやめる | Avalonia 版は機能は揃ったが、macOS のアプリとしては見た目が不自然だった。ViewModel は当初から UI 非依存で、画面だけを差し替えられる。AppKit 版はバンドルも小さくなる (Avalonia 版 26 MB) |
 
 ## 14. マイルストーンと現在の状態
 
-macOS で一通りの機能を完成させてから Windows 対応に進みます。Core と設定 UI は OS 非依存に作るため、
-Windows 対応で追加するのは Platform の Windows 実装、Router の Windows 経路、WinUI 3 ピッカーです。
+macOS で一通りの機能を完成させてから Windows 対応に進みます。Core と設定 UI のロジックは OS 非依存に作るため、
+Windows 対応で追加するのは Platform の Windows 実装、Router の Windows 経路、WinUI 3 のピッカーと設定 UI の画面です。
 `.app` / `.exe` 一式を生成するビルド (§4.4) は各 OS の最初のマイルストーンに含め、以降のマイルストーンでは
 常にその成果物でテストします。M5 はリリース段階の作業 (署名・公証・インストーラー・ドキュメント) だけです。
 
@@ -650,8 +653,8 @@ Windows 対応で追加するのは Platform の Windows 実装、Router の Win
 | M0 | スパイク (§12 の macOS 項目 1〜5) と計測方法の確立 | macOS 起動経路とピッカー構成の方式が確定している | 完了 (2026-10-01)。残件はヘルパーのネスト配置時の再確認で、M2 で行う。`tools/bench` は測る対象の Router ができる M2 で作る |
 | M1 | Core: 設定モデル、JSON、条件、ルーティング、プロファイル解決、IPC メッセージ、`--dry-run` | ユニットテストで §6〜§7 の仕様を網羅。`--dry-run` で設定ファイルの評価結果を確認できる | 完了 (2026-10-01)。`Preferis.Core` + 111 テスト、`Preferis.Router` は `--dry-run` のみ。NativeAOT publish 確認済み |
 | M2 | macOS Platform + Router 高速経路: Launch Services 検出、プロファイル列挙、LaunchPlan 実行、既定ブラウザー登録、Apple Event 受信。**`PublishMacOS` ターゲットで ad-hoc 署名済みの `Preferis.app` 一式を生成** | `artifacts/` の `Preferis.app` を既定ブラウザーにし、単一候補のルールで日常利用できる | 完了 (2026-10-01)。`open -a` 経由と argv 経由で Chrome / Edge Dev への振り分けを確認。既定ブラウザー化は `--register` をユーザーが実行して確認する。ピッカー不在時は既定プロファイルへフォールバック。Platform.md §5 に計測値 |
-| M3 | macOS ピッカー (AppKit, ヘルパーバンドル) + 設定 UI (Avalonia, macOS で検証)。両者を `Preferis.app` に同梱 | macOS で全機能が揃い、設定ファイルを手で編集せずに運用できる | 実装完了 (2026-10-01)、目視確認待ち。`Preferis Picker.app` (AppKit, NativeAOT, 4.6 MB) と `Preferis Settings.app` (Avalonia 12, NativeAOT, 26 MB) を `Contents/Helpers/` に同梱し内側から署名。Router 経由でピッカー表示まで 120 ms、「記憶する」、オプトイン履歴、`Preferis.app` を直接開くと設定 UI。テスト 333 件 (Core 221, Platform 28, Settings 84)。描画は PNG 書き出しで確認済みだが、実際のリンククリックからのピッカーの前面表示と設定 UI の手操作は開発者の目視確認が必要。未実装: UI の日本語化、ルールのドラッグ並べ替え、アプリアイコン |
-| M4 | Windows: スパイク (§12 の 6〜9)、Platform の Windows 実装、Router の Windows 経路、WinUI 3 ピッカー、設定 UI の Windows 検証。**`PublishWindows` ターゲットで exe 一式のフォルダーを生成** | `artifacts/` の `Preferis.exe` を既定ブラウザーにし、M3 と同等の機能が揃う。同一の設定ファイルを両 OS で共有できる | 未着手 |
+| M3 | macOS ピッカー (AppKit, ヘルパーバンドル) + 設定 UI (AppKit)。両者を `Preferis.app` に同梱 | macOS で全機能が揃い、設定ファイルを手で編集せずに運用できる | 設定 UI を AppKit で作り直し中 (2026-10-01)。それ以前の状態: 実装完了、目視確認待ち。`Preferis Picker.app` (AppKit, NativeAOT, 4.6 MB) と `Preferis Settings.app` (Avalonia 12, NativeAOT, 26 MB) を `Contents/Helpers/` に同梱し内側から署名。Router 経由でピッカー表示まで 120 ms、「記憶する」、オプトイン履歴、`Preferis.app` を直接開くと設定 UI。テスト 333 件 (Core 221, Platform 28, Settings 84)。描画は PNG 書き出しで確認済みだが、実際のリンククリックからのピッカーの前面表示と設定 UI の手操作は開発者の目視確認が必要。未実装: UI の日本語化、ルールのドラッグ並べ替え、アプリアイコン |
+| M4 | Windows: スパイク (§12 の 6〜9)、Platform の Windows 実装、Router の Windows 経路、WinUI 3 ピッカー、WinUI 3 の設定 UI (`Preferis.Settings.Core` の ViewModel を使う)。**`PublishWindows` ターゲットで exe 一式のフォルダーを生成** | `artifacts/` の `Preferis.exe` を既定ブラウザーにし、M3 と同等の機能が揃う。同一の設定ファイルを両 OS で共有できる | 未着手 |
 | M5 | リリース: Developer ID 署名と公証、インストーラー (macOS: dmg / Homebrew cask、Windows: zip / winget 等)、ベンチ結果の記録、利用者向けドキュメント | 配布物を第三者が導入できる | 未着手 |
 
 本ドキュメントは設計段階のものです。実装と齟齬が出た場合は実装側の判断を本書に反映してください。

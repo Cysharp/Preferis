@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The settings UI without a UI framework: view models (CommunityToolkit.Mvvm) and the services they use. Each OS
+    renders them natively (Preferis.Settings.MacOS with AppKit, Preferis.Settings.Windows with WinUI 3 in M4).
+  -->
+  <PropertyGroup>
+    <RootNamespace>Preferis.Settings</RootNamespace>
+    <Description>Preferis settings: view models and services shared by the native settings UIs.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Preferis.Core/Preferis.Core.csproj" />
+    <ProjectReference Include="../Preferis.Platform/Preferis.Platform.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Preferis.Settings.Core.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -5,7 +5,7 @@ using Preferis.Core.Hosting;
 using Preferis.Settings.Services;
 using Preferis.Settings.ViewModels;
 
-namespace Preferis.Settings.Tests;
+namespace Preferis.Settings.Core.Tests;
 
 internal sealed class FakeSettingsPlatform : ISettingsPlatform
 {

@@ -6,10 +6,11 @@
       "src/Preferis.Platform/Preferis.Platform.csproj",
       "src/Preferis.Router/Preferis.Router.csproj",
       "src/Preferis.Picker.MacOS/Preferis.Picker.MacOS.csproj",
+      "src/Preferis.Settings.Core/Preferis.Settings.Core.csproj",
       "src/Preferis.Settings/Preferis.Settings.csproj",
       "test/Preferis.Core.Tests/Preferis.Core.Tests.csproj",
       "test/Preferis.Platform.Tests/Preferis.Platform.Tests.csproj",
-      "test/Preferis.Settings.Tests/Preferis.Settings.Tests.csproj"
+      "test/Preferis.Settings.Core.Tests/Preferis.Settings.Core.Tests.csproj"
     ]
   }
 }

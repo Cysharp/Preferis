@@ -1,6 +1,6 @@
 using Preferis.Core.Configuration;
 
-namespace Preferis.Settings.Tests;
+namespace Preferis.Settings.Core.Tests;
 
 public sealed class SettingsViewModelTests : IDisposable
 {

@@ -2,7 +2,7 @@ using Preferis.Core.Configuration;
 using Preferis.Core.History;
 using Preferis.Core.Routing;
 
-namespace Preferis.Settings.Tests;
+namespace Preferis.Settings.Core.Tests;
 
 public sealed class TestPageTests : IDisposable
 {

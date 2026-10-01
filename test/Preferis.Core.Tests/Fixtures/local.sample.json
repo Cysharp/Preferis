@@ -1,0 +1,7 @@
+{
+  "configPath": "~/Library/CloudStorage/OneDrive-Example/Apps/Preferis/config.json",
+  "browserOverrides": {
+    "chrome": { "path": "/Applications/Google Chrome Beta.app" }
+  },
+  "logging": { "level": "error", "history": false, "historySize": 50 }
+}

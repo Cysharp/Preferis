@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "defaultProfile": "edge",
+  "profiles": [
+    { "id": "edge", "name": "Microsoft Edge", "browser": "edge" },
+    {
+      "id": "chrome-default",
+      "name": "Chrome (Default)",
+      "browser": "chrome",
+      "browserProfile": { "directory": "Default", "name": "Mayuki" }
+    },
+    {
+      "id": "chrome-work",
+      "name": "Chrome (Work)",
+      "browser": "chrome",
+      "browserProfile": { "directory": "Profile 1", "name": "Work", "email": "me@work.example.com" },
+      "fallback": "edge"
+    },
+    { "id": "edge-private", "name": "Edge (InPrivate)", "browser": "edge", "private": true },
+    { "id": "system-browser", "name": "OS 標準ブラウザー", "browser": { "windows": "edge", "macos": "safari" } },
+    {
+      "id": "custom-tool",
+      "name": "社内ツール",
+      "command": {
+        "windows": { "path": "%LOCALAPPDATA%\\Programs\\Foo\\foo.exe", "args": ["--open", "{url}"] },
+        "macos":   { "path": "/Applications/Foo.app/Contents/MacOS/Foo", "args": ["{url}"] }
+      }
+    }
+  ],
+  "rules": [
+    {
+      "id": "unwrap-safelinks",
+      "name": "Outlook Safe Links を展開して再ルーティング",
+      "enabled": true,
+      "condition": { "type": "host", "match": "wildcard", "pattern": "*.safelinks.protection.outlook.com" },
+      "actions": [
+        { "type": "rewrite", "mode": "queryParameter", "parameter": "url" },
+        { "type": "reroute" }
+      ]
+    },
+    {
+      "id": "google-admin",
+      "name": "Google Admin は Chrome (Work)",
+      "enabled": true,
+      "condition": { "type": "url", "match": "startsWith", "pattern": "https://admin.google.com/" },
+      "actions": [ { "type": "open", "profiles": ["chrome-work"] } ]
+    },
+    {
+      "id": "app-split",
+      "name": "app1 / app2 でプロファイルを分ける",
+      "enabled": true,
+      "condition": {
+        "type": "or",
+        "conditions": [
+          { "type": "host", "match": "equals", "pattern": "app1.example.com" },
+          { "type": "host", "match": "equals", "pattern": "app2.example.com" }
+        ]
+      },
+      "actions": [ { "type": "open", "profiles": ["chrome-default"] } ]
+    },
+    {
+      "id": "ms-login",
+      "name": "Microsoft ログインは選択する",
+      "enabled": true,
+      "condition": { "type": "host", "match": "regex", "pattern": "^login\\.microsoftonline\\.com$" },
+      "actions": [ { "type": "open", "profiles": ["edge", "chrome-work", "chrome-default"] } ]
+    }
+  ],
+  "catchAll": {
+    "actions": [ { "type": "open" } ]
+  },
+  "settings": {
+    "picker": { "position": "cursor", "autoSelectSeconds": 0, "rememberChoiceDefault": false },
+    "language": "auto"
+  }
+}

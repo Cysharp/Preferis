@@ -1,2 +1,9 @@
 <Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Preferis.Core/Preferis.Core.csproj" />
+    <Project Path="src/Preferis.Router/Preferis.Router.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/Preferis.Core.Tests/Preferis.Core.Tests.csproj" />
+  </Folder>
 </Solution>

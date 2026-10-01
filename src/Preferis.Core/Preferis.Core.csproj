@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Preferis.Core</RootNamespace>
+    <Description>Preferis core: configuration model, routing engine, profile resolution and picker IPC messages. OS and UI independent.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Preferis.Core.Tests" />
+  </ItemGroup>
+
+</Project>

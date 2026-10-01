@@ -9,6 +9,11 @@ namespace Preferis.Settings.Services;
 /// <param name="IconPng">The application icon as PNG, when available.</param>
 public sealed record DetectedBrowserInfo(DetectedBrowser Browser, IReadOnlyList<BrowserProfileInfo>? Profiles, byte[]? IconPng);
 
+/// <summary>The outcome of handing a URL to the Router.</summary>
+/// <param name="ExitCode">0 when the URL was opened, ignored or delegated; 2 when nothing could be done.</param>
+/// <param name="Output">What the Router reported (its log lines), for showing to the user.</param>
+public sealed record RouterRunResult(int ExitCode, IReadOnlyList<string> Output);
+
 /// <summary>What the settings UI needs from the OS. One implementation per OS; faked in the tests.</summary>
 public interface ISettingsPlatform
 {
@@ -36,6 +41,15 @@ public interface ISettingsPlatform
 
     /// <summary>Opens the OS page where the default browser is chosen.</summary>
     void OpenDefaultBrowserSettings();
+
+    /// <summary>False when the Router cannot be found (settings UI not running from inside <c>Preferis.app</c>).</summary>
+    bool CanOpenUrls { get; }
+
+    /// <summary>
+    /// Opens a URL the way a clicked link would: the Router routes it with the saved configuration, shows the picker
+    /// when the rules say so and launches the browser. Completes when the Router is done (after the picker closed).
+    /// </summary>
+    Task<RouterRunResult> OpenUrlAsync(string url);
 
     /// <summary>Shows a file or folder in Finder / Explorer.</summary>
     void Reveal(string path);

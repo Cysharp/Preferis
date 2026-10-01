@@ -54,6 +54,19 @@ public sealed partial class TestPageViewModel : PageViewModel
     public ObservableCollection<CandidateLine> Candidates { get; } = [];
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(OpenCommand))]
+    public partial bool IsOpening { get; private set; }
+
+    /// <summary>What happened when the URL was opened for real, or null before that.</summary>
+    [ObservableProperty]
+    public partial string? OpenResult { get; private set; }
+
+    [ObservableProperty]
+    public partial IReadOnlyList<string> OpenOutput { get; private set; } = [];
+
+    public bool CanOpenUrls => Settings.Platform.CanOpenUrls;
+
+    [ObservableProperty]
     public partial bool IsHistoryEnabled { get; private set; }
 
     public ObservableCollection<HistoryLine> History { get; } = [];
@@ -106,6 +119,55 @@ public sealed partial class TestPageViewModel : PageViewModel
             }
         }
     }
+
+    /// <summary>
+    /// Opens the URL for real, as a clicked link would, so the picker and the launch can be tried. The Router reads the
+    /// saved configuration, so unsaved edits are saved first or left out, as the user chooses.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanOpen))]
+    private async Task Open()
+    {
+        Run();
+        if (Error is not null)
+        {
+            return;
+        }
+
+        if (Settings.IsDirty)
+        {
+            var answer = await Settings.Dialogs.AskAsync(
+                "Save the changes before opening?",
+                "Preferis opens the URL with the saved configuration. Unsaved changes are only used by this page's test.",
+                ["Save and Open", "Open Saved Configuration", "Cancel"]);
+            if (answer == 0 && !Settings.TrySave())
+            {
+                return;
+            }
+            if (answer is not (0 or 1))
+            {
+                return;
+            }
+        }
+
+        IsOpening = true;
+        OpenResult = "Opening…";
+        OpenOutput = [];
+        try
+        {
+            var result = await Settings.Platform.OpenUrlAsync(Url.Trim());
+            OpenResult = result.ExitCode == 0 ? "Preferis handled the URL." : "Preferis could not open the URL.";
+            OpenOutput = result.Output;
+        }
+        finally
+        {
+            IsOpening = false;
+        }
+        // "Always open ... with this choice" in the picker writes config.json; show it right away.
+        Settings.CheckForExternalChanges();
+        LoadHistory();
+    }
+
+    private bool CanOpen => Settings.Platform.CanOpenUrls && !IsOpening;
 
     [RelayCommand]
     private void TestHistoryEntry(HistoryLine entry)

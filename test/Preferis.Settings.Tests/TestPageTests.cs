@@ -1,5 +1,6 @@
 using Preferis.Core.Configuration;
 using Preferis.Core.History;
+using Preferis.Core.Routing;
 
 namespace Preferis.Settings.Tests;
 
@@ -143,5 +144,127 @@ public sealed class TestPageTests : IDisposable
 
         Assert.False(page.IsHistoryEnabled);
         Assert.Empty(page.History);
+    }
+}
+
+public sealed class TestPageOpenTests : IDisposable
+{
+    private readonly SettingsHarness _harness = new();
+
+    public void Dispose() => _harness.Dispose();
+
+    [Fact]
+    public async Task Opening_hands_the_url_to_preferis_and_shows_what_happened()
+    {
+        var page = _harness.WithSample().Create().Test;
+        page.Url = "  https://login.microsoftonline.com/common ";
+
+        await page.OpenCommand.ExecuteAsync(null);
+
+        Assert.Equal(["https://login.microsoftonline.com/common"], _harness.Platform.OpenedUrls);
+        Assert.Equal("Preferis handled the URL.", page.OpenResult);
+        Assert.Equal(["[Info] Launched: Launched 'edge'. (12.3 ms)"], page.OpenOutput);
+        Assert.NotNull(page.Decision);
+        Assert.False(page.IsOpening);
+    }
+
+    [Fact]
+    public async Task A_failure_reported_by_preferis_is_shown()
+    {
+        var page = _harness.WithSample().Create().Test;
+        _harness.Platform.OpenResult = new(2, ["[Error] Not an absolute URL"]);
+        page.Url = "https://www.example.com/";
+
+        await page.OpenCommand.ExecuteAsync(null);
+
+        Assert.Equal("Preferis could not open the URL.", page.OpenResult);
+    }
+
+    [Fact]
+    public async Task Text_that_is_not_a_url_is_not_opened()
+    {
+        var page = _harness.WithSample().Create().Test;
+        page.Url = "example";
+
+        await page.OpenCommand.ExecuteAsync(null);
+
+        Assert.Empty(_harness.Platform.OpenedUrls);
+        Assert.NotNull(page.Error);
+    }
+
+    [Fact]
+    public async Task Unsaved_changes_can_be_saved_before_opening()
+    {
+        var settings = _harness.WithSample().Create();
+        settings.Profiles.Profiles[0].Name = "Edited";
+        settings.Test.Url = "https://www.example.com/";
+        _harness.Dialogs.Answers.Enqueue("Save and Open");
+
+        await settings.Test.OpenCommand.ExecuteAsync(null);
+
+        Assert.Single(_harness.Platform.OpenedUrls);
+        Assert.False(settings.IsDirty);
+        Assert.Equal("Edited", _harness.SavedConfig().Profiles[0].Name);
+    }
+
+    [Fact]
+    public async Task Unsaved_changes_can_be_left_out()
+    {
+        var settings = _harness.WithSample().Create();
+        settings.Profiles.Profiles[0].Name = "Edited";
+        settings.Test.Url = "https://www.example.com/";
+        _harness.Dialogs.Answers.Enqueue("Open Saved Configuration");
+
+        await settings.Test.OpenCommand.ExecuteAsync(null);
+
+        Assert.Single(_harness.Platform.OpenedUrls);
+        Assert.True(settings.IsDirty);
+        Assert.Equal("Microsoft Edge", _harness.SavedConfig().Profiles[0].Name);
+    }
+
+    [Fact]
+    public async Task Cancelling_the_question_opens_nothing()
+    {
+        var settings = _harness.WithSample().Create();
+        settings.Profiles.Profiles[0].Name = "Edited";
+        settings.Test.Url = "https://www.example.com/";
+        _harness.Dialogs.Answers.Enqueue("Cancel");
+
+        await settings.Test.OpenCommand.ExecuteAsync(null);
+
+        Assert.Empty(_harness.Platform.OpenedUrls);
+        Assert.True(settings.IsDirty);
+    }
+
+    [Fact]
+    public async Task A_choice_remembered_in_the_picker_shows_up_and_the_result_stays()
+    {
+        var settings = _harness.WithSample().Create();
+        settings.SelectedPage = settings.Test;
+        var page = settings.Test;
+        page.Url = "https://login.microsoftonline.com/common";
+        _harness.Platform.OnOpen = _ =>
+        {
+            var config = _harness.Loader.Load().Config;
+            RememberedRule.Insert(config, RememberedRule.Create(RoutingUrl.Parse("https://login.microsoftonline.com/"), "edge"), "ms-login");
+            _harness.Loader.Save(config, _harness.Paths.DefaultConfigPath);
+        };
+
+        await page.OpenCommand.ExecuteAsync(null);
+
+        Assert.Contains(settings.Rules.Rules, r => r.Id.StartsWith("remember-", StringComparison.Ordinal));
+        Assert.Same(page, settings.Test);
+        Assert.Same(page, settings.SelectedPage);
+        Assert.Equal("Preferis handled the URL.", page.OpenResult);
+    }
+
+    [Fact]
+    public void Opening_needs_preferis_app()
+    {
+        _harness.Platform.CanOpenUrls = false;
+
+        var page = _harness.WithSample().Create().Test;
+
+        Assert.False(page.OpenCommand.CanExecute(null));
     }
 }

@@ -137,6 +137,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void Revert() => Load();
 
+    /// <summary>Saves for a page that needs the file on disk to be current (opening a URL for real). False when it could not.</summary>
+    internal bool TrySave() => SaveCore(force: false);
+
     /// <summary>
     /// Called when the window becomes active (and before moving the file): a <c>config.json</c> changed elsewhere is
     /// reloaded when it has no edits here, and flagged otherwise. Pending <c>local.json</c> edits survive the reload.
@@ -286,12 +289,20 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         Profiles = new ProfilesPageViewModel(this);
         Rules = new RulesPageViewModel(this);
-        Test = new TestPageViewModel(this);
+        // The test page holds no configuration of its own (it routes with Config when asked), and keeping it keeps
+        // what it shows, e.g. the result of opening a URL whose picker choice was remembered and caused this reload.
+        Test ??= new TestPageViewModel(this);
         General = new GeneralPageViewModel(this);
         _loading = false;
 
         ReplacePages(null);
+        var unchanged = Pages[current] == SelectedPage;
         SelectedPage = Pages[current];
+        if (unchanged)
+        {
+            // Still the same page object, so it was not activated by the change: refresh it with the reloaded configuration.
+            SelectedPage.Activate();
+        }
         MarkChanged();
     }
 

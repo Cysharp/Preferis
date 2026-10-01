@@ -21,6 +21,12 @@ internal sealed class FakeSettingsPlatform : ISettingsPlatform
 
     public int SystemSettingsOpened { get; private set; }
 
+    public bool CanOpenUrls { get; set; } = true;
+
+    public List<string> OpenedUrls { get; } = [];
+
+    public RouterRunResult OpenResult { get; set; } = new(0, ["[Info] Launched: Launched 'edge'. (12.3 ms)"]);
+
     public List<string> Revealed { get; } = [];
 
     public HostPlatform Platform => HostPlatform.MacOS;
@@ -44,6 +50,16 @@ internal sealed class FakeSettingsPlatform : ISettingsPlatform
     }
 
     public void OpenDefaultBrowserSettings() => SystemSettingsOpened++;
+
+    /// <summary>What the Router does meanwhile, e.g. save a remembered rule.</summary>
+    public Action<string>? OnOpen { get; set; }
+
+    public Task<RouterRunResult> OpenUrlAsync(string url)
+    {
+        OpenedUrls.Add(url);
+        OnOpen?.Invoke(url);
+        return Task.FromResult(OpenResult);
+    }
 
     public void Reveal(string path) => Revealed.Add(path);
 

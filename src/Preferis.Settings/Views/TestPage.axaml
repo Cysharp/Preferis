@@ -8,17 +8,34 @@
     <StackPanel Spacing="10" MaxWidth="860" HorizontalAlignment="Left" Margin="0,0,16,16">
       <TextBlock Classes="heading" Text="Test" />
       <TextBlock Classes="secondary" TextWrapping="Wrap"
-                 Text="Shows how a URL would be routed with the configuration being edited, unsaved changes included. Nothing is opened." />
+                 Text="Test shows how a URL would be routed with the configuration being edited, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, to try the picker and the browser for real." />
 
-      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
         <TextBox Classes="code" Text="{Binding Url}" PlaceholderText="https://www.example.com/">
           <TextBox.KeyBindings>
             <KeyBinding Gesture="Enter" Command="{Binding RunCommand}" />
           </TextBox.KeyBindings>
         </TextBox>
         <Button Grid.Column="1" Classes="accent" Content="Test" Command="{Binding RunCommand}" />
+        <Button Grid.Column="2" Content="Open" Command="{Binding OpenCommand}"
+                ToolTip.Tip="Open the URL with Preferis, as if a link was clicked: the picker appears when the rules say so" />
       </Grid>
+      <TextBlock Classes="secondary small" TextWrapping="Wrap" IsVisible="{Binding !CanOpenUrls}"
+                 Text="Open needs Preferis Settings to run from inside Preferis.app." />
       <TextBlock Text="{Binding Error}" Foreground="#E5484D" IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+      <Border Classes="card" IsVisible="{Binding OpenResult, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <StackPanel Spacing="4">
+          <TextBlock Text="{Binding OpenResult}" FontWeight="SemiBold" />
+          <ItemsControl ItemsSource="{Binding OpenOutput}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <SelectableTextBlock Classes="code secondary small" Text="{Binding}" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
 
       <StackPanel Spacing="8" IsVisible="{Binding HasResult}">
         <Border Classes="card">

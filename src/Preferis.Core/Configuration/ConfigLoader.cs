@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Preferis.Core.Hosting;
 using Preferis.Core.Profiles;
 
 namespace Preferis.Core.Configuration;
@@ -9,7 +10,7 @@ namespace Preferis.Core.Configuration;
 public sealed record ConfigLoadResult(PreferisConfig Config, LocalConfig Local, string ConfigPath, bool Exists, string? Error);
 
 /// <summary>Locates, reads and writes <c>local.json</c> and <c>config.json</c>.</summary>
-public sealed class ConfigLoader
+public sealed class ConfigLoader : IConfigStore
 {
     private readonly ConfigPaths _paths;
     private readonly Platform _platform;

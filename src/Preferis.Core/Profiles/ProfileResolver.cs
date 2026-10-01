@@ -152,6 +152,12 @@ public sealed class ProfileResolver
         return new ResolveResult.Resolved(new LaunchPlan(LaunchKind.Execute, browser.ExecutablePath, arguments, browser, profileDirectory), warnings, profile.Id);
     }
 
+    /// <summary>The plan for opening a URL with a detected browser without any profile or option (fallback picker).</summary>
+    public static LaunchPlan PlanForBrowser(DetectedBrowser browser, RoutingUrl url, Platform platform)
+        => browser.Family == BrowserFamily.Other && platform == Platform.MacOS
+            ? new LaunchPlan(LaunchKind.OpenWithApplication, browser.ApplicationPath ?? browser.ExecutablePath, [url.AbsoluteUri], browser, null)
+            : new LaunchPlan(LaunchKind.Execute, browser.ExecutablePath, [url.AbsoluteUri], browser, null);
+
     private ResolveResult ResolveCommand(Profile profile, RoutingUrl url)
     {
         var spec = profile.Command!.For(_platform);

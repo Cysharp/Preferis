@@ -193,47 +193,36 @@ public sealed class TestPageOpenTests : IDisposable
     }
 
     [Fact]
-    public async Task Unsaved_changes_can_be_saved_before_opening()
+    public async Task Edits_still_waiting_are_saved_before_opening()
     {
         var settings = _harness.WithSample().Create();
         settings.Profiles.Profiles[0].Name = "Edited";
         settings.Test.Url = "https://www.example.com/";
-        _harness.Dialogs.Answers.Enqueue("Save and Open");
 
         await settings.Test.OpenCommand.ExecuteAsync(null);
 
         Assert.Single(_harness.Platform.OpenedUrls);
+        Assert.Empty(_harness.Dialogs.Asked);
         Assert.False(settings.IsDirty);
         Assert.Equal("Edited", _harness.SavedConfig().Profiles[0].Name);
     }
 
     [Fact]
-    public async Task Unsaved_changes_can_be_left_out()
+    public async Task Edits_that_cannot_be_saved_leave_the_choice_to_open_anyway()
     {
         var settings = _harness.WithSample().Create();
         settings.Profiles.Profiles[0].Name = "Edited";
+        File.WriteAllText(_harness.Paths.DefaultConfigPath, SettingsHarness.SampleJson.Replace("Chrome (Default)", "Theirs", StringComparison.Ordinal));
         settings.Test.Url = "https://www.example.com/";
-        _harness.Dialogs.Answers.Enqueue("Open Saved Configuration");
 
-        await settings.Test.OpenCommand.ExecuteAsync(null);
-
-        Assert.Single(_harness.Platform.OpenedUrls);
-        Assert.True(settings.IsDirty);
-        Assert.Equal("Microsoft Edge", _harness.SavedConfig().Profiles[0].Name);
-    }
-
-    [Fact]
-    public async Task Cancelling_the_question_opens_nothing()
-    {
-        var settings = _harness.WithSample().Create();
-        settings.Profiles.Profiles[0].Name = "Edited";
-        settings.Test.Url = "https://www.example.com/";
         _harness.Dialogs.Answers.Enqueue("Cancel");
-
         await settings.Test.OpenCommand.ExecuteAsync(null);
-
         Assert.Empty(_harness.Platform.OpenedUrls);
-        Assert.True(settings.IsDirty);
+
+        _harness.Dialogs.Answers.Enqueue("Open Saved Configuration");
+        await settings.Test.OpenCommand.ExecuteAsync(null);
+        Assert.Single(_harness.Platform.OpenedUrls);
+        Assert.Equal("Microsoft Edge", _harness.SavedConfig().Profiles[0].Name);
     }
 
     [Fact]

@@ -48,7 +48,7 @@ public sealed class GeneralPageTests : IDisposable
         page.IsHistoryEnabled = true;
         page.HistorySize = 20;
         Assert.True(settings.IsDirty);
-        settings.SaveCommand.Execute(null);
+        _harness.Saves.RunPending();
 
         var local = _harness.Loader.LoadLocal();
         Assert.Equal("trace", local.Logging?.Level);

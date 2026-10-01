@@ -9,8 +9,8 @@ using Preferis.Settings.ViewModels;
 namespace Preferis.Settings.MacOS;
 
 /// <summary>
-/// The settings window, laid out like System Settings: a sidebar with the pages, the page on the right, Revert and Save
-/// in the toolbar. The close button shows the unsaved-changes dot; the subtitle summarizes the state.
+/// The settings window, laid out like System Settings: a sidebar with the pages and the page on the right. Edits save
+/// themselves, so there is no Save button; the subtitle counts the problems of the configuration.
 /// </summary>
 internal sealed class SettingsWindow
 {
@@ -74,13 +74,14 @@ internal sealed class SettingsWindow
         Window.ContentViewController = split;
         Window.SetContentSize(new CGSize(1080, 720));
 
-        Window.Toolbar = new NSToolbar("PreferisSettingsToolbar") { Delegate = new Toolbar(settings, _bindings), DisplayMode = NSToolbarDisplayMode.Icon };
+        // Empty, for the tall title bar of System Settings that the page title sits in.
+        Window.Toolbar = new NSToolbar("PreferisSettingsToolbar") { DisplayMode = NSToolbarDisplayMode.Icon };
 
         _events = new WindowEvents(this);
         Window.Delegate = _events;
 
         _bindings.Observe(settings, ShowPage, nameof(SettingsViewModel.SelectedPage), nameof(SettingsViewModel.Pages));
-        _bindings.Observe(settings, UpdateTitle, nameof(SettingsViewModel.SelectedPage), nameof(SettingsViewModel.IsDirty), nameof(SettingsViewModel.IssueSummary));
+        _bindings.Observe(settings, UpdateTitle, nameof(SettingsViewModel.SelectedPage), nameof(SettingsViewModel.IssueSummary));
     }
 
     public NSWindow Window { get; }
@@ -149,17 +150,7 @@ internal sealed class SettingsWindow
     private void UpdateTitle()
     {
         Window.Title = _settings.SelectedPage?.Title ?? "Preferis Settings";
-        var parts = new List<string>();
-        if (_settings.IsDirty)
-        {
-            parts.Add("Edited");
-        }
-        if (_settings.IssueSummary.Length > 0)
-        {
-            parts.Add(_settings.IssueSummary);
-        }
-        Window.Subtitle = string.Join(" — ", parts);
-        Window.DocumentEdited = _settings.IsDirty;
+        Window.Subtitle = _settings.IssueSummary;
     }
 
     private async void OnCloseRequested()
@@ -211,51 +202,6 @@ internal sealed class SettingsWindow
         }
     }
 
-    private sealed class Toolbar : NSToolbarDelegate
-    {
-        private const string Revert = "revert";
-        private const string Save = "save";
-        private readonly SettingsViewModel _settings;
-        private readonly Bindings _bindings;
-
-        public Toolbar(SettingsViewModel settings, Bindings bindings)
-        {
-            _settings = settings;
-            _bindings = bindings;
-        }
-
-        public Toolbar(NativeHandle handle)
-            : base(handle)
-        {
-            _settings = null!;
-            _bindings = null!;
-        }
-
-        public override string[] DefaultItemIdentifiers(NSToolbar toolbar) => [NSToolbar.NSToolbarFlexibleSpaceItemIdentifier, Revert, Save];
-
-        public override string[] AllowedItemIdentifiers(NSToolbar toolbar) => DefaultItemIdentifiers(toolbar);
-
-        public override NSToolbarItem WillInsertItem(NSToolbar toolbar, string itemIdentifier, bool willBeInserted)
-        {
-            var item = new NSToolbarItem(itemIdentifier);
-            var button = Ui.Button(itemIdentifier == Save ? "Save" : "Revert");
-            if (itemIdentifier == Save)
-            {
-                button.KeyEquivalent = "s";
-                button.KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask;
-                _bindings.Command(button, _settings.SaveCommand);
-            }
-            else
-            {
-                _bindings.Command(button, _settings.RevertCommand);
-            }
-            _bindings.Observe(_settings, () => button.Enabled = _settings.IsDirty, nameof(SettingsViewModel.IsDirty));
-            item.View = button;
-            item.Label = button.Title;
-            return item;
-        }
-    }
-
     private sealed class WindowEvents : NSWindowDelegate
     {
         private readonly SettingsWindow _owner;
@@ -274,6 +220,7 @@ internal sealed class SettingsWindow
         // Coming back to the window is when a change made elsewhere (the Router, a sync client) should show up.
         public override void DidBecomeKey(NSNotification notification) => _owner._settings.CheckForExternalChanges();
 
+        // Edits still waiting for the pause are saved first; closing asks only when they cannot be.
         public override bool WindowShouldClose(NSObject sender)
         {
             if (_owner._closeConfirmed || !_owner._settings.IsDirty)
@@ -294,7 +241,10 @@ internal interface IPageView : IDisposable
     NSView View { get; }
 }
 
-/// <summary>The notice above the page: changes on disk, a configuration that could not be read, a failed operation.</summary>
+/// <summary>
+/// The notice above the page: edits held back because <c>config.json</c> changed elsewhere or could not be read, or a
+/// failed operation.
+/// </summary>
 internal sealed class Banner
 {
     public Banner(SettingsViewModel settings, Bindings bindings)
@@ -302,11 +252,11 @@ internal sealed class Banner
         var icon = NSImageView.FromImage(Images.Symbol("exclamationmark.triangle.fill", 14)!);
         icon.ContentTintColor = NSColor.SystemOrange;
         var text = Ui.Wrapping("", 520, 12, NSColor.Label);
-        var reload = Ui.Button("Reload");
-        var overwrite = Ui.Button("Save Anyway");
-        bindings.Command(reload, settings.RevertCommand);
-        bindings.Command(overwrite, settings.SaveAnywayCommand);
-        var row = Ui.HStack(10, icon, text, Ui.Spacer(), reload, overwrite);
+        var theirs = Ui.Button("Use Theirs");
+        var mine = Ui.Button("Keep Mine");
+        bindings.Command(theirs, settings.UseTheirsCommand);
+        bindings.Command(mine, settings.KeepMineCommand);
+        var row = Ui.HStack(10, icon, text, Ui.Spacer(), theirs, mine);
         row.Alignment = NSLayoutAttribute.CenterY;
         row.EdgeInsets = new NSEdgeInsets(10, 16, 10, 16);
 
@@ -324,13 +274,16 @@ internal sealed class Banner
         bindings.Observe(settings, () =>
         {
             var message = settings.HasExternalChanges
-                ? "config.json was changed outside the settings (for example by “Always open … with this choice” or a sync client). Reload to see those changes, or save yours over them."
-                : settings.StatusMessage ?? settings.LoadError;
+                ? "config.json was changed outside the settings (for example by “Always open … with this choice” or a sync client) before your latest changes were saved. Use the file as it is now, or save your changes over it."
+                : settings.IsHoldingEditsForUnreadableFile
+                    ? $"{settings.LoadError} Your changes to it are not saved until you replace the file with them."
+                    : settings.StatusMessage ?? settings.LoadError;
             text.StringValue = message ?? "";
-            reload.Hidden = !settings.HasExternalChanges;
-            overwrite.Hidden = !settings.HasExternalChanges;
+            theirs.Hidden = !settings.HasExternalChanges;
+            mine.Hidden = !(settings.HasExternalChanges || settings.IsHoldingEditsForUnreadableFile);
+            mine.Title = settings.HasExternalChanges ? "Keep Mine" : "Replace";
             box.Hidden = message is null;
-        }, nameof(SettingsViewModel.HasExternalChanges), nameof(SettingsViewModel.StatusMessage), nameof(SettingsViewModel.LoadError));
+        }, nameof(SettingsViewModel.HasExternalChanges), nameof(SettingsViewModel.IsHoldingEditsForUnreadableFile), nameof(SettingsViewModel.StatusMessage), nameof(SettingsViewModel.LoadError));
     }
 
     public NSView View { get; }

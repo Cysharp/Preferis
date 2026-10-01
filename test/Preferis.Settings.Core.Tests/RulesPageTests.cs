@@ -333,7 +333,7 @@ public sealed class RulesPageTests : IDisposable
 
         group.AddConditionCommand.Execute(null);
         ((LeafConditionViewModel)group.Children[1]).Pattern = "example.com";
-        settings.SaveCommand.Execute(null);
+        _harness.Saves.RunPending();
 
         var saved = File.ReadAllText(_harness.Paths.DefaultConfigPath);
         Assert.Contains("com.tinyspeck.slackmacgap", saved, StringComparison.Ordinal);

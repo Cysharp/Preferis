@@ -33,17 +33,26 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void An_edit_makes_the_session_dirty_and_saving_writes_it()
+    public void Edits_are_saved_after_a_pause_without_asking()
     {
         var settings = _harness.WithSample().Create();
 
         settings.Profiles.Profiles[0].Name = "Edge (renamed)";
         Assert.True(settings.IsDirty);
+        Assert.Equal("Microsoft Edge", _harness.SavedConfig().Profiles[0].Name);
 
-        settings.SaveCommand.Execute(null);
+        _harness.Saves.RunPending();
 
         Assert.False(settings.IsDirty);
         Assert.Equal("Edge (renamed)", _harness.SavedConfig().Profiles[0].Name);
+    }
+
+    [Fact]
+    public void Nothing_is_saved_without_an_edit()
+    {
+        _harness.WithSample().Create();
+
+        Assert.False(_harness.Saves.HasPending);
     }
 
     [Fact]
@@ -66,32 +75,9 @@ public sealed class SettingsViewModelTests : IDisposable
         var settings = _harness.Create();
 
         settings.Profiles.Profiles[0].Name = "Edge (renamed)";
-        settings.SaveCommand.Execute(null);
+        _harness.Saves.RunPending();
 
         Assert.Contains("fromTheFuture", File.ReadAllText(_harness.Paths.DefaultConfigPath), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Revert_discards_unsaved_changes()
-    {
-        var settings = _harness.WithSample().Create();
-        settings.Profiles.Profiles[0].Name = "Edge (renamed)";
-
-        settings.RevertCommand.Execute(null);
-
-        Assert.False(settings.IsDirty);
-        Assert.Equal("Microsoft Edge", settings.Profiles.Profiles[0].Name);
-    }
-
-    [Fact]
-    public void Reloading_keeps_the_current_page()
-    {
-        var settings = _harness.WithSample().Create();
-        settings.SelectedPage = settings.Rules;
-
-        settings.RevertCommand.Execute(null);
-
-        Assert.Same(settings.Rules, settings.SelectedPage);
     }
 
     [Fact]
@@ -104,17 +90,45 @@ public sealed class SettingsViewModelTests : IDisposable
         theirs.Profiles[1].Name = "Theirs";
         _harness.Loader.Save(theirs, _harness.Paths.DefaultConfigPath);
 
-        settings.SaveCommand.Execute(null);
+        _harness.Saves.RunPending();
 
         Assert.True(settings.HasExternalChanges);
         Assert.True(settings.IsDirty);
         Assert.Equal("Theirs", _harness.SavedConfig().Profiles[1].Name);
 
-        settings.SaveAnywayCommand.Execute(null);
+        // Further edits wait for the decision instead of being saved over theirs.
+        settings.Profiles.Profiles[2].Name = "Mine too";
+        _harness.Saves.RunPending();
+        Assert.Equal("Theirs", _harness.SavedConfig().Profiles[1].Name);
+
+        settings.KeepMineCommand.Execute(null);
 
         Assert.False(settings.HasExternalChanges);
+        Assert.False(settings.IsDirty);
         Assert.Equal("Mine", _harness.SavedConfig().Profiles[0].Name);
         Assert.Equal("Chrome (Default)", _harness.SavedConfig().Profiles[1].Name);
+        Assert.Equal("Mine too", _harness.SavedConfig().Profiles[2].Name);
+    }
+
+    [Fact]
+    public void Using_theirs_drops_the_edits_that_were_waiting()
+    {
+        var settings = _harness.WithSample().Create();
+        settings.SelectedPage = settings.Rules;
+        settings.Profiles.Profiles[0].Name = "Mine";
+        var theirs = ConfigSerializer.Deserialize(SettingsHarness.SampleJson);
+        theirs.Profiles[1].Name = "Theirs";
+        _harness.Loader.Save(theirs, _harness.Paths.DefaultConfigPath);
+        _harness.Saves.RunPending();
+
+        settings.UseTheirsCommand.Execute(null);
+
+        Assert.False(settings.HasExternalChanges);
+        Assert.False(settings.IsDirty);
+        Assert.Equal("Microsoft Edge", settings.Profiles.Profiles[0].Name);
+        Assert.Equal("Theirs", settings.Profiles.Profiles[1].Name);
+        Assert.Same(settings.Rules, settings.SelectedPage);
+        Assert.False(_harness.Saves.HasPending);
     }
 
     [Fact]
@@ -126,7 +140,7 @@ public sealed class SettingsViewModelTests : IDisposable
         theirs.Profiles[0].Name = "Theirs";
         _harness.Loader.Save(theirs, _harness.Paths.DefaultConfigPath);
 
-        settings.SaveCommand.Execute(null);
+        _harness.Saves.RunPending();
 
         Assert.False(settings.HasExternalChanges);
         Assert.False(settings.IsDirty);
@@ -142,11 +156,31 @@ public sealed class SettingsViewModelTests : IDisposable
         var settings = _harness.Create();
 
         settings.General.LogLevel = "trace";
-        settings.SaveCommand.Execute(null);
+        _harness.Saves.RunPending();
 
         Assert.NotNull(settings.LoadError);
         Assert.True(settings.ConfigUnreadable);
         Assert.Equal("{ broken", File.ReadAllText(_harness.Paths.DefaultConfigPath));
+        Assert.Equal("trace", _harness.Loader.LoadLocal().Logging?.Level);
+    }
+
+    [Fact]
+    public void A_broken_file_is_replaced_only_when_asked()
+    {
+        File.WriteAllText(_harness.Paths.DefaultConfigPath, "{ broken");
+        var settings = _harness.Create();
+
+        settings.General.AutoSelectSeconds = 5;
+        _harness.Saves.RunPending();
+
+        Assert.True(settings.IsHoldingEditsForUnreadableFile);
+        Assert.Equal("{ broken", File.ReadAllText(_harness.Paths.DefaultConfigPath));
+
+        settings.KeepMineCommand.Execute(null);
+
+        Assert.False(settings.IsHoldingEditsForUnreadableFile);
+        Assert.False(settings.ConfigUnreadable);
+        Assert.Equal(5, _harness.SavedConfig().Settings?.Picker?.AutoSelectSeconds);
     }
 
     [Fact]
@@ -177,7 +211,7 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void A_broken_file_is_reported_and_replaced_only_when_saving()
+    public void A_broken_file_is_reported_and_left_alone()
     {
         File.WriteAllText(_harness.Paths.DefaultConfigPath, "{ broken");
 
@@ -205,19 +239,31 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task Closing_with_unsaved_changes_asks_first()
+    public async Task Closing_saves_the_edits_still_waiting()
     {
         var settings = _harness.WithSample().Create();
-        Assert.True(await settings.CanCloseAsync());
-
         settings.Profiles.Profiles[0].Name = "Mine";
 
-        Assert.False(await settings.CanCloseAsync());
-        _harness.Dialogs.Answers.Enqueue("Don't Save");
         Assert.True(await settings.CanCloseAsync());
+
+        Assert.Empty(_harness.Dialogs.Asked);
+        Assert.Equal("Mine", _harness.SavedConfig().Profiles[0].Name);
+    }
+
+    [Fact]
+    public async Task Closing_asks_only_when_the_edits_cannot_be_saved()
+    {
+        var settings = _harness.WithSample().Create();
+        settings.Profiles.Profiles[0].Name = "Mine";
+        File.WriteAllText(_harness.Paths.DefaultConfigPath, SettingsHarness.SampleJson.Replace("Chrome (Default)", "Theirs", StringComparison.Ordinal));
+
+        Assert.False(await settings.CanCloseAsync());
+        _harness.Dialogs.Answers.Enqueue("Discard My Changes");
+        Assert.True(await settings.CanCloseAsync());
+        Assert.Equal("Theirs", _harness.SavedConfig().Profiles[1].Name);
         Assert.Equal("Microsoft Edge", _harness.SavedConfig().Profiles[0].Name);
 
-        _harness.Dialogs.Answers.Enqueue("Save");
+        _harness.Dialogs.Answers.Enqueue("Keep Mine");
         Assert.True(await settings.CanCloseAsync());
         Assert.Equal("Mine", _harness.SavedConfig().Profiles[0].Name);
     }

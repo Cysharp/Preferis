@@ -122,7 +122,7 @@ public sealed partial class TestPageViewModel : PageViewModel
 
     /// <summary>
     /// Opens the URL for real, as a clicked link would, so the picker and the launch can be tried. The Router reads the
-    /// saved configuration, so unsaved edits are saved first or left out, as the user chooses.
+    /// file, so edits still waiting are saved first; when they cannot be, opening with the file as it is is a choice.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanOpen))]
     private async Task Open()
@@ -133,17 +133,13 @@ public sealed partial class TestPageViewModel : PageViewModel
             return;
         }
 
-        if (Settings.IsDirty)
+        if (Settings.IsDirty && !Settings.SaveNow())
         {
             var answer = await Settings.Dialogs.AskAsync(
-                "Save the changes before opening?",
-                "Preferis opens the URL with the saved configuration. Unsaved changes are only used by this page's test.",
-                ["Save and Open", "Open Saved Configuration", "Cancel"]);
-            if (answer == 0 && !Settings.TrySave())
-            {
-                return;
-            }
-            if (answer is not (0 or 1))
+                "Your latest changes are not saved.",
+                "Preferis opens the URL with the configuration on disk, which does not have them. Only this page's test uses them.",
+                ["Open Saved Configuration", "Cancel"]);
+            if (answer != 0)
             {
                 return;
             }

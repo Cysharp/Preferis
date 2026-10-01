@@ -54,9 +54,9 @@ internal sealed class AppDelegate : NSApplicationDelegate
     private void Start()
     {
         var loader = ConfigLoader.ForCurrentMachine();
-        _settings = new SettingsViewModel(loader, new MacSettingsPlatform(loader.LoadLocal()), new AppKitDialogService());
+        _settings = new SettingsViewModel(loader, new MacSettingsPlatform(loader.LoadLocal()), new AppKitDialogService(), new TimerSaveScheduler());
         _window = new SettingsWindow(_settings);
-        NSApplication.SharedApplication.MainMenu = MainMenu.Build(_settings);
+        NSApplication.SharedApplication.MainMenu = MainMenu.Build();
 
         if (Environment.GetEnvironmentVariable("PREFERIS_SETTINGS_SNAPSHOT") is { Length: > 0 } directory)
         {
@@ -79,7 +79,7 @@ internal sealed class AppDelegate : NSApplicationDelegate
 
     public override bool ApplicationShouldTerminateAfterLastWindowClosed(NSApplication sender) => true;
 
-    // Quitting with unsaved changes asks first, like closing the window.
+    // Quitting saves the edits still waiting, like closing the window, and asks only when they cannot be saved.
     public override NSApplicationTerminateReply ApplicationShouldTerminate(NSApplication sender)
     {
         if (_settings is not { IsDirty: true })
@@ -97,7 +97,7 @@ internal sealed class AppDelegate : NSApplicationDelegate
 /// <summary>The menu bar. The Edit menu is what makes copy, paste and undo work in the text fields.</summary>
 internal static class MainMenu
 {
-    public static NSMenu Build(SettingsViewModel settings)
+    public static NSMenu Build()
     {
         var menu = new NSMenu();
 
@@ -112,10 +112,8 @@ internal static class MainMenu
         app.AddItem(new NSMenuItem("Quit Preferis Settings", new Selector("terminate:"), "q"));
         menu.AddItem(new NSMenuItem("Preferis Settings") { Submenu = app });
 
+        // No Save or Revert: edits save themselves.
         var file = new NSMenu("File");
-        file.AddItem(new NSMenuItem("Save", "s", (_, _) => settings.SaveCommand.Execute(null)));
-        file.AddItem(new NSMenuItem("Revert to Saved", "", (_, _) => settings.RevertCommand.Execute(null)));
-        file.AddItem(NSMenuItem.SeparatorItem);
         file.AddItem(new NSMenuItem("Close", new Selector("performClose:"), "w"));
         menu.AddItem(new NSMenuItem("File") { Submenu = file });
 

@@ -9,12 +9,14 @@ namespace Preferis.Settings.ViewModels;
 /// <summary>
 /// One editing session over <c>config.json</c> and <c>local.json</c>. The pages edit <see cref="Config"/> and
 /// <see cref="Local"/> in place (so properties this version does not know survive) and report each edit through
-/// <see cref="MarkChanged"/>. Nothing is written until Save. A file changed by someone else meanwhile (the
-/// Router's "remember", a sync client) is never overwritten silently.
+/// <see cref="MarkChanged"/>; edits are saved after a short pause (<see cref="ISaveScheduler"/>), as settings on macOS
+/// are. A <c>config.json</c> changed by someone else meanwhile (the Router's "remember", a sync client), or one that
+/// could not be read, is never overwritten without asking.
 /// </summary>
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly ConfigLoader _loader;
+    private readonly ISaveScheduler _saves;
 
     // config.json as it was on disk when we last read or wrote it (null: no file), to notice outside changes.
     private string? _diskText;
@@ -22,9 +24,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     private string _savedLocalJson = "";
     private bool _loading;
 
-    public SettingsViewModel(ConfigLoader loader, ISettingsPlatform platform, IDialogService dialogs)
+    public SettingsViewModel(ConfigLoader loader, ISettingsPlatform platform, IDialogService dialogs, ISaveScheduler saves)
     {
         _loader = loader;
+        _saves = saves;
         Platform = platform;
         Dialogs = dialogs;
         Browsers = platform.DetectBrowsers();
@@ -57,14 +60,23 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private bool ConfigEdited => ConfigSerializer.Serialize(Config) != _savedConfigJson;
 
+    /// <summary>Edits that are not on disk yet: waiting for the pause, or held back (see <see cref="HasExternalChanges"/>).</summary>
     [ObservableProperty]
     public partial bool IsDirty { get; private set; }
 
     [ObservableProperty]
     public partial string? LoadError { get; private set; }
 
+    /// <summary><c>config.json</c> changed elsewhere while edits were waiting: they are held until Keep Mine or Use Theirs.</summary>
     [ObservableProperty]
     public partial bool HasExternalChanges { get; private set; }
+
+    /// <summary>
+    /// Edits of a <c>config.json</c> that could not be read are held until Keep Mine, which replaces the file: whatever
+    /// was in it may still matter to the person who wrote it.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsHoldingEditsForUnreadableFile { get; private set; }
 
     /// <summary>The outcome of the last operation that failed (saving, moving the file, registering), for the status bar.</summary>
     [ObservableProperty]
@@ -114,31 +126,36 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     partial void OnSelectedPageChanged(PageViewModel? value) => value?.Activate();
 
-    /// <summary>Called by the pages after every edit of <see cref="Config"/> or <see cref="Local"/>.</summary>
+    /// <summary>Called by the pages after every edit of <see cref="Config"/> or <see cref="Local"/>; schedules the save.</summary>
     internal void MarkChanged()
     {
         if (_loading)
         {
             return;
         }
-        IsDirty = ConfigSerializer.Serialize(Config) != _savedConfigJson || ConfigSerializer.SerializeLocal(Local) != _savedLocalJson;
+        var configEdited = ConfigEdited;
+        var localEdited = ConfigSerializer.SerializeLocal(Local) != _savedLocalJson;
+        IsDirty = configEdited || localEdited;
         Issues = ConfigValidator.Validate(Config);
         Profiles.UpdateIssues(Issues);
         Rules.UpdateIssues(Issues);
+        // Held config.json edits wait for a decision; asking for a save again would only hold them again.
+        if ((configEdited && !HasExternalChanges && !IsHoldingEditsForUnreadableFile) || localEdited)
+        {
+            _saves.Schedule(() => SaveCore(force: false));
+        }
     }
 
+    /// <summary>Saves the held edits over <c>config.json</c>, whether it changed elsewhere or could not be read.</summary>
     [RelayCommand]
-    private void Save() => SaveCore(force: false);
+    private void KeepMine() => SaveCore(force: true);
 
-    /// <summary>Saves over a file that changed on disk since it was loaded.</summary>
+    /// <summary>Drops the held edits of <c>config.json</c> and shows the file as it is now.</summary>
     [RelayCommand]
-    private void SaveAnyway() => SaveCore(force: true);
+    private void UseTheirs() => Load(keepLocalEdits: true);
 
-    [RelayCommand]
-    private void Revert() => Load();
-
-    /// <summary>Saves for a page that needs the file on disk to be current (opening a URL for real). False when it could not.</summary>
-    internal bool TrySave() => SaveCore(force: false);
+    /// <summary>Saves now, for a page that needs the file on disk to be current (opening a URL for real). False when it could not.</summary>
+    internal bool SaveNow() => SaveCore(force: false);
 
     /// <summary>
     /// Called when the window becomes active (and before moving the file): a <c>config.json</c> changed elsewhere is
@@ -160,18 +177,28 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    /// <summary>Asks about unsaved changes. Returns false when the window should stay open.</summary>
+    /// <summary>
+    /// Saves the edits still waiting before the window closes, and asks only when they cannot be saved. Returns false
+    /// when the window should stay open.
+    /// </summary>
     public async Task<bool> CanCloseAsync()
     {
-        if (!IsDirty)
+        if (!IsDirty || SaveCore(force: false))
         {
             return true;
         }
-        var answer = await Dialogs.AskAsync("Do you want to save the changes?", "Your changes will be lost if you don't save them.", ["Save", "Don't Save", "Cancel"]);
-        return answer switch
+        var held = HasExternalChanges || IsHoldingEditsForUnreadableFile;
+        var (title, message) = HasExternalChanges
+            ? ("config.json was changed elsewhere while you were editing.", "Keep your changes to save them over it, or discard them to leave the file as it is.")
+            : IsHoldingEditsForUnreadableFile
+                ? ("config.json could not be read.", "Keep your changes to replace the file with them, or discard them to leave the file as it is.")
+                : ("Your changes could not be saved.", StatusMessage ?? "");
+        string[] buttons = held ? ["Keep Mine", "Discard My Changes", "Cancel"] : ["Discard My Changes", "Cancel"];
+        var answer = await Dialogs.AskAsync(title, message, buttons);
+        return (answer >= 0 && answer < buttons.Length ? buttons[answer] : "Cancel") switch
         {
-            0 => SaveCore(force: false),
-            1 => true,
+            "Keep Mine" => SaveCore(force: true),
+            "Discard My Changes" => true,
             _ => false,
         };
     }
@@ -188,14 +215,14 @@ public sealed partial class SettingsViewModel : ObservableObject
         MarkChanged();
     }
 
-    /// <summary>"Move to cloud storage": writes the configuration being edited (including unsaved edits) to <paramref name="target"/>.</summary>
+    /// <summary>"Move to cloud storage": writes the configuration being edited (including edits still waiting) to <paramref name="target"/>.</summary>
     internal void Relocate(string target, bool overwrite)
     {
         _loader.RelocateConfig(Config, ConfigPath, target, overwrite);
         var json = ConfigSerializer.Serialize(Config);
         _savedConfigJson = json;
         _diskText = json;
-        // local.json now points at the new place; other local edits stay pending until Save.
+        // local.json now points at the new place; other local edits are saved as usual after the pause.
         var onDisk = _loader.LoadLocal();
         Local.ConfigPath = onDisk.ConfigPath;
         _savedLocalJson = ConfigSerializer.SerializeLocal(onDisk);
@@ -213,26 +240,37 @@ public sealed partial class SettingsViewModel : ObservableObject
         Load();
     }
 
+    /// <summary>Writes what was edited. False when edits of <c>config.json</c> are held back or writing failed.</summary>
     private bool SaveCore(bool force)
     {
         var configJson = ConfigSerializer.Serialize(Config);
         var configEdited = configJson != _savedConfigJson;
         var diskChanged = ReadDisk() != _diskText;
-        // Only edits of config.json can conflict with the file on disk; local.json belongs to this machine alone.
-        if (configEdited && diskChanged && !force)
+        // Only edits of config.json can conflict with the file on disk; local.json belongs to this machine alone and
+        // is saved either way.
+        var holdConfig = false;
+        if (configEdited && !force)
         {
-            HasExternalChanges = true;
-            return false;
+            if (diskChanged)
+            {
+                HasExternalChanges = holdConfig = true;
+            }
+            else if (ConfigUnreadable)
+            {
+                IsHoldingEditsForUnreadableFile = holdConfig = true;
+            }
         }
 
         try
         {
-            if (configEdited)
+            if (configEdited && !holdConfig)
             {
                 _loader.Save(Config, ConfigPath);
                 _savedConfigJson = configJson;
                 _diskText = configJson;
                 ConfigUnreadable = false;
+                IsHoldingEditsForUnreadableFile = false;
+                HasExternalChanges = false;
             }
             var localJson = ConfigSerializer.SerializeLocal(Local);
             if (localJson != _savedLocalJson)
@@ -248,7 +286,6 @@ public sealed partial class SettingsViewModel : ObservableObject
             return false;
         }
 
-        HasExternalChanges = false;
         StatusMessage = null;
         if (!configEdited && diskChanged)
         {
@@ -263,7 +300,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             LoadError = null;
         }
         MarkChanged();
-        return true;
+        return !holdConfig;
     }
 
     private void Load(bool keepLocalEdits = false)
@@ -284,6 +321,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
         LoadError = result.Error;
         HasExternalChanges = false;
+        IsHoldingEditsForUnreadableFile = false;
         _diskText = ReadDisk();
         _savedConfigJson = ConfigSerializer.Serialize(Config);
 

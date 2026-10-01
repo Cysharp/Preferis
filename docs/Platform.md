@@ -421,7 +421,8 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
   コードで組む。AppKit には C# のオブジェクトへのバインディングがないため、`Bindings` が `INotifyPropertyChanged` の購読と
   コントロールのイベントで双方向に結び、ビューを差し替えるときに購読を外す。
 - 見た目はシステム設定に倣う: `NSSplitViewController` のサイドバー、角丸のグループに「左にラベル、右にコントロール」の行を
-  並べたフォーム (`Form`)、ツールバーの Revert / Save、ウィンドウのサブタイトルに未保存とエラー件数。プロファイルとルールは
+  並べたフォーム (`Form`)、ウィンドウのサブタイトルにエラー件数。編集は自動で保存する (`TimerSaveScheduler` が編集の 0.6 秒後に
+  `NSTimer` で書き込む。Design.md §9.1)。プロファイルとルールは
   左に一覧 (`ListPane`。ドラッグで並べ替え、下に + − ⋯)、右に選択中の項目の編集画面 (先頭にアイコン・名前・概要と問題点のグループ)。
 - フォームの寸法と部品は、システム設定が使う SwiftUI の grouped `Form` を macOS 26 で描いて測った値に合わせている:
   ページ余白 20 pt、グループは角丸 12 pt・内側の余白 10 pt・塗りは `quaternarySystemFill`、行の高さは文字だけで 36.5 pt、
@@ -454,7 +455,7 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 - Microsoft.macOS の注意点 (§3.7 に加えて): `NSTableView.Source` を設定した時点で `SelectionDidChange` が呼ばれることがあるので、
   ハンドラーは組み立て途中のフィールドではなく通知の `Object` からテーブルを取る。`DidFinishLaunching` で投げた例外は AppKit が
   ログに出して握りつぶし、ウィンドウのないプロセスが残るため、捕まえて終了する。
-- 終了 (⌘Q、AppleScript の quit) は未保存の変更がなければそのまま終わる。`osascript -e 'tell application id
+- 終了 (⌘Q、AppleScript の quit) は書き込み待ちの編集を書き込んでから終わる (保留中で書けない時だけ尋ねる)。`osascript -e 'tell application id
   "net.mayuki.Preferis.Settings" to quit'` は終了したにもかかわらず -128 (ユーザーによるキャンセル) を返すことがある。
 
 ## 4. 共通: 起動時間の計測

@@ -123,6 +123,24 @@ internal sealed class FakeDialogs : IDialogService
     }
 }
 
+/// <summary>Holds the save the view model asks for until the test runs it, as the UI's timer would after a pause.</summary>
+internal sealed class FakeSaveScheduler : ISaveScheduler
+{
+    private Action? _pending;
+
+    public bool HasPending => _pending is not null;
+
+    public void Schedule(Action save) => _pending = save;
+
+    /// <summary>The pause is over: runs the save that is waiting, if any.</summary>
+    public void RunPending()
+    {
+        var save = _pending;
+        _pending = null;
+        save?.Invoke();
+    }
+}
+
 /// <summary>A settings session over real files in a temporary directory.</summary>
 internal sealed class SettingsHarness : IDisposable
 {
@@ -143,6 +161,8 @@ internal sealed class SettingsHarness : IDisposable
 
     public FakeDialogs Dialogs { get; } = new();
 
+    public FakeSaveScheduler Saves { get; } = new();
+
     public static string SampleJson => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "config.sample.json"));
 
     public SettingsHarness WithSample()
@@ -151,7 +171,7 @@ internal sealed class SettingsHarness : IDisposable
         return this;
     }
 
-    public SettingsViewModel Create() => new(Loader, Platform, Dialogs);
+    public SettingsViewModel Create() => new(Loader, Platform, Dialogs, Saves);
 
     public PreferisConfig SavedConfig() => ConfigSerializer.Deserialize(File.ReadAllText(Loader.Load().ConfigPath));
 

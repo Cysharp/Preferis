@@ -46,4 +46,8 @@ public enum TraceKind
 /// <summary>One step of the routing process, for <c>--dry-run</c> and the settings UI test page.</summary>
 public sealed record TraceEntry(TraceKind Kind, string? RuleId, string Message);
 
-public sealed record RoutingResult(RoutingDecision Decision, IReadOnlyList<TraceEntry> Trace);
+public sealed record RoutingResult(RoutingDecision Decision, IReadOnlyList<TraceEntry> Trace)
+{
+    /// <summary>The rule whose actions produced <see cref="Decision"/>; null when the catch-all did.</summary>
+    public string? RuleId { get; init; }
+}

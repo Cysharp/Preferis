@@ -140,6 +140,28 @@ public class RouterTests
     }
 
     [Fact]
+    public void The_result_names_the_rule_whose_actions_decided()
+    {
+        Assert.Equal("google-admin", Route(Sample(), "https://admin.google.com/").RuleId);
+        Assert.Equal("google-admin", Route(Sample(), "https://nl.safelinks.protection.outlook.com/?url=https%3A%2F%2Fadmin.google.com%2F").RuleId);
+        Assert.Null(Route(Sample(), "https://www.example.com/").RuleId);
+    }
+
+    [Fact]
+    public void A_catch_all_without_actions_decides_even_after_a_rule_fell_through()
+    {
+        var config = Config("edge",
+            RuleFor("upgrade", new UrlCondition { Match = MatchKind.StartsWith, Pattern = "http://" },
+                new RewriteAction { Mode = RewriteMode.Regex, Pattern = "^http://", Replacement = "https://" }));
+        config.CatchAll.Actions.Clear();
+
+        var result = Route(config, "http://www.example.com/");
+
+        Assert.IsType<RoutingDecision.Open>(result.Decision);
+        Assert.Null(result.RuleId);
+    }
+
+    [Fact]
     public void Rerouting_the_same_url_is_detected_as_a_loop()
     {
         var config = Config("edge", RuleFor("loop", Host("loop.example.com"), new RerouteAction()));

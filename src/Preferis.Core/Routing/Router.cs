@@ -23,12 +23,12 @@ public sealed class Router
     public RoutingResult Route(RoutingUrl url)
     {
         var trace = new List<TraceEntry>();
-        var decision = RouteCore(url, trace);
+        var (decision, ruleId) = RouteCore(url, trace);
         trace.Add(new TraceEntry(TraceKind.Decision, null, Describe(decision)));
-        return new RoutingResult(decision, trace);
+        return new RoutingResult(decision, trace) { RuleId = ruleId };
     }
 
-    private RoutingDecision RouteCore(RoutingUrl start, List<TraceEntry> trace)
+    private (RoutingDecision Decision, string? RuleId) RouteCore(RoutingUrl start, List<TraceEntry> trace)
     {
         var current = start;
         var hops = 0;
@@ -38,19 +38,19 @@ public sealed class Router
         while (true)
         {
             var outcome = EvaluateOnce(ref current, trace);
-            if (outcome.Decision is not null)
+            if (outcome.Decision is { } decision)
             {
-                return outcome.Decision;
+                return (decision, outcome.RuleId);
             }
 
             // Reroute requested.
             if (hops >= MaxHops)
             {
-                return new RoutingDecision.Failed(current, $"Reroute hop limit ({MaxHops}) exceeded.");
+                return (new RoutingDecision.Failed(current, $"Reroute hop limit ({MaxHops}) exceeded."), outcome.RuleId);
             }
             if (!seen.Add(current.AbsoluteUri))
             {
-                return new RoutingDecision.Failed(current, $"Reroute loop detected at '{current.AbsoluteUri}'.");
+                return (new RoutingDecision.Failed(current, $"Reroute loop detected at '{current.AbsoluteUri}'."), outcome.RuleId);
             }
             hops++;
             trace.Add(new TraceEntry(TraceKind.Rerouted, outcome.RuleId, $"Reroute #{hops} with {current.AbsoluteUri}"));

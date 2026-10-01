@@ -30,17 +30,25 @@ public sealed class RoutingService
             Log(LogLevel.Warning, loaded.Error);
         }
 
-        var context = new Context(url, loaded, new ProfileResolver(_services.HostPlatform, _services.Browsers, _services.BrowserProfiles, _services.GetEnvironmentVariable, _services.HomeDirectory));
         var result = new Router(loaded.Config).Route(url);
         foreach (var entry in result.Trace)
         {
             Log(LogLevel.Trace, entry.RuleId is null ? $"[{entry.Kind}] {entry.Message}" : $"[{entry.Kind}] {entry.RuleId}: {entry.Message}");
         }
 
-        switch (result.Decision)
+        // Everything from here on (launching, the picker, remembering, the fallbacks) works on the URL the rules
+        // produced: after a rewrite (e.g. an unwrapped Safe Link) that is no longer the URL that came in.
+        var context = new Context(result.Decision.Url, loaded, new ProfileResolver(_services.HostPlatform, _services.Browsers, _services.BrowserProfiles, _services.GetEnvironmentVariable, _services.HomeDirectory));
+        return Execute(context, result.Decision, loaded.Error) with { RuleId = result.RuleId };
+    }
+
+    private HandleResult Execute(Context context, RoutingDecision decision, string? configError)
+    {
+        var url = context.Url;
+        switch (decision)
         {
             case RoutingDecision.Open { ProfileIds.Count: 0 }:
-                return OfferDetectedBrowsers(context, loaded.Error ?? "No profiles are configured yet.");
+                return OfferDetectedBrowsers(context, configError ?? "No profiles are configured yet.");
             case RoutingDecision.Open { ProfileIds.Count: 1 } single:
                 return LaunchProfile(context, single.ProfileIds[0]);
             case RoutingDecision.Open several:
@@ -58,7 +66,7 @@ public sealed class RoutingService
                 Log(LogLevel.Error, $"Routing failed: {failed.Reason}");
                 return Fallback(context, failed.Reason, failedProfileId: null, allowPicker: true);
             default:
-                return Fallback(context, $"Unexpected decision {result.Decision}.", failedProfileId: null, allowPicker: true);
+                return Fallback(context, $"Unexpected decision {decision}.", failedProfileId: null, allowPicker: true);
         }
     }
 
@@ -162,10 +170,19 @@ public sealed class RoutingService
 
     private void Remember(Context context, string profileId, string? ruleId)
     {
+        // The picker may have been open for minutes: add the rule to the file as it is now, so that changes saved
+        // meanwhile (settings UI, another picker) are kept rather than replaced by the copy loaded before.
+        var current = _services.Config.Load();
+        if (current.Error is not null || current.ConfigPath != context.Loaded.ConfigPath)
+        {
+            Log(LogLevel.Warning, $"Not remembering '{context.Url.Host}': the configuration changed in a way that cannot be merged. {current.Error}");
+            return;
+        }
+
         try
         {
-            RememberedRule.Insert(context.Config, RememberedRule.Create(context.Url, profileId), ruleId);
-            _services.Config.Save(context.Config, context.Loaded.ConfigPath);
+            RememberedRule.Insert(current.Config, RememberedRule.Create(context.Url, profileId), ruleId);
+            _services.Config.Save(current.Config, current.ConfigPath);
             Log(LogLevel.Info, $"Remembered '{context.Url.Host}' -> '{profileId}'.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -190,6 +207,7 @@ public sealed class RoutingService
                     Position = picker?.Position ?? "cursor",
                     AutoSelectSeconds = picker?.AutoSelectSeconds ?? 0,
                     RememberChoiceDefault = false,
+                    AllowRemember = false,
                 },
                 Message = message,
             };

@@ -37,6 +37,17 @@ public class RoutingServiceTests
         Assert.Empty(host.PickerRequests);
     }
 
+    [Theory]
+    [InlineData("https://admin.google.com/", "google-admin")]
+    [InlineData("https://nl.safelinks.protection.outlook.com/?url=https%3A%2F%2Fadmin.google.com%2F", "google-admin")]
+    [InlineData("https://www.example.com/", null)]
+    public void The_result_names_the_rule_that_decided(string url, string? ruleId)
+    {
+        var result = Handle(FullHost(), url);
+
+        Assert.Equal(ruleId, result.RuleId);
+    }
+
     [Fact]
     public void Several_candidates_show_the_picker_and_the_choice_is_launched()
     {
@@ -50,6 +61,64 @@ public class RoutingServiceTests
         Assert.Equal(["edge", "chrome-work", "chrome-default"], request.Candidates.Select(c => c.ProfileId));
         Assert.Null(request.Message);
         Assert.Equal("--profile-directory=Default", Assert.Single(host.Launched).Arguments[0]);
+    }
+
+    [Fact]
+    public void The_rewritten_url_is_what_opens()
+    {
+        var host = FullHost();
+
+        Handle(host, "https://nl.safelinks.protection.outlook.com/?url=https%3A%2F%2Fadmin.google.com%2Fac%2Fusers");
+
+        Assert.Equal("https://admin.google.com/ac/users", Assert.Single(host.Launched).Arguments[^1]);
+    }
+
+    [Fact]
+    public void The_picker_and_remembering_see_the_rewritten_url()
+    {
+        var host = FullHost();
+        host.PickerAnswer = _ => Select("edge", remember: true);
+
+        Handle(host, "https://nl.safelinks.protection.outlook.com/?url=https%3A%2F%2Flogin.microsoftonline.com%2Fcommon");
+
+        Assert.Equal("https://login.microsoftonline.com/common", Assert.Single(host.PickerRequests).Url);
+        var remembered = Assert.IsType<HostCondition>(host.SavedConfig!.Rules.Single(r => r.Id.StartsWith("remember-", StringComparison.Ordinal)).Condition);
+        Assert.Equal("login.microsoftonline.com", remembered.Pattern);
+    }
+
+    [Fact]
+    public void Remembering_keeps_changes_saved_while_the_picker_was_open()
+    {
+        var host = FullHost();
+        host.PickerAnswer = _ =>
+        {
+            // Meanwhile the settings UI saved an edit.
+            var edited = ConfigSerializer.Deserialize(ConfigSerializer.Serialize(host.Config));
+            edited.Profiles[0].Name = "Edited meanwhile";
+            host.Config = edited;
+            return Select("chrome-work", remember: true);
+        };
+
+        Handle(host, "https://login.microsoftonline.com/common");
+
+        Assert.Equal("Edited meanwhile", host.SavedConfig!.Profiles[0].Name);
+        Assert.Contains(host.SavedConfig.Rules, r => r.Id.StartsWith("remember-", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Nothing_is_remembered_over_a_configuration_that_became_unreadable()
+    {
+        var host = FullHost();
+        host.PickerAnswer = _ =>
+        {
+            host.ConfigError = "config.json could not be read";
+            return Select("chrome-work", remember: true);
+        };
+
+        var result = Handle(host, "https://login.microsoftonline.com/common");
+
+        Assert.Equal(HandleOutcome.Launched, result.Outcome);
+        Assert.Null(host.SavedConfig);
     }
 
     [Fact]
@@ -185,6 +254,7 @@ public class RoutingServiceTests
         Assert.Contains("config.json", request.Message);
         Assert.Equal(["browser:chrome", "browser:safari"], request.Candidates.Select(c => c.ProfileId));
         Assert.Equal("chrome", request.Candidates[0].Browser);
+        Assert.False(request.Options.AllowRemember);
         var plan = Assert.Single(host.Launched);
         Assert.Equal(Chrome, plan.Path);
         Assert.Equal(["https://www.example.com/"], plan.Arguments);

@@ -10,6 +10,7 @@ public abstract class RoutingAction
     public abstract string Type { get; }
 
     /// <summary>Terminal actions end routing; non-terminal ones hand the (possibly rewritten) URL to the next action.</summary>
+    /// <remarks>The source generator does not inherit <see cref="JsonIgnoreAttribute"/> from this declaration, so every override repeats it.</remarks>
     [JsonIgnore]
     public abstract bool IsTerminal { get; }
 }
@@ -19,6 +20,7 @@ public sealed class OpenAction : RoutingAction
 {
     public override string Type => "open";
 
+    [JsonIgnore]
     public override bool IsTerminal => true;
 
     public List<string>? Profiles { get; set; }
@@ -29,6 +31,7 @@ public sealed class SystemAction : RoutingAction
 {
     public override string Type => "system";
 
+    [JsonIgnore]
     public override bool IsTerminal => true;
 }
 
@@ -37,6 +40,7 @@ public sealed class NoneAction : RoutingAction
 {
     public override string Type => "none";
 
+    [JsonIgnore]
     public override bool IsTerminal => true;
 }
 
@@ -56,6 +60,7 @@ public sealed class RewriteAction : RoutingAction
 {
     public override string Type => "rewrite";
 
+    [JsonIgnore]
     public override bool IsTerminal => false;
 
     public RewriteMode Mode { get; set; }
@@ -75,6 +80,7 @@ public sealed class RerouteAction : RoutingAction
 {
     public override string Type => "reroute";
 
+    [JsonIgnore]
     public override bool IsTerminal => true;
 }
 
@@ -91,6 +97,7 @@ public sealed class UnknownAction : RoutingAction
 
     // Treated as terminal so that a rule with an unknown action does not fall through to other rules
     // and silently route somewhere the newer configuration did not intend.
+    [JsonIgnore]
     public override bool IsTerminal => true;
 
     [JsonIgnore]

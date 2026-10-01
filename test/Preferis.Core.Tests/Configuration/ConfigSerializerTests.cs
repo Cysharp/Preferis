@@ -185,6 +185,29 @@ public class ConfigSerializerTests
     }
 
     [Fact]
+    public void Only_documented_properties_are_written()
+    {
+        // From docs/Configuration.md §2. Anything else (such as the engine's IsTerminal) would look like a setting.
+        string[] documented =
+        [
+            "version", "defaultProfile", "profiles", "rules", "catchAll", "settings",
+            "id", "name", "browser", "browserProfile", "private", "extraArgs", "command", "fallback", "windows", "macos", "path", "args",
+            "directory", "email", "enabled", "condition", "conditions", "actions", "type", "match", "pattern", "ignoreCase",
+            "mode", "replacement", "parameter", "picker", "position", "autoSelectSeconds", "rememberChoiceDefault", "language",
+        ];
+        using var written = JsonDocument.Parse(ConfigSerializer.Serialize(ConfigSerializer.Deserialize(Fixtures.ConfigSample)));
+
+        Assert.Empty(PropertyNames(written.RootElement).Except(documented));
+    }
+
+    private static IEnumerable<string> PropertyNames(JsonElement element) => element.ValueKind switch
+    {
+        JsonValueKind.Object => element.EnumerateObject().SelectMany(p => PropertyNames(p.Value).Prepend(p.Name)),
+        JsonValueKind.Array => element.EnumerateArray().SelectMany(PropertyNames),
+        _ => [],
+    };
+
+    [Fact]
     public void Enum_values_are_written_in_camel_case()
     {
         var config = PreferisConfig.CreateDefault();

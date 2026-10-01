@@ -15,27 +15,82 @@
     <ArtifactsDir>$(RepoRoot)artifacts/$(RuntimeIdentifier)/</ArtifactsDir>
     <PublishRoot>$(ArtifactsDir)publish/</PublishRoot>
     <BundleDir>$(ArtifactsDir)Preferis.app/</BundleDir>
+    <HelpersDir>$(BundleDir)Contents/Helpers/</HelpersDir>
     <!-- "-" is ad-hoc signing for local testing; release builds pass a Developer ID (M5). -->
     <SigningIdentity Condition="'$(SigningIdentity)' == ''">-</SigningIdentity>
     <RouterProject>$(RepoRoot)src/Preferis.Router/Preferis.Router.csproj</RouterProject>
+    <PickerProject>$(RepoRoot)src/Preferis.Picker.MacOS/Preferis.Picker.MacOS.csproj</PickerProject>
+    <SettingsProject>$(RepoRoot)src/Preferis.Settings/Preferis.Settings.csproj</SettingsProject>
+    <PublishProperties>Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier)</PublishProperties>
+    <PickerBuiltBundle>$(RepoRoot)src/Preferis.Picker.MacOS/bin/$(Configuration)/net10.0-macos/$(RuntimeIdentifier)/Preferis Picker.app</PickerBuiltBundle>
+    <LipoArch Condition="'$(RuntimeIdentifier)' == 'osx-x64'">x86_64</LipoArch>
+    <LipoArch Condition="'$(LipoArch)' == ''">arm64</LipoArch>
   </PropertyGroup>
 
   <!-- `dotnet build` implies a restore of this project; there is nothing to restore here. -->
   <Target Name="Restore" />
 
   <Target Name="PublishRouter">
-    <MSBuild Projects="$(RouterProject)" Targets="Restore" Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);MSBuildRestoreSessionId=$([System.Guid]::NewGuid())" />
-    <MSBuild Projects="$(RouterProject)" Targets="Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=true;PublishAot=true;_IsPublishing=true;PublishDir=$(PublishRoot)Router/" />
+    <MSBuild Projects="$(RouterProject)" Targets="Restore" Properties="$(PublishProperties);MSBuildRestoreSessionId=$([System.Guid]::NewGuid())" />
+    <MSBuild Projects="$(RouterProject)" Targets="Publish" Properties="$(PublishProperties);SelfContained=true;PublishAot=true;_IsPublishing=true;PublishDir=$(PublishRoot)Router/" />
   </Target>
 
-  <Target Name="PublishMacOS" DependsOnTargets="PublishRouter" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+  <!--
+    Microsoft.macOS assembles and signs the .app itself, under the project's bin folder. It is copied from there:
+    pointing AppBundleDir outside the project made the SDK (26.5) write codesign arguments over the nested
+    libraries instead of signing them.
+  -->
+  <Target Name="PublishPicker" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <MSBuild Projects="$(PickerProject)" Targets="Restore" Properties="$(PublishProperties);MSBuildRestoreSessionId=$([System.Guid]::NewGuid())" />
+    <MSBuild Projects="$(PickerProject)" Targets="Publish" Properties="$(PublishProperties);_IsPublishing=true" />
+    <Error Condition="!Exists('$(PickerBuiltBundle)/Contents/MacOS/Preferis Picker')" Text="The picker bundle was not found at $(PickerBuiltBundle)." />
+  </Target>
+
+  <Target Name="PublishSettings">
+    <MSBuild Projects="$(SettingsProject)" Targets="Restore" Properties="$(PublishProperties);MSBuildRestoreSessionId=$([System.Guid]::NewGuid())" />
+    <MSBuild Projects="$(SettingsProject)" Targets="Publish" Properties="$(PublishProperties);SelfContained=true;PublishAot=true;_IsPublishing=true;PublishDir=$(PublishRoot)Settings/" />
+  </Target>
+
+  <Target Name="PublishMacOS" DependsOnTargets="PublishRouter;PublishPicker;PublishSettings" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <PropertyGroup>
+      <PickerBundle>$(HelpersDir)Preferis Picker.app</PickerBundle>
+      <SettingsBundle>$(HelpersDir)Preferis Settings.app</SettingsBundle>
+    </PropertyGroup>
+    <ItemGroup>
+      <_SettingsBinaries Include="$(PublishRoot)Settings/Preferis.Settings;$(PublishRoot)Settings/*.dylib" />
+    </ItemGroup>
+
     <RemoveDir Directories="$(BundleDir)" />
-    <MakeDir Directories="$(BundleDir)Contents/MacOS;$(BundleDir)Contents/Resources;$(BundleDir)Contents/Helpers" />
+    <MakeDir Directories="$(BundleDir)Contents/MacOS;$(BundleDir)Contents/Resources;$(HelpersDir)" />
+
+    <!-- Router: the main executable and the only bundle that claims http/https (docs/Platform.md §3.1). -->
     <Copy SourceFiles="$(PublishRoot)Router/Preferis" DestinationFolder="$(BundleDir)Contents/MacOS" />
     <Copy SourceFiles="$(RepoRoot)src/Preferis.Router/macOS/Info.plist" DestinationFolder="$(BundleDir)Contents" />
     <WriteLinesToFile File="$(BundleDir)Contents/PkgInfo" Lines="APPL????" Overwrite="true" />
-    <!-- Helpers (picker, settings) are signed first and nested here from M3 on. -->
+
+    <!-- Picker: copied as built. `cp -R` keeps the bundle's symlinks and permissions intact. -->
+    <Exec Command="cp -R &quot;$(PickerBuiltBundle)&quot; &quot;$(HelpersDir)&quot;" />
+
+    <!-- Settings: Avalonia publishes a plain executable plus native libraries; they live together in Contents/MacOS. -->
+    <MakeDir Directories="$(SettingsBundle)/Contents/MacOS;$(SettingsBundle)/Contents/Resources" />
+    <Copy SourceFiles="@(_SettingsBinaries)" DestinationFolder="$(SettingsBundle)/Contents/MacOS" />
+    <!-- SkiaSharp, HarfBuzzSharp and Avalonia.Native ship universal libraries; keep only this RID's half (about 10 MB). -->
+    <ItemGroup>
+      <_SettingsLibrary Include="$(SettingsBundle)/Contents/MacOS/*.dylib" />
+    </ItemGroup>
+    <Exec Command="if [ &quot;`lipo -archs '%(_SettingsLibrary.FullPath)'`&quot; != '$(LipoArch)' ]; then lipo '%(_SettingsLibrary.FullPath)' -thin $(LipoArch) -output '%(_SettingsLibrary.FullPath)'; fi" />
+    <Copy SourceFiles="$(RepoRoot)src/Preferis.Settings/macOS/Info.plist" DestinationFolder="$(SettingsBundle)/Contents" />
+    <WriteLinesToFile File="$(SettingsBundle)/Contents/PkgInfo" Lines="APPL????" Overwrite="true" />
+
+    <!-- Sign from the inside out without &#45;&#45;deep: nested libraries, then each helper, then the main bundle. -->
+    <ItemGroup>
+      <_NestedLibrary Include="$(HelpersDir)**/*.dylib" />
+    </ItemGroup>
+    <Exec Command="codesign --force --sign &quot;$(SigningIdentity)&quot; &quot;%(_NestedLibrary.FullPath)&quot;" />
+    <Exec Command="codesign --force --sign &quot;$(SigningIdentity)&quot; &quot;$(PickerBundle)&quot;" />
+    <Exec Command="codesign --force --sign &quot;$(SigningIdentity)&quot; &quot;$(SettingsBundle)&quot;" />
     <Exec Command="codesign --force --sign &quot;$(SigningIdentity)&quot; &quot;$(BundleDir)&quot;" />
+    <Exec Command="codesign --verify --strict &quot;$(BundleDir)&quot;" />
     <Message Importance="high" Text="Preferis.app: $(BundleDir)" />
   </Target>
 

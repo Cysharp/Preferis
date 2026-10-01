@@ -3,9 +3,12 @@
     <Project Path="src/Preferis.Core/Preferis.Core.csproj" />
     <Project Path="src/Preferis.Platform/Preferis.Platform.csproj" />
     <Project Path="src/Preferis.Router/Preferis.Router.csproj" />
+    <Project Path="src/Preferis.Picker.MacOS/Preferis.Picker.MacOS.csproj" />
+    <Project Path="src/Preferis.Settings/Preferis.Settings.csproj" />
   </Folder>
   <Folder Name="/test/">
     <Project Path="test/Preferis.Core.Tests/Preferis.Core.Tests.csproj" />
     <Project Path="test/Preferis.Platform.Tests/Preferis.Platform.Tests.csproj" />
+    <Project Path="test/Preferis.Settings.Tests/Preferis.Settings.Tests.csproj" />
   </Folder>
 </Solution>

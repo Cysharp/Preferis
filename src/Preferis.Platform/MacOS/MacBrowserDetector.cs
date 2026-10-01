@@ -15,7 +15,7 @@ public sealed class MacBrowserDetector : IBrowserDetector
     private const string ProbeUrl = "https://example.com/";
 
     /// <summary>The Router's bundle id (src/Preferis.Router/macOS/Info.plist); the helpers' ids extend it.</summary>
-    private const string ProductBundleId = "net.mayuki.Preferis";
+    internal const string ProductBundleId = "net.mayuki.Preferis";
 
     private readonly IReadOnlyDictionary<string, BrowserOverride>? _overrides;
     private readonly string _homeDirectory;

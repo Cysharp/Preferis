@@ -341,7 +341,9 @@ Preferis は `LSUIElement` なので、起動したブラウザーが前面に�
 
 Router は UI フレームワークを持たないため、Apple Event を受けるための最小限の AppKit 呼び出しを
 objc ランタイム経由で自前で行います (`MacUrlActivationSource`)。Launch Services から起動されたかどうかは
-LS が設定する環境変数 `__CFBundleIdentifier` の有無で判定し、シェルから URL を引数に起動された場合は
+LS が設定する環境変数 `__CFBundleIdentifier` が自分の bundle id (`net.mayuki.Preferis`) かで判定します。
+この変数は子プロセスに引き継がれるため、有無だけで判定すると Terminal のシェル (`com.apple.Terminal`) や設定 UI が
+起動した Router も「LS から起動された」とみなしてしまう (M3 で修正)。シェルから URL を引数に起動された場合は
 NSApplication を使わずその場で処理します。
 
 1. `objc_allocateClassPair(NSObject, "PreferisAppDelegate")` でデリゲートクラスを作り、

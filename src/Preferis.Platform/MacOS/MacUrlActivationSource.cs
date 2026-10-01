@@ -16,8 +16,16 @@ public static unsafe class MacUrlActivationSource
     private static int _urlsReceived;
     private static IntPtr _app;
 
-    /// <summary>True when Launch Services started this process (it sets this variable), i.e. URLs will arrive as events.</summary>
-    public static bool IsLaunchedByLaunchServices => Environment.GetEnvironmentVariable("__CFBundleIdentifier") is not null;
+    /// <summary>True when Launch Services started this process, i.e. URLs will arrive as events.</summary>
+    public static bool IsLaunchedByLaunchServices => IsLaunchedByLaunchServicesWith(Environment.GetEnvironmentVariable("__CFBundleIdentifier"));
+
+    /// <summary>
+    /// Launch Services sets <c>__CFBundleIdentifier</c> to the bundle it launches, but every child process inherits it:
+    /// a shell in Terminal carries Terminal's id, the Router started by the settings app carries the settings app's.
+    /// Only our own id means Launch Services started the Router.
+    /// </summary>
+    internal static bool IsLaunchedByLaunchServicesWith(string? cfBundleIdentifier)
+        => string.Equals(cfBundleIdentifier, MacBrowserDetector.ProductBundleId, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Runs the application loop. Does not return; call <see cref="Terminate"/> to exit.</summary>
     /// <param name="onUrls">Invoked on the main thread for every batch of URLs. Should return quickly (hand off to a worker).</param>

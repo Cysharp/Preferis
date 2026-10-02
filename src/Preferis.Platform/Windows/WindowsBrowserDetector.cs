@@ -182,7 +182,7 @@ public sealed class WindowsBrowserDetector : IBrowserDetector
     /// <summary>Which catalog browser a registration is, or null for one outside the catalog.</summary>
     private static (BrowserCatalogEntry? Entry, bool Excluded) Classify(string key, string executable)
     {
-        var fileName = Path.GetFileName(executable);
+        var fileName = FileName(executable);
         // Preferis must not offer itself (that would loop), whatever its key is called. Internet Explorer is retired on
         // Windows 11 and only opens Edge.
         if (key.Equals("Preferis", StringComparison.OrdinalIgnoreCase)
@@ -206,6 +206,10 @@ public sealed class WindowsBrowserDetector : IBrowserDetector
         }
         return (GenericExecutableNames.Contains(fileName) ? null : candidates.FirstOrDefault(), false);
     }
+
+    // Registry paths are Windows paths whatever runs this (the tests also run on macOS), and Path splits at the host's
+    // separators only.
+    private static string FileName(string path) => path[(path.LastIndexOfAny(['\\', '/']) + 1)..];
 
     private static bool NameMatches(BrowserCatalogEntry entry, string key)
     {
@@ -247,7 +251,7 @@ public sealed class WindowsBrowserDetector : IBrowserDetector
                 : null);
         return new DetectedBrowser(
             id,
-            entry?.DisplayName ?? name ?? Path.GetFileNameWithoutExtension(executable),
+            entry?.DisplayName ?? name ?? Path.GetFileNameWithoutExtension(FileName(executable)),
             entry?.Family ?? BrowserFamily.Other,
             executable,
             null,

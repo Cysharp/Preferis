@@ -23,10 +23,13 @@ public class ConfigPathsTests
     {
         var paths = ConfigPaths.ForMacOS(homeDirectory: "/Users/me");
 
-        Assert.Equal("/Users/me/Library/Application Support/Preferis/local.json", paths.LocalConfigPath);
-        Assert.Equal("/Users/me/Library/Application Support/Preferis/config.json", paths.DefaultConfigPath);
-        Assert.Equal("/Users/me/Library/Logs/Preferis", paths.LogDirectory);
-        Assert.Equal("/Users/me/Library/Logs/Preferis/history.jsonl", paths.HistoryPath);
+        // Separators as on macOS, whichever OS runs the tests.
+        Assert.Equal("/Users/me/Library/Application Support/Preferis/local.json", Unix(paths.LocalConfigPath));
+        Assert.Equal("/Users/me/Library/Application Support/Preferis/config.json", Unix(paths.DefaultConfigPath));
+        Assert.Equal("/Users/me/Library/Logs/Preferis", Unix(paths.LogDirectory));
+        Assert.Equal("/Users/me/Library/Logs/Preferis/history.jsonl", Unix(paths.HistoryPath));
+
+        static string Unix(string path) => path.Replace('\\', '/');
     }
 }
 
@@ -74,7 +77,8 @@ public class ConfigLoaderTests : IDisposable
         var result = Loader().Load();
 
         Assert.Null(result.Error);
-        Assert.Equal(Path.Combine(synced, "config.json"), result.ConfigPath);
+        // "~/" expands with the separator written in local.json; Windows reads either.
+        Assert.Equal(Path.GetFullPath(Path.Combine(synced, "config.json")), Path.GetFullPath(result.ConfigPath));
         Assert.Equal("edge", result.Config.DefaultProfile);
         Assert.Equal("~/cloud/Preferis/config.json", result.Local.ConfigPath);
     }

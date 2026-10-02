@@ -535,6 +535,10 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
   なるため、プロジェクトの既定 RID を SDK の RID にしている。
 - **`AppBundleDir` をプロジェクト外に向けない**: SDK 26.5 では、ネストしたライブラリの署名用の引数ファイルが dylib 自体に
   上書きされ、187 バイトのテキストになった。`build/Preferis.Build.proj` は既定の場所に作らせてからコピーする。
+- **`Info.plist` の変更が反映されない**: SDK 26.5 の `_CompileAppManifest` はビルドのプロパティの一覧 (`_CompileAppManifest.inputs`)
+  だけを入力にしており、`Info.plist` を書き換えても、クリーンビルドするまで古いコンパイル済みのマニフェストがバンドルに入った
+  (`CFBundleLocalizations` を足しても `artifacts/` の `Preferis.app` に入らなかった)。AppKit の 2 つのプロジェクトは
+  `build/AppManifest.targets` を読み込み、`Info.plist` の方が新しければコンパイル済みのマニフェストを消して作り直させる。
 
 ### 3.8 設定 UI (`Preferis Settings.app`, AppKit)
 

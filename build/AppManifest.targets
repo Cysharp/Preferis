@@ -1,0 +1,19 @@
+<Project>
+
+  <!--
+    Imported by the AppKit projects (the picker and the settings). Microsoft.macOS (26.5) compiles Info.plist only when
+    one of the build properties it lists changes: the input of its _CompileAppManifest target is that list
+    (_CompileAppManifest.inputs), not the file. An edited Info.plist (such as CFBundleLocalizations) therefore kept the old
+    compiled manifest, in the bundle too, until a clean build. Dropping the compiled manifest when Info.plist is newer has
+    it compiled again.
+  -->
+  <Target Name="RecompileEditedAppManifest"
+          BeforeTargets="_CompileAppManifest"
+          Condition="Exists('$(MSBuildProjectDirectory)/Info.plist') And '$(_TemporaryAppManifest)' != '' And Exists('$(_TemporaryAppManifest)')"
+          Inputs="$(MSBuildProjectDirectory)/Info.plist"
+          Outputs="$(_TemporaryAppManifest)">
+    <!-- Runs only when Info.plist is newer than the compiled manifest (the target's own inputs and outputs). -->
+    <Delete Files="$(_TemporaryAppManifest)" />
+  </Target>
+
+</Project>

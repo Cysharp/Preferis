@@ -29,4 +29,6 @@
     <ProjectReference Include="../Preferis.Platform/Preferis.Platform.csproj" />
   </ItemGroup>
 
+  <Import Project="../../build/AppManifest.targets" />
+
 </Project>

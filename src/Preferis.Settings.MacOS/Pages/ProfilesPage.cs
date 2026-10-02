@@ -235,7 +235,7 @@ internal sealed class ProfilesPage : IPageView
         var id = Ui.Field("work", monospaced: true);
         bindings.Text(id, profile, nameof(ProfileViewModel.IdDraft), () => profile.IdDraft, value => profile.IdDraft = value);
         // Return applies the id; leaving the field does not.
-        id.Cell.SendsActionOnEndEditing = false;
+        id.Cell.SetSendsActionOnEndEditing(false);
         id.Activated += (_, _) =>
         {
             if (profile.ChangeIdCommand.CanExecute(null))
@@ -261,7 +261,7 @@ internal sealed class ProfilesPage : IPageView
         var browser = Ui.Popup();
         bindings.Popup(browser, profile, nameof(ProfileViewModel.Browser), () => profile.BrowserChoices, () => profile.Browser, value => profile.Browser = value, c => c.Title, c => Images.FromPng(c.IconPng));
         var mac = Ui.Popup();
-        bindings.Popup(mac, profile, nameof(ProfileViewModel.MacOSBrowser), () => profile.BrowserChoices, () => profile.MacOSBrowser, value => profile.MacOSBrowser = value, c => c.Title, c => Images.FromPng(c.IconPng));
+        bindings.Popup(mac, profile, nameof(ProfileViewModel.MacOSBrowser), () => profile.MacOSBrowserChoices, () => profile.MacOSBrowser, value => profile.MacOSBrowser = value, c => c.Title, c => Images.FromPng(c.IconPng));
         var windows = Ui.Popup();
         bindings.Popup(windows, profile, nameof(ProfileViewModel.WindowsBrowser), () => profile.WindowsBrowserChoices, () => profile.WindowsBrowser, value => profile.WindowsBrowser = value, c => c.Title);
         var perOs = Ui.Switch();

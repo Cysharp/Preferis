@@ -21,13 +21,22 @@ namespace Preferis.Settings.Windows;
 /// </summary>
 internal static class Snapshots
 {
+    // By page rather than by title, which is in the language of the UI.
+    private static string FileName(PageViewModel page) => page switch
+    {
+        GeneralPageViewModel => "general",
+        ProfilesPageViewModel => "profiles",
+        RulesPageViewModel => "rules",
+        _ => "test",
+    };
+
     public static void TakeAndExit(SettingsWindow window, SettingsViewModel settings, string directory)
     {
         Directory.CreateDirectory(directory);
         var steps = new List<(string Name, Action Prepare)>();
         foreach (var page in settings.Pages.ToList())
         {
-            steps.Add((page.Title.ToLowerInvariant(), () =>
+            steps.Add((FileName(page), () =>
             {
                 settings.SelectedPage = page;
                 if (page is TestPageViewModel test && Environment.GetEnvironmentVariable("PREFERIS_SETTINGS_SNAPSHOT_URL") is { Length: > 0 } url)

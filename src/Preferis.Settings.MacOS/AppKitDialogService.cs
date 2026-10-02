@@ -1,5 +1,6 @@
 using AppKit;
 using Preferis.Settings.Services;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.MacOS;
 
@@ -17,7 +18,7 @@ internal sealed class AppKitDialogService : IDialogService
         panel.CanChooseFiles = false;
         panel.CanCreateDirectories = true;
         panel.AllowsMultipleSelection = false;
-        panel.Prompt = "Choose";
+        panel.Prompt = L("Choose");
         return Task.FromResult(panel.RunModal() == 1 ? panel.Url?.Path : null);
     }
 
@@ -39,7 +40,7 @@ internal sealed class AppKitDialogService : IDialogService
         foreach (var button in buttons)
         {
             var added = alert.AddButton(button);
-            if (button == "Cancel")
+            if (button == L("Cancel"))
             {
                 added.KeyEquivalent = "\u001b";
             }

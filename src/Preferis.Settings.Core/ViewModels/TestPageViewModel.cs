@@ -6,6 +6,7 @@ using Preferis.Core.Configuration;
 using Preferis.Core.History;
 using Preferis.Core.Profiles;
 using Preferis.Core.Routing;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.ViewModels;
 
@@ -26,14 +27,14 @@ public sealed record HistoryLine(string Time, string Url, string Rule, string Ou
 /// </summary>
 public sealed partial class TestPageViewModel : PageViewModel
 {
-    private const string ThisComputer = "With the target of this computer.";
+    private static string ThisComputer => L("With the target of this computer.");
 
     public TestPageViewModel(SettingsViewModel settings)
         : base(settings)
     {
     }
 
-    public override string Title => "Test";
+    public override string Title => L("Test");
 
     [ObservableProperty]
     public partial string Url { get; set; } = "https://";
@@ -96,7 +97,7 @@ public sealed partial class TestPageViewModel : PageViewModel
 
         if (!RoutingUrl.TryParse(Url.Trim(), out var url))
         {
-            Error = "Enter an absolute URL, such as https://www.example.com/.";
+            Error = L("Enter an absolute URL, such as https://www.example.com/.");
             return;
         }
 
@@ -108,7 +109,7 @@ public sealed partial class TestPageViewModel : PageViewModel
             Trace.Add(new TraceLine(KindText(entry.Kind), entry.RuleId is null ? null : RuleName(config, entry.RuleId), entry.Message));
         }
 
-        var source = result.RuleId is null ? "(catch-all)" : $"(rule \"{RuleName(config, result.RuleId)}\")";
+        var source = result.RuleId is null ? L("(catch-all)") : L("(rule \"{0}\")", RuleName(config, result.RuleId));
         Decision = Describe(result.Decision, config, source);
         RoutedUrl = result.Decision.Url.AbsoluteUri != url.AbsoluteUri ? result.Decision.Url.AbsoluteUri : null;
 
@@ -140,9 +141,9 @@ public sealed partial class TestPageViewModel : PageViewModel
         if (Settings.IsDirty && !Settings.SaveNow())
         {
             var answer = await Settings.Dialogs.AskAsync(
-                "Your latest changes are not saved.",
-                "Preferis opens the URL with the configuration on disk, which does not have them. Only this page's test uses them.",
-                ["Open Saved Configuration", "Cancel"]);
+                L("Your latest changes are not saved."),
+                L("Preferis opens the URL with the configuration on disk, which does not have them. Only this page's test uses them."),
+                [L("Open Saved Configuration"), L("Cancel")]);
             if (answer != 0)
             {
                 return;
@@ -150,12 +151,12 @@ public sealed partial class TestPageViewModel : PageViewModel
         }
 
         IsOpening = true;
-        OpenResult = "Opening…";
+        OpenResult = L("Opening…");
         OpenOutput = [];
         try
         {
             var result = await Settings.Platform.OpenUrlAsync(Url.Trim());
-            OpenResult = result.ExitCode == 0 ? "Preferis handled the URL." : "Preferis could not open the URL.";
+            OpenResult = result.ExitCode == 0 ? L("Preferis handled the URL.") : L("Preferis could not open the URL.");
             OpenOutput = result.Output;
         }
         finally
@@ -185,7 +186,7 @@ public sealed partial class TestPageViewModel : PageViewModel
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Settings.StatusMessage = $"Could not clear the history: {ex.Message}";
+            Settings.StatusMessage = L("Could not clear the history: {0}", ex.Message);
         }
         History.Clear();
     }
@@ -206,13 +207,13 @@ public sealed partial class TestPageViewModel : PageViewModel
                 History.Add(new HistoryLine(
                     entry.Time.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
                     entry.Url,
-                    entry.RuleId is null ? "catch-all" : RuleName(Settings.Config, entry.RuleId),
-                    entry.Outcome));
+                    entry.RuleId is null ? L("catch-all") : RuleName(Settings.Config, entry.RuleId),
+                    OutcomeText(entry.Outcome)));
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Settings.StatusMessage = $"Could not read the history: {ex.Message}";
+            Settings.StatusMessage = L("Could not read the history: {0}", ex.Message);
         }
     }
 
@@ -222,7 +223,7 @@ public sealed partial class TestPageViewModel : PageViewModel
 
         if (config.Profiles.FirstOrDefault(p => p.Id == id) is not { } profile)
         {
-            return new CandidateLine(id, false, $"Profile '{id}' does not exist.");
+            return new CandidateLine(id, false, L("Profile '{0}' does not exist.", id));
         }
 
         // Resolve the profile on its own first, so a failure names this profile's problem rather than the last fallback's.
@@ -234,7 +235,7 @@ public sealed partial class TestPageViewModel : PageViewModel
             return new CandidateLine(profile.Name, true, notes.Count == 0 ? command : $"{command}  ({string.Join(" ", notes)})");
         }
 
-        var reason = direct is ResolveResult.Unresolved unresolved ? unresolved.Reason : "Unexpected resolution result.";
+        var reason = direct is ResolveResult.Unresolved unresolved ? unresolved.Reason : L("Unexpected resolution result.");
         if (isLocal)
         {
             reason = $"{ThisComputer} {reason}";
@@ -245,22 +246,22 @@ public sealed partial class TestPageViewModel : PageViewModel
         }
         return resolver.ResolveWithFallback(config, id, url) switch
         {
-            ResolveResult.Resolved viaFallback => new CandidateLine(profile.Name, false, $"{reason} Uses the fallback “{NameOf(viaFallback.ProfileId)}”: {CommandLine(viaFallback.Plan)}"),
-            ResolveResult.Unresolved last => new CandidateLine(profile.Name, false, $"{reason} The fallback “{NameOf(fallbackId)}” cannot be used either: {last.Reason}"),
+            ResolveResult.Resolved viaFallback => new CandidateLine(profile.Name, false, L("{0} Uses the fallback “{1}”: {2}", reason, NameOf(viaFallback.ProfileId), CommandLine(viaFallback.Plan))),
+            ResolveResult.Unresolved last => new CandidateLine(profile.Name, false, L("{0} The fallback “{1}” cannot be used either: {2}", reason, NameOf(fallbackId), last.Reason)),
             _ => new CandidateLine(profile.Name, false, reason),
         };
     }
 
     private static string Describe(RoutingDecision decision, PreferisConfig config, string source) => decision switch
     {
-        RoutingDecision.Open { ProfileIds.Count: 0 } => "No profile is configured: the Router offers the browsers detected on this computer",
-        RoutingDecision.Open { Source: OpenSource.DefaultProfile } => $"Open with the default profile {source}",
-        RoutingDecision.Open { ProfileIds.Count: 1 } open => $"Open with {config.Profiles.FirstOrDefault(p => p.Id == open.ProfileIds[0])?.Name ?? open.ProfileIds[0]} {source}",
-        RoutingDecision.Open { Source: OpenSource.AllProfiles } open => $"Show the picker with all {open.ProfileIds.Count} profiles, as there is no default profile {source}",
-        RoutingDecision.Open open => $"Show the picker with {open.ProfileIds.Count} profiles {source}",
-        RoutingDecision.System => $"Hand to the system default handler {source}",
-        RoutingDecision.None => $"Do nothing {source}",
-        RoutingDecision.Failed failed => $"Routing fails: {failed.Reason} The Router then falls back to the default profile or the picker.",
+        RoutingDecision.Open { ProfileIds.Count: 0 } => L("No profile is configured: the Router offers the browsers detected on this computer"),
+        RoutingDecision.Open { Source: OpenSource.DefaultProfile } => L("Open with the default profile {0}", source),
+        RoutingDecision.Open { ProfileIds.Count: 1 } open => L("Open with {0} {1}", config.Profiles.FirstOrDefault(p => p.Id == open.ProfileIds[0])?.Name ?? open.ProfileIds[0], source),
+        RoutingDecision.Open { Source: OpenSource.AllProfiles } open => L("Show the picker with all {0} profiles, as there is no default profile {1}", open.ProfileIds.Count, source),
+        RoutingDecision.Open open => L("Show the picker with {0} profiles {1}", open.ProfileIds.Count, source),
+        RoutingDecision.System => L("Hand to the system default handler {0}", source),
+        RoutingDecision.None => L("Do nothing {0}", source),
+        RoutingDecision.Failed failed => L("Routing fails: {0} The Router then falls back to the default profile or the picker.", failed.Reason),
         _ => decision.ToString() ?? "",
     };
 
@@ -275,15 +276,25 @@ public sealed partial class TestPageViewModel : PageViewModel
 
     private static string KindText(TraceKind kind) => kind switch
     {
-        TraceKind.RuleMatched => "matched",
-        TraceKind.RuleNotMatched => "not matched",
-        TraceKind.RuleDisabled => "disabled",
-        TraceKind.Action => "action",
-        TraceKind.Rewritten => "rewritten",
-        TraceKind.FellThrough => "fell through",
-        TraceKind.Rerouted => "rerouted",
-        TraceKind.CatchAll => "catch-all",
-        TraceKind.Warning => "warning",
-        _ => "decision",
+        TraceKind.RuleMatched => L("matched"),
+        TraceKind.RuleNotMatched => L("not matched"),
+        TraceKind.RuleDisabled => L("disabled"),
+        TraceKind.Action => L("action"),
+        TraceKind.Rewritten => L("rewritten"),
+        TraceKind.FellThrough => L("fell through"),
+        TraceKind.Rerouted => L("rerouted"),
+        TraceKind.CatchAll => L("catch-all"),
+        TraceKind.Warning => L("warning"),
+        _ => L("decision"),
+    };
+
+    // The history keeps the outcome as the Router named it (HandleOutcome).
+    private static string OutcomeText(string outcome) => outcome switch
+    {
+        "Launched" => L("Launched"),
+        "Delegated" => L("Handed to the system"),
+        "Ignored" => L("Not opened"),
+        "Failed" => L("Failed"),
+        _ => outcome,
     };
 }

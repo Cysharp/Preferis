@@ -4,6 +4,7 @@ using Preferis.Core.Configuration;
 using Preferis.Core.History;
 using Preferis.Core.Hosting;
 using Preferis.Core.Routing;
+using Preferis.Platform;
 using Preferis.Platform.Browsers;
 using Preferis.Platform.Launching;
 using Preferis.Platform.MacOS;
@@ -78,7 +79,8 @@ internal sealed class RouterHost
                 new WindowsUserNotifier(),
                 log,
                 Environment.GetEnvironmentVariable,
-                home);
+                home,
+                SystemLanguages.Preferred);
             registrar = new WindowsDefaultBrowserRegistrar(Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Preferis.exe"));
         }
         else if (OperatingSystem.IsMacOS())
@@ -96,7 +98,8 @@ internal sealed class RouterHost
                 new MacUserNotifier(),
                 log,
                 Environment.GetEnvironmentVariable,
-                home);
+                home,
+                SystemLanguages.Preferred);
             registrar = MacDefaultBrowserRegistrar.ForMainBundle();
         }
         else

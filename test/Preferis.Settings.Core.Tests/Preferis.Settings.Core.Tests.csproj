@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <None Include="../Preferis.Core.Tests/Fixtures/config.sample.json" Link="Fixtures/config.sample.json" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../Preferis.Core.Tests/Localization/TranslationAudit.cs" Link="Localization/TranslationAudit.cs" />
   </ItemGroup>
 
 </Project>

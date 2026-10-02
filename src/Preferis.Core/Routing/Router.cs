@@ -1,4 +1,5 @@
 using Preferis.Core.Configuration;
+using static Preferis.Core.Localization.CoreText;
 
 namespace Preferis.Core.Routing;
 
@@ -46,14 +47,14 @@ public sealed class Router
             // Reroute requested.
             if (hops >= MaxHops)
             {
-                return (new RoutingDecision.Failed(current, $"Reroute hop limit ({MaxHops}) exceeded."), outcome.RuleId);
+                return (new RoutingDecision.Failed(current, L("Reroute hop limit ({0}) exceeded.", MaxHops)), outcome.RuleId);
             }
             if (!seen.Add(current.AbsoluteUri))
             {
-                return (new RoutingDecision.Failed(current, $"Reroute loop detected at '{current.AbsoluteUri}'."), outcome.RuleId);
+                return (new RoutingDecision.Failed(current, L("Reroute loop detected at '{0}'.", current.AbsoluteUri)), outcome.RuleId);
             }
             hops++;
-            trace.Add(new TraceEntry(TraceKind.Rerouted, outcome.RuleId, $"Reroute #{hops} with {current.AbsoluteUri}"));
+            trace.Add(new TraceEntry(TraceKind.Rerouted, outcome.RuleId, L("Reroute #{0} with {1}", hops, current.AbsoluteUri)));
         }
     }
 
@@ -64,17 +65,17 @@ public sealed class Router
         {
             if (!rule.Enabled)
             {
-                trace.Add(new TraceEntry(TraceKind.RuleDisabled, rule.Id, "Disabled"));
+                trace.Add(new TraceEntry(TraceKind.RuleDisabled, rule.Id, L("Disabled")));
                 continue;
             }
 
             if (!ConditionEvaluator.Matches(rule.Condition, current))
             {
-                trace.Add(new TraceEntry(TraceKind.RuleNotMatched, rule.Id, $"No match for {current.AbsoluteUri}"));
+                trace.Add(new TraceEntry(TraceKind.RuleNotMatched, rule.Id, L("No match for {0}", current.AbsoluteUri)));
                 continue;
             }
 
-            trace.Add(new TraceEntry(TraceKind.RuleMatched, rule.Id, $"Matched {current.AbsoluteUri}"));
+            trace.Add(new TraceEntry(TraceKind.RuleMatched, rule.Id, L("Matched {0}", current.AbsoluteUri)));
             var outcome = ExecuteActions(rule.Actions, rule.Id, ref current, trace);
             switch (outcome)
             {
@@ -83,12 +84,12 @@ public sealed class Router
                 case ActionOutcome.Reroute:
                     return (null, rule.Id);
                 case ActionOutcome.FallThrough:
-                    trace.Add(new TraceEntry(TraceKind.FellThrough, rule.Id, $"No terminal action; continuing with {current.AbsoluteUri}"));
+                    trace.Add(new TraceEntry(TraceKind.FellThrough, rule.Id, L("No terminal action; continuing with {0}", current.AbsoluteUri)));
                     continue;
             }
         }
 
-        trace.Add(new TraceEntry(TraceKind.CatchAll, null, "No rule matched; applying the catch-all rule"));
+        trace.Add(new TraceEntry(TraceKind.CatchAll, null, L("No rule matched; applying the catch-all rule")));
         return ExecuteActions(_config.CatchAll.Actions, null, ref current, trace) switch
         {
             ActionOutcome.Decided(var decision) => (decision, null),
@@ -102,7 +103,7 @@ public sealed class Router
     {
         foreach (var action in actions)
         {
-            trace.Add(new TraceEntry(TraceKind.Action, ruleId, action.Type));
+            trace.Add(new TraceEntry(TraceKind.Action, ruleId, ActionName(action)));
             switch (action)
             {
                 case OpenAction open:
@@ -117,14 +118,14 @@ public sealed class Router
                     var (rewritten, error) = UrlRewriter.Rewrite(rewrite, current);
                     if (rewritten is null)
                     {
-                        return new ActionOutcome.Decided(new RoutingDecision.Failed(current, error ?? "Rewrite failed."));
+                        return new ActionOutcome.Decided(new RoutingDecision.Failed(current, error ?? L("Rewrite failed.")));
                     }
                     trace.Add(new TraceEntry(TraceKind.Rewritten, ruleId, $"{current.AbsoluteUri} -> {rewritten.AbsoluteUri}"));
                     current = rewritten;
                     break;
                 default:
                     // An action this version does not know: refuse to guess where the URL should go.
-                    return new ActionOutcome.Decided(new RoutingDecision.Failed(current, $"Unknown action type '{action.Type}'."));
+                    return new ActionOutcome.Decided(new RoutingDecision.Failed(current, L("Unknown action type '{0}'.", action.Type)));
             }
         }
 
@@ -138,7 +139,7 @@ public sealed class Router
         var known = _config.Profiles.Select(p => p.Id).Where(listed.Remove).ToList();
         foreach (var missing in listed)
         {
-            trace.Add(new TraceEntry(TraceKind.Warning, ruleId, $"Profile '{missing}' does not exist and was ignored"));
+            trace.Add(new TraceEntry(TraceKind.Warning, ruleId, L("Profile '{0}' does not exist and was ignored", missing)));
         }
 
         if (known.Count > 0)
@@ -153,18 +154,36 @@ public sealed class Router
 
         if (_config.DefaultProfile is not null)
         {
-            trace.Add(new TraceEntry(TraceKind.Warning, ruleId, $"Default profile '{_config.DefaultProfile}' does not exist"));
+            trace.Add(new TraceEntry(TraceKind.Warning, ruleId, L("Default profile '{0}' does not exist", _config.DefaultProfile)));
         }
         return new RoutingDecision.Open(url, _config.Profiles.Select(p => p.Id).ToList(), OpenSource.AllProfiles, ruleId);
     }
 
     private string Describe(RoutingDecision decision) => decision switch
     {
-        RoutingDecision.Open open => $"open {open.Url.AbsoluteUri} with [{string.Join(", ", open.ProfileIds.Select(id => ProfileNames.Describe(_config, id)))}] ({open.Source})",
-        RoutingDecision.System system => $"system {system.Url.AbsoluteUri}",
-        RoutingDecision.None => "none",
-        RoutingDecision.Failed failed => $"failed: {failed.Reason}",
+        RoutingDecision.Open open => L("open {0} with [{1}] ({2})", open.Url.AbsoluteUri, string.Join(", ", open.ProfileIds.Select(id => ProfileNames.Describe(_config, id))), SourceName(open.Source)),
+        RoutingDecision.System system => L("system {0}", system.Url.AbsoluteUri),
+        RoutingDecision.None => L("none"),
+        RoutingDecision.Failed failed => L("failed: {0}", failed.Reason),
         _ => decision.ToString() ?? "",
+    };
+
+    // The type as config.json names it, in the language of the UI.
+    private static string ActionName(RoutingAction action) => action switch
+    {
+        OpenAction => L("open"),
+        SystemAction => L("system"),
+        NoneAction => L("none"),
+        RewriteAction => L("rewrite"),
+        RerouteAction => L("reroute"),
+        _ => action.Type,
+    };
+
+    private static string SourceName(OpenSource source) => source switch
+    {
+        OpenSource.DefaultProfile => L("DefaultProfile"),
+        OpenSource.AllProfiles => L("AllProfiles"),
+        _ => L("Explicit"),
     };
 
     private abstract record ActionOutcome

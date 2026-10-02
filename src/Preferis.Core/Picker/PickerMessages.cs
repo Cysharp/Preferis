@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Preferis.Core.Configuration;
+using Preferis.Core.Localization;
 using Preferis.Core.Routing;
 
 namespace Preferis.Core.Picker;
@@ -45,6 +46,12 @@ public sealed class PickerOptions
     /// by: URLs without a host, or candidates that are detected browsers rather than configured profiles.
     /// </summary>
     public bool AllowRemember { get; set; } = true;
+
+    /// <summary>
+    /// The language to show, <c>en</c> or <c>ja</c>: the Router resolves <c>settings.language</c> (docs/Design.md §9.4).
+    /// Null (an older Router): the picker follows the OS.
+    /// </summary>
+    public string? Language { get; set; }
 }
 
 public enum PickerResult
@@ -94,10 +101,15 @@ public static class PickerMessages
                 AutoSelectSeconds = picker?.AutoSelectSeconds ?? 0,
                 RememberChoiceDefault = picker?.RememberChoiceDefault ?? false,
                 AllowRemember = decision.Url.Host.Length > 0,
+                Language = UiLanguages.Current.Code(),
             },
             Message = message,
         };
     }
+
+    /// <summary>The language a picker shows: the one the Router chose, or the system's for a request without one.</summary>
+    public static UiLanguage LanguageOf(PickerRequest request, Func<IEnumerable<string>> systemLanguages)
+        => UiLanguages.FromCode(request.Options.Language) ?? UiLanguages.Resolve(null, systemLanguages);
 
     public static string Serialize(PickerRequest request) => JsonSerializer.Serialize(request, PreferisJsonContext.Default.PickerRequest);
 

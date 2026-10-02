@@ -7,6 +7,7 @@ using Preferis.Core.Browsers;
 using Preferis.Core.Configuration;
 using Preferis.Core.Profiles;
 using Preferis.Settings.Services;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.ViewModels;
 
@@ -21,7 +22,7 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
         SelectedProfile = Profiles.FirstOrDefault();
     }
 
-    public override string Title => "Profiles";
+    public override string Title => L("Profiles");
 
     public ObservableCollection<ProfileViewModel> Profiles { get; }
 
@@ -59,7 +60,7 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
     [RelayCommand]
     private void AddCommandProfile()
     {
-        var name = UniqueName("Command");
+        var name = UniqueName(L("Command"));
         var spec = new CommandSpec { Path = "", Args = ["{url}"] };
         AddProfile(new Profile
         {
@@ -77,7 +78,7 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
         copy.Id = NewId();
         // The ids it had belong to the original.
         copy.PreviousIds = null;
-        copy.Name = UniqueName(source.Name + " copy");
+        copy.Name = UniqueName(L("{0} copy", source.Name));
         if (LocalProfileTargets.Find(Settings.Local, source.Model, Settings.Config) is { } target)
         {
             Settings.Local.ProfileTargets![copy.Id] = LocalProfileTargets.Copy(target);
@@ -92,8 +93,8 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
         var usages = Usages(Settings.Config, profile.Id);
         if (usages.Count > 0)
         {
-            var message = "It is used by:\n• " + string.Join("\n• ", usages) + "\n\nThese references will be removed.";
-            if (await Settings.Dialogs.AskAsync($"Delete “{profile.Name}”?", message, ["Delete", "Cancel"]) != 0)
+            var message = L("It is used by:\n{0}\n\nThese references will be removed.", "• " + string.Join("\n• ", usages));
+            if (await Settings.Dialogs.AskAsync(L("Delete “{0}”?", profile.Name), message, [L("Delete"), L("Cancel")]) != 0)
             {
                 return;
             }
@@ -215,13 +216,13 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
         var usages = new List<string>();
         if (config.DefaultProfile == id)
         {
-            usages.Add("the default profile setting");
+            usages.Add(L("the default profile setting"));
         }
-        usages.AddRange(config.Profiles.Where(p => p.Fallback == id).Select(p => $"the fallback of “{p.Name}”"));
-        usages.AddRange(config.Rules.Where(r => Opens(r.Actions, id)).Select(r => $"rule “{r.Name}” ({r.Id})"));
+        usages.AddRange(config.Profiles.Where(p => p.Fallback == id).Select(p => L("the fallback of “{0}”", p.Name)));
+        usages.AddRange(config.Rules.Where(r => Opens(r.Actions, id)).Select(r => L("rule “{0}” ({1})", r.Name, r.Id)));
         if (Opens(config.CatchAll.Actions, id))
         {
-            usages.Add("the catch-all rule");
+            usages.Add(L("the catch-all rule"));
         }
         return usages;
     }
@@ -257,7 +258,7 @@ public sealed class DetectedBrowserViewModel
     {
         Info = info;
         _platform = platform;
-        var items = new List<DetectedItemViewModel> { new(this, null, info.Browser.DisplayName, info.Profiles is { Count: > 0 } ? "Without a specific browser profile" : null) };
+        var items = new List<DetectedItemViewModel> { new(this, null, info.Browser.DisplayName, info.Profiles is { Count: > 0 } ? L("Without a specific browser profile") : null) };
         items.AddRange((info.Profiles ?? []).Select(p => new DetectedItemViewModel(
             this,
             p,
@@ -277,9 +278,9 @@ public sealed class DetectedBrowserViewModel
     /// <summary>Why no browser profiles are listed, when that is not obvious.</summary>
     public string? Note => Info.Profiles is null && Info.Browser.Family != BrowserFamily.Other
         ? _platform == HostPlatform.MacOS
-            ? "Its browser profiles could not be read. On macOS 27 and later, give Preferis Settings Full Disk Access to list them."
+            ? L("Its browser profiles could not be read. On macOS 27 and later, give Preferis Settings Full Disk Access to list them.")
             // On Windows nothing denies access; the profile list does not exist until the browser has run once.
-            : "Its browser profiles could not be read. Start the browser once so that it creates them."
+            : L("Its browser profiles could not be read. Start the browser once so that it creates them.")
         : null;
 
     public IReadOnlyList<DetectedItemViewModel> Items { get; }

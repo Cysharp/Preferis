@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.Windows.Storage.Pickers;
 using Preferis.Settings.Services;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.Windows;
 
@@ -25,7 +26,7 @@ internal sealed class WinUIDialogService : IDialogService
         {
             return null;
         }
-        var picker = new FolderPicker(window.AppWindow.Id) { CommitButtonText = "Choose" };
+        var picker = new FolderPicker(window.AppWindow.Id) { CommitButtonText = L("Choose") };
         var result = await picker.PickSingleFolderAsync();
         return result?.Path;
     }
@@ -36,7 +37,7 @@ internal sealed class WinUIDialogService : IDialogService
         {
             return null;
         }
-        var picker = new FileOpenPicker(window.AppWindow.Id) { CommitButtonText = "Choose" };
+        var picker = new FileOpenPicker(window.AppWindow.Id) { CommitButtonText = L("Choose") };
         picker.FileTypeFilter.Add("*");
         var result = await picker.PickSingleFileAsync();
         return result?.Path;

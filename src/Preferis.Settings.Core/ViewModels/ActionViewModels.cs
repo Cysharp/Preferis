@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Preferis.Core.Configuration;
 using Preferis.Core.Routing;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.ViewModels;
 
@@ -35,11 +36,11 @@ public sealed partial class ActionListViewModel : ObservableObject
 
     public static IReadOnlyList<EnumChoice<ActionKind>> Kinds { get; } =
     [
-        new(ActionKind.Open, "Open with profiles"),
-        new(ActionKind.Rewrite, "Rewrite the URL"),
-        new(ActionKind.Reroute, "Route again from the first rule"),
-        new(ActionKind.System, "Hand to the system default"),
-        new(ActionKind.None, "Do nothing"),
+        new(ActionKind.Open, L("Open with profiles")),
+        new(ActionKind.Rewrite, L("Rewrite the URL")),
+        new(ActionKind.Reroute, L("Route again from the first rule")),
+        new(ActionKind.System, L("Hand to the system default")),
+        new(ActionKind.None, L("Do nothing")),
     ];
 
     internal SettingsViewModel Settings => _settings;
@@ -108,9 +109,9 @@ public sealed partial class ActionListViewModel : ObservableObject
     {
         OpenAction open => new OpenActionViewModel(this, open),
         RewriteAction rewrite => new RewriteActionViewModel(this, rewrite),
-        SystemAction => new SimpleActionViewModel(this, ActionKind.System, "Hand to the system default", "Lets the OS default handler open the URL (never Preferis itself)."),
-        NoneAction => new SimpleActionViewModel(this, ActionKind.None, "Do nothing", "The URL is not opened."),
-        RerouteAction => new SimpleActionViewModel(this, ActionKind.Reroute, "Route again", "Starts over from the first rule with the current (rewritten) URL."),
+        SystemAction => new SimpleActionViewModel(this, ActionKind.System, L("Hand to the system default"), L("Lets the OS default handler open the URL (never Preferis itself).")),
+        NoneAction => new SimpleActionViewModel(this, ActionKind.None, L("Do nothing"), L("The URL is not opened.")),
+        RerouteAction => new SimpleActionViewModel(this, ActionKind.Reroute, L("Route again"), L("Starts over from the first rule with the current (rewritten) URL.")),
         UnknownAction unknown => new UnknownActionViewModel(this, unknown),
         _ => throw new ArgumentOutOfRangeException(nameof(action), action.Type, "Unsupported action."),
     };
@@ -172,7 +173,7 @@ public sealed partial class ProfileToggleViewModel : ObservableObject
     {
         _owner = owner;
         Id = id;
-        Name = isMissing ? $"{id} (missing)" : name;
+        Name = isMissing ? L("{0} (missing)", id) : name;
         IsMissing = isMissing;
         IsSelected = isSelected;
     }
@@ -208,7 +209,7 @@ public sealed class OpenActionViewModel : ActionViewModel
         _ready = true;
     }
 
-    public override string Title => "Open with";
+    public override string Title => L("Open with");
 
     public ObservableCollection<ProfileToggleViewModel> Profiles { get; }
 
@@ -246,12 +247,12 @@ public sealed partial class RewriteActionViewModel : ActionViewModel
         _ready = true;
     }
 
-    public override string Title => "Rewrite the URL";
+    public override string Title => L("Rewrite the URL");
 
     public static IReadOnlyList<EnumChoice<RewriteMode>> Modes { get; } =
     [
-        new(RewriteMode.Regex, "Replace with a regular expression"),
-        new(RewriteMode.QueryParameter, "Use a query parameter as the URL"),
+        new(RewriteMode.Regex, L("Replace with a regular expression")),
+        new(RewriteMode.QueryParameter, L("Use a query parameter as the URL")),
     ];
 
     [ObservableProperty]
@@ -337,7 +338,7 @@ public sealed class UnknownActionViewModel : ActionViewModel
         _model = model;
     }
 
-    public override string Title => $"Unknown action “{Type}”";
+    public override string Title => L("Unknown action “{0}”", Type);
 
     public string Type => _model.Type;
 

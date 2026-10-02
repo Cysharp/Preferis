@@ -1,6 +1,7 @@
 using AppKit;
 using Preferis.Settings.MacOS.Controls;
 using Preferis.Settings.ViewModels;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.MacOS.Pages;
 
@@ -16,10 +17,10 @@ internal sealed class TestPage : IPageView
         _bindings.Text(url, page, nameof(TestPageViewModel.Url), () => page.Url, value => page.Url = value);
         // Return in the field tests the URL, like the Test button.
         url.Activated += (_, _) => page.RunCommand.Execute(null);
-        var test = Ui.Button("Test");
+        var test = Ui.Button(L("Test"));
         _bindings.Command(test, page.RunCommand);
-        var open = Ui.Button("Open");
-        open.ToolTip = "Open the URL with Preferis, as if a link was clicked: the picker appears when the rules say so.";
+        var open = Ui.Button(L("Open"));
+        open.ToolTip = L("Open the URL with Preferis, as if a link was clicked: the picker appears when the rules say so.");
         _bindings.Command(open, page.OpenCommand);
         var input = Ui.HStack(8, url, test, open);
 
@@ -32,9 +33,10 @@ internal sealed class TestPage : IPageView
         }, nameof(TestPageViewModel.Error));
 
         var intro = Form.Section(null,
-            "Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so the picker and the browser can be tried for real."
-                + (page.CanOpenUrls ? "" : " Open needs Preferis Settings to run from inside Preferis.app."),
-            Form.Row("URL", input));
+            page.CanOpenUrls
+                ? L("Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so the picker and the browser can be tried for real.")
+                : L("Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so the picker and the browser can be tried for real. Open needs Preferis Settings to run from inside Preferis.app."),
+            Form.Row(L("URL"), input));
 
         View = Form.Page(intro, errorFooter, Result(page), Opened(page), Steps(page), History(page));
     }
@@ -49,13 +51,13 @@ internal sealed class TestPage : IPageView
         decision.Font = NSFont.SystemFontOfSize(13, NSFontWeight.Semibold)!;
         var routed = Ui.Wrapping("", ContentWidth, 11);
         var candidates = Ui.VStack(8);
-        var section = Form.Section("Result", Form.Wide(Ui.VStack(8, decision, routed, candidates)));
+        var section = Form.Section(L("Result"), Form.Wide(Ui.VStack(8, decision, routed, candidates)));
 
         _bindings.Observe(page, () =>
         {
             section.Hidden = !page.HasResult;
             decision.StringValue = page.Decision ?? "";
-            routed.StringValue = page.RoutedUrl is { } url ? $"URL after rewriting: {url}" : "";
+            routed.StringValue = page.RoutedUrl is { } url ? L("URL after rewriting: {0}", url) : "";
             routed.Hidden = page.RoutedUrl is null;
         }, nameof(TestPageViewModel.Decision), nameof(TestPageViewModel.RoutedUrl));
         _bindings.ObserveCollection(page.Candidates, () =>
@@ -82,7 +84,7 @@ internal sealed class TestPage : IPageView
         var output = Ui.Wrapping("", ContentWidth, 11);
         output.Font = NSFont.MonospacedSystemFont(11, NSFontWeight.Regular)!;
         output.Selectable = true;
-        var section = Form.Section("Opened", Form.Wide(Ui.VStack(6, result, output)));
+        var section = Form.Section(L("Opened"), Form.Wide(Ui.VStack(6, result, output)));
         _bindings.Observe(page, () =>
         {
             section.Hidden = page.OpenResult is null;
@@ -96,7 +98,7 @@ internal sealed class TestPage : IPageView
     private NSView Steps(TestPageViewModel page)
     {
         var rows = Ui.VStack(6);
-        var section = Form.Section("Steps", Form.Wide(rows));
+        var section = Form.Section(L("Steps"), Form.Wide(rows));
         _bindings.ObserveCollection(page.Trace, () =>
         {
             section.Hidden = page.Trace.Count == 0;
@@ -121,10 +123,10 @@ internal sealed class TestPage : IPageView
     private NSView History(TestPageViewModel page)
     {
         var rows = Ui.VStack(4);
-        var empty = Ui.Secondary("Nothing yet.", 12);
-        var clear = Ui.Button("Clear History");
+        var empty = Ui.Secondary(L("Nothing yet."), 12);
+        var clear = Ui.Button(L("Clear History"));
         _bindings.Command(clear, page.ClearHistoryCommand);
-        var header = Form.Header("Recently Opened", clear);
+        var header = Form.Header(L("Recently Opened"), clear);
         var box = Form.Group(Form.Wide(Ui.VStack(4, empty, rows)));
         var section = Ui.VStack(8, header, box);
         Ui.FillWidth(header, section);
@@ -144,7 +146,7 @@ internal sealed class TestPage : IPageView
                 url.ToolTip = entry.Url;
                 url.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
                 var rule = Ui.Secondary(entry.Rule);
-                var again = Ui.Button("Test");
+                var again = Ui.Button(L("Test"));
                 again.ControlSize = NSControlSize.Small;
                 var line = entry;
                 again.Activated += (_, _) => page.TestHistoryEntryCommand.Execute(line);

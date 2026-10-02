@@ -3,6 +3,7 @@ using AppKit;
 using Preferis.Core.Configuration;
 using Preferis.Settings.MacOS.Controls;
 using Preferis.Settings.ViewModels;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.MacOS.Pages;
 
@@ -48,9 +49,9 @@ internal sealed class RulesPage : IPageView
         _catchAll.Box.HeightAnchor.ConstraintEqualTo((nfloat)(RowHeight + 20)).Active = true;
         _rules.AddBelowRows(_catchAll.Box);
 
-        var add = Ui.IconButton("plus", "Add a rule below the selected one");
+        var add = Ui.IconButton("plus", L("Add a rule below the selected one"));
         _bindings.Command(add, page.AddRuleCommand);
-        var remove = Ui.IconButton("minus", "Delete the selected rule");
+        var remove = Ui.IconButton("minus", L("Delete the selected rule"));
         _bindings.Command(remove, page.DeleteRuleCommand);
         _rules.Bar.AddArrangedSubview(add);
         _rules.Bar.AddArrangedSubview(remove);
@@ -91,9 +92,9 @@ internal sealed class RulesPage : IPageView
     {
         var enabled = Ui.Checkbox("");
         enabled.State = rule.Enabled ? NSCellStateValue.On : NSCellStateValue.Off;
-        enabled.ToolTip = "Turn the rule on or off";
+        enabled.ToolTip = L("Turn the rule on or off");
         enabled.Activated += (_, _) => rule.Enabled = enabled.State == NSCellStateValue.On;
-        var name = Ui.Label(rule.Name.Length > 0 ? rule.Name : "(Unnamed)", color: rule.Enabled ? NSColor.Label : NSColor.TertiaryLabel);
+        var name = Ui.Label(rule.Name.Length > 0 ? rule.Name : L("(Unnamed)"), color: rule.Enabled ? NSColor.Label : NSColor.TertiaryLabel);
         var summary = Ui.Secondary(rule.Summary);
         summary.ToolTip = rule.Summary;
         var texts = Ui.VStack(1, name, summary);
@@ -114,7 +115,7 @@ internal sealed class RulesPage : IPageView
         icon.WidthAnchor.ConstraintEqualTo(18).Active = true;
         var summary = Ui.Secondary(catchAll.Summary);
         summary.ToolTip = catchAll.Summary;
-        var texts = Ui.VStack(1, Ui.Label("When No Rule Matches"), summary);
+        var texts = Ui.VStack(1, Ui.Label(L("When No Rule Matches")), summary);
         texts.SetHuggingPriority(1, NSLayoutConstraintOrientation.Horizontal);
         var row = Ui.HStack(6, icon, texts);
         row.EdgeInsets = new NSEdgeInsets(0, 0, 0, 6);
@@ -129,7 +130,7 @@ internal sealed class RulesPage : IPageView
     {
         var badge = NSImageView.FromImage(Images.Symbol("exclamationmark.circle.fill", 12)!);
         badge.ContentTintColor = NSColor.SystemRed;
-        badge.ToolTip = "This rule has problems";
+        badge.ToolTip = L("This rule has problems");
         badge.SetContentHuggingPriorityForOrientation(750, NSLayoutConstraintOrientation.Horizontal);
         return badge;
     }
@@ -140,15 +141,15 @@ internal sealed class RulesPage : IPageView
         more.AddItem("");
         more.LastItem!.Image = Images.Symbol("ellipsis", 12);
         more.Menu!.AutoEnablesItems = false;
-        var duplicate = new NSMenuItem("Duplicate", (_, _) => _page.DuplicateRuleCommand.Execute(null));
-        var up = new NSMenuItem("Move Up", (_, _) => _page.MoveRuleUpCommand.Execute(null));
-        var down = new NSMenuItem("Move Down", (_, _) => _page.MoveRuleDownCommand.Execute(null));
+        var duplicate = new NSMenuItem(L("Duplicate"), (_, _) => _page.DuplicateRuleCommand.Execute(null));
+        var up = new NSMenuItem(L("Move Up"), (_, _) => _page.MoveRuleUpCommand.Execute(null));
+        var down = new NSMenuItem(L("Move Down"), (_, _) => _page.MoveRuleDownCommand.Execute(null));
         more.Menu.AddItem(duplicate);
         more.Menu.AddItem(NSMenuItem.SeparatorItem);
         more.Menu.AddItem(up);
         more.Menu.AddItem(down);
         more.Menu.AddItem(NSMenuItem.SeparatorItem);
-        more.Menu.AddItem(new NSMenuItem("Import from CSV…", (_, _) => _page.ImportRulesCommand.Execute(null)));
+        more.Menu.AddItem(new NSMenuItem(L("Import from CSV…"), (_, _) => _page.ImportRulesCommand.Execute(null)));
         void Update()
         {
             duplicate.Enabled = _page.DuplicateRuleCommand.CanExecute(null);
@@ -184,7 +185,7 @@ internal sealed class RulesPage : IPageView
         {
             RuleViewModel rule => RuleEditor(rule, _editorBindings),
             CatchAllViewModel catchAll => CatchAllEditor(catchAll, _editorBindings),
-            _ => EditorParts.Empty("No Rule Selected", "Click + below the list to add a rule."),
+            _ => EditorParts.Empty(L("No Rule Selected"), L("Click + below the list to add a rule.")),
         };
         _editorHost.AddSubview(editor);
         Ui.Pin(editor, _editorHost);
@@ -196,72 +197,70 @@ internal sealed class RulesPage : IPageView
         var subtitle = Ui.Flowing("");
         bindings.Observe(rule, () =>
         {
-            title.StringValue = rule.Name.Length > 0 ? rule.Name : "(Unnamed)";
+            title.StringValue = rule.Name.Length > 0 ? rule.Name : L("(Unnamed)");
             subtitle.StringValue = rule.Summary;
         }, nameof(RuleViewModel.Name), nameof(RuleViewModel.Summary));
         var header = EditorParts.Header(EditorParts.SymbolBadge("arrow.triangle.branch", NSColor.SystemOrange, 32), title, subtitle, rule, nameof(RuleViewModel.Issues), () => rule.Issues, bindings);
 
-        var name = Ui.Field("Name");
+        var name = Ui.Field(L("Name"));
         bindings.Text(name, rule, nameof(RuleViewModel.Name), () => rule.Name, value => rule.Name = value);
         var enabled = Ui.Switch();
         bindings.Switch(enabled, rule, nameof(RuleViewModel.Enabled), () => rule.Enabled, value => rule.Enabled = value);
         var general = Form.Section(null,
-            Form.Row("Name", name, $"Id: {rule.Id}"),
-            Form.Row("Enabled", enabled, "Routing skips a rule that is turned off."));
+            Form.Row(L("Name"), name, L("ID: {0}", rule.Id)),
+            Form.Row(L("Enabled"), enabled, L("Routing skips a rule that is turned off.")));
 
         return Form.Page(
             header,
             general,
             ConditionSection(rule, bindings),
-            ActionsSection(rule.Actions, "the rewritten URL goes on to the next rule.", bindings));
+            ActionsSection(rule.Actions, L("Actions run from top to bottom. Every action but Rewrite ends the routing; when only rewrites ran, the rewritten URL goes on to the next rule."), bindings));
     }
 
     private static NSView CatchAllEditor(CatchAllViewModel catchAll, Bindings bindings)
     {
-        var title = Ui.Label("When No Rule Matches");
-        var subtitle = Ui.Flowing("The catch-all rule comes after every other rule and has no condition; only its actions can be changed.");
+        var title = Ui.Label(L("When No Rule Matches"));
+        var subtitle = Ui.Flowing(L("The catch-all rule comes after every other rule and has no condition; only its actions can be changed."));
         var header = EditorParts.Header(EditorParts.SymbolBadge("arrow.turn.down.right", NSColor.SystemGray, 32), title, subtitle, catchAll, nameof(CatchAllViewModel.Issues), () => catchAll.Issues, bindings);
-        return Form.Page(header, ActionsSection(catchAll.Actions, "the default profile opens the rewritten URL.", bindings));
+        return Form.Page(header, ActionsSection(catchAll.Actions, L("Actions run from top to bottom. Every action but Rewrite ends the routing; when only rewrites ran, the default profile opens the rewritten URL."), bindings));
     }
 
     private NSView ConditionSection(RuleViewModel rule, Bindings bindings)
     {
-        const string Footer = "Host is the host name alone (www.example.com) and never case-sensitive; URL is the whole URL. "
-            + "“matches” takes * for any characters and ? for one; “matches regex” takes a .NET regular expression. "
-            + "Hold ⌥ and click + to nest a group. A rule without a condition never matches.";
+        var footer = L("Host is the host name alone (www.example.com) and never case-sensitive; URL is the whole URL. “matches” takes * for any characters and ? for one; “matches regex” takes a .NET regular expression. Hold ⌥ and click + to nest a group. A rule without a condition never matches.");
         if (ConditionPredicates.ToEditor(rule.Model.Condition) is not { } tree)
         {
             // A condition type from a newer Preferis: kept as it is, and only replaceable as a whole.
             var json = Ui.Flowing(JsonSerializer.SerializeToElement(rule.Model, PreferisJsonContext.Default.Rule).GetProperty("condition").ToString(), 11, NSColor.Label);
             json.Font = NSFont.MonospacedSystemFont(11, NSFontWeight.Regular)!;
             json.Selectable = true;
-            var replace = Ui.Button("Replace with a New Condition", () =>
+            var replace = Ui.Button(L("Replace with a New Condition"), () =>
             {
                 rule.SetCondition(new HostCondition { Match = MatchKind.Exact, Pattern = "" });
                 ShowEditor();
             });
-            return Form.Section("If",
-                Form.Row("This condition comes from a newer version of Preferis", replace, "It cannot be edited here and is saved unchanged."),
+            return Form.Section(L("If"),
+                Form.Row(L("This condition comes from a newer version of Preferis"), replace, L("It cannot be edited here and is saved unchanged.")),
                 Form.Wide(json));
         }
 
         var editor = new ConditionEditor(tree, edited => rule.SetCondition(ConditionPredicates.FromEditor(edited)));
         bindings.Add(editor.Dispose);
-        return Form.Section("If", Footer, Form.Wide(editor.View));
+        return Form.Section(L("If"), footer, Form.Wide(editor.View));
     }
 
     /// <summary>
     /// "Then": one group per action, in the order they run, with "Add Action" beside the title.
     /// </summary>
-    /// <param name="afterRewrites">What happens when only rewrites ran (docs/Design.md §6.1).</param>
-    private static NSView ActionsSection(ActionListViewModel actions, string afterRewrites, Bindings bindings)
+    /// <param name="footer">How the actions run, ending with what happens when only rewrites ran (docs/Design.md §6.1).</param>
+    private static NSView ActionsSection(ActionListViewModel actions, string footer, Bindings bindings)
     {
-        var add = Ui.PullDown("Add Action", ActionListViewModel.Kinds.Select(k => (k.Title, (Action)(() => actions.AddCommand.Execute(k.Value)))), bordered: true);
+        var add = Ui.PullDown(L("Add Action"), ActionListViewModel.Kinds.Select(k => (k.Title, (Action)(() => actions.AddCommand.Execute(k.Value)))), bordered: true);
         var groups = Ui.VStack(Form.GroupSpacing);
         var section = Ui.VStack(8,
-            Form.Header("Then", add),
+            Form.Header(L("Then"), add),
             groups,
-            Form.Footer("Actions run from top to bottom. Every action but Rewrite ends the routing; when only rewrites ran, " + afterRewrites));
+            Form.Footer(footer));
         foreach (var view in section.ArrangedSubviews)
         {
             Ui.FillWidth(view, section);
@@ -278,7 +277,7 @@ internal sealed class RulesPage : IPageView
                 view.RemoveFromSuperview();
             }
             var views = actions.Items.Count == 0
-                ? [Form.Group(Form.Row(Ui.Label("No actions yet: a rule needs at least one.", color: NSColor.SystemRed), null))]
+                ? [Form.Group(Form.Row(Ui.Label(L("No actions yet: a rule needs at least one."), color: NSColor.SystemRed), null))]
                 : actions.Items.Select(action => ActionGroup(action, itemBindings)).ToArray();
             foreach (var view in views)
             {
@@ -292,16 +291,16 @@ internal sealed class RulesPage : IPageView
     private static NSView ActionGroup(ActionViewModel action, Bindings bindings)
     {
         var buttons = Ui.HStack(2,
-            SmallButton("chevron.up", "Move up", action.MoveUpCommand, bindings),
-            SmallButton("chevron.down", "Move down", action.MoveDownCommand, bindings),
-            SmallButton("minus.circle", "Remove this action", action.RemoveCommand, bindings));
+            SmallButton("chevron.up", L("Move up"), action.MoveUpCommand, bindings),
+            SmallButton("chevron.down", L("Move down"), action.MoveDownCommand, bindings),
+            SmallButton("minus.circle", L("Remove this action"), action.RemoveCommand, bindings));
         var title = $"{action.Number}  {action.Title}";
         return action switch
         {
             OpenActionViewModel open => Form.Group(Form.Row(title, buttons), OpenRow(open, bindings)),
             RewriteActionViewModel rewrite => RewriteGroup(Form.Row(title, buttons), rewrite, bindings),
             SimpleActionViewModel simple => Form.Group(Form.Row(title, buttons, simple.Description)),
-            UnknownActionViewModel unknown => Form.Group(Form.Row(title, buttons, "From a newer version of Preferis; saved unchanged."), Form.Wide(Json(unknown.Json))),
+            UnknownActionViewModel unknown => Form.Group(Form.Row(title, buttons, L("From a newer version of Preferis; saved unchanged.")), Form.Wide(Json(unknown.Json))),
             _ => Form.Group(Form.Row(title, buttons)),
         };
     }
@@ -326,24 +325,24 @@ internal sealed class RulesPage : IPageView
             if (toggle.IsMissing)
             {
                 check.ContentTintColor = NSColor.SystemRed;
-                check.ToolTip = "No profile has this id any more; uncheck it to remove it.";
+                check.ToolTip = L("No profile has this id any more; uncheck it to remove it.");
             }
             bindings.Check(check, toggle, nameof(ProfileToggleViewModel.IsSelected), () => toggle.IsSelected, value => toggle.IsSelected = value);
             checks.AddArrangedSubview(check);
         }
         if (open.Profiles.Count == 0)
         {
-            checks.AddArrangedSubview(Ui.Secondary("Add profiles on the Profiles page.", 13));
+            checks.AddArrangedSubview(Ui.Secondary(L("Add profiles on the Profiles page."), 13));
         }
         var note = Ui.Flowing("");
         // Every check and uncheck raises UsesDefaultProfile.
         bindings.Observe(open, () => note.StringValue = open.Profiles.Count(p => p.IsSelected) switch
         {
-            0 => "None checked: the default profile opens the URL.",
-            1 => "The checked profile opens the URL.",
-            _ => "The picker offers the checked profiles, in the order of the Profiles page.",
+            0 => L("None checked: the default profile opens the URL."),
+            1 => L("The checked profile opens the URL."),
+            _ => L("The picker offers the checked profiles, in the order of the Profiles page."),
         }, nameof(OpenActionViewModel.UsesDefaultProfile));
-        return Form.Row(Ui.Label("Profiles"), checks, note);
+        return Form.Row(Ui.Label(L("Profiles")), checks, note);
     }
 
     private static NSView RewriteGroup(NSView header, RewriteActionViewModel rewrite, Bindings bindings)
@@ -361,10 +360,10 @@ internal sealed class RulesPage : IPageView
         var parameter = Ui.Field("url", monospaced: true);
         bindings.Text(parameter, rewrite, nameof(RewriteActionViewModel.Parameter), () => rewrite.Parameter, value => rewrite.Parameter = value);
 
-        var patternRow = Form.Row(Ui.Label("Pattern"), pattern, error);
-        var replacementRow = Form.Row("Replace with", replacement, "Applied to the whole URL, with a lower-case scheme and host and no default port. $1, $2… insert the groups.");
-        var parameterRow = Form.Row("Parameter", parameter, "Its value becomes the URL, as with links wrapped by mail and chat services.");
-        var group = Form.Group(header, Form.Row("Method", mode), patternRow, replacementRow, parameterRow);
+        var patternRow = Form.Row(Ui.Label(L("Pattern")), pattern, error);
+        var replacementRow = Form.Row(L("Replace with"), replacement, L("Applied to the whole URL, with a lower-case scheme and host and no default port. $1, $2… insert the groups."));
+        var parameterRow = Form.Row(L("Parameter"), parameter, L("Its value becomes the URL, as with links wrapped by mail and chat services."));
+        var group = Form.Group(header, Form.Row(L("Method"), mode), patternRow, replacementRow, parameterRow);
         bindings.Observe(rewrite, () =>
         {
             error.StringValue = rewrite.PatternError ?? "";

@@ -1,8 +1,10 @@
 using Preferis.Core.Browsers;
 using Preferis.Core.Configuration;
+using Preferis.Core.Localization;
 using Preferis.Core.Picker;
 using Preferis.Core.Profiles;
 using Preferis.Core.Routing;
+using static Preferis.Core.Localization.CoreText;
 
 namespace Preferis.Core.Hosting;
 
@@ -24,7 +26,18 @@ public sealed class RoutingService
 
     public HandleResult Handle(RoutingUrl url)
     {
+        // The language of the picker and of the messages (docs/Design.md §9.4) is config.json's; while it loads, and when it
+        // cannot be read, the system's rather than that of the previous URL.
+        var systemLanguages = _services.SystemLanguages;
+        if (systemLanguages is not null)
+        {
+            UiLanguages.SetLazily(() => UiLanguages.Resolve(null, systemLanguages));
+        }
         var loaded = _services.Config.Load();
+        if (systemLanguages is not null && loaded.Config.Settings?.Language is { } setting)
+        {
+            UiLanguages.SetLazily(() => UiLanguages.Resolve(setting, systemLanguages));
+        }
         if (loaded.Error is not null)
         {
             Log(LogLevel.Warning, loaded.Error);
@@ -51,15 +64,15 @@ public sealed class RoutingService
         switch (decision)
         {
             case RoutingDecision.Open { ProfileIds.Count: 0 }:
-                return OfferDetectedBrowsers(context, configError ?? "No profiles are configured yet.");
+                return OfferDetectedBrowsers(context, configError ?? L("No profiles are configured yet."));
             case RoutingDecision.Open { ProfileIds.Count: 1 } single:
                 return LaunchProfile(context, single.ProfileIds[0]);
             case RoutingDecision.Open several:
                 return ShowProfilePicker(context, several.ProfileIds, several.RuleId, message: null, allowFallbackPicker: true)
-                    ?? Fallback(context, "The picker could not be shown.", failedProfileId: null, allowPicker: false);
+                    ?? Fallback(context, L("The picker could not be shown."), failedProfileId: null, allowPicker: false);
             case RoutingDecision.System when _services.System.IsSelfDefaultHandler(url.Uri.Scheme):
                 Log(LogLevel.Warning, "The system default handler is Preferis itself; not delegating.");
-                return Fallback(context, "The system default handler is Preferis itself.", failedProfileId: null, allowPicker: true);
+                return Fallback(context, L("The system default handler is Preferis itself."), failedProfileId: null, allowPicker: true);
             case RoutingDecision.System:
                 _services.System.OpenWithSystemDefault(url);
                 return new HandleResult(HandleOutcome.Delegated, null, "Handed to the system default handler.");
@@ -69,7 +82,7 @@ public sealed class RoutingService
                 Log(LogLevel.Error, $"Routing failed: {failed.Reason}");
                 return Fallback(context, failed.Reason, failedProfileId: null, allowPicker: true);
             default:
-                return Fallback(context, $"Unexpected decision {decision}.", failedProfileId: null, allowPicker: true);
+                return Fallback(context, L("Unexpected decision {0}.", decision), failedProfileId: null, allowPicker: true);
         }
     }
 
@@ -88,14 +101,14 @@ public sealed class RoutingService
                 }
                 // A launch failure goes straight to the picker (docs/Design.md §8 step 3): the user should see
                 // which profile failed and choose, rather than silently landing in the default browser.
-                var launchFailure = $"Could not start {Describe(context, resolved.ProfileId)}: {error}";
+                var launchFailure = L("Could not start {0}: {1}", Describe(context, resolved.ProfileId), error);
                 return ShowProfilePicker(context, context.Config.Profiles.Select(p => p.Id).ToList(), ruleId: null, message: launchFailure, allowFallbackPicker: false)
                     ?? Fallback(context, launchFailure, resolved.ProfileId, allowPicker: false);
             case ResolveResult.Unresolved unresolved:
                 Log(LogLevel.Warning, unresolved.Reason);
                 return Fallback(context, unresolved.Reason, profileId, allowPicker: true);
             default:
-                return Fallback(context, "Unexpected resolution result.", profileId, allowPicker: true);
+                return Fallback(context, L("Unexpected resolution result."), profileId, allowPicker: true);
         }
     }
 
@@ -130,7 +143,7 @@ public sealed class RoutingService
             return new HandleResult(HandleOutcome.Delegated, null, $"Handed to the system default handler after: {reason}");
         }
 
-        _services.Notifier.ShowError("Preferis", $"The URL could not be opened: {reason}", context.Url);
+        _services.Notifier.ShowError("Preferis", L("The URL could not be opened: {0}", reason), context.Url);
         return new HandleResult(HandleOutcome.Failed, null, reason);
     }
 
@@ -162,12 +175,12 @@ public sealed class RoutingService
             case ResolveResult.Resolved resolved when TryLaunch(context, resolved.Plan, resolved.ProfileId, out _):
                 return Launched(context, resolved.ProfileId);
             case ResolveResult.Resolved resolved:
-                return Fallback(context, $"Could not start {Describe(context, resolved.ProfileId)}.", resolved.ProfileId, allowFallbackPicker);
+                return Fallback(context, L("Could not start {0}.", Describe(context, resolved.ProfileId)), resolved.ProfileId, allowFallbackPicker);
             case ResolveResult.Unresolved unresolved:
                 Log(LogLevel.Warning, unresolved.Reason);
                 return Fallback(context, unresolved.Reason, chosen, allowFallbackPicker);
             default:
-                return Fallback(context, "Unexpected resolution result.", chosen, allowFallbackPicker);
+                return Fallback(context, L("Unexpected resolution result."), chosen, allowFallbackPicker);
         }
     }
 
@@ -211,6 +224,7 @@ public sealed class RoutingService
                     AutoSelectSeconds = picker?.AutoSelectSeconds ?? 0,
                     RememberChoiceDefault = false,
                     AllowRemember = false,
+                    Language = UiLanguages.Current.Code(),
                 },
                 Message = message,
             };
@@ -227,7 +241,7 @@ public sealed class RoutingService
                 {
                     return Launched(context, chosen);
                 }
-                message = $"Could not start '{browser.DisplayName}': {error}";
+                message = L("Could not start '{0}': {1}", browser.DisplayName, error);
             }
         }
         else
@@ -241,7 +255,7 @@ public sealed class RoutingService
             return new HandleResult(HandleOutcome.Delegated, null, $"Handed to the system default handler after: {message}");
         }
 
-        _services.Notifier.ShowError("Preferis", $"The URL could not be opened: {message}", context.Url);
+        _services.Notifier.ShowError("Preferis", L("The URL could not be opened: {0}", message), context.Url);
         return new HandleResult(HandleOutcome.Failed, null, message);
     }
 

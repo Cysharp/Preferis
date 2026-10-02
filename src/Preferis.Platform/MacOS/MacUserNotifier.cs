@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.Versioning;
 using Preferis.Core.Hosting;
 using Preferis.Core.Routing;
+using static Preferis.Core.Localization.CoreText;
 
 namespace Preferis.Platform.MacOS;
 
@@ -15,8 +16,9 @@ public sealed class MacUserNotifier : IUserNotifier
     public void ShowError(string title, string message, RoutingUrl? url)
     {
         var text = url is null ? message : $"{message}\n\n{url.AbsoluteUri}";
-        var buttons = url is null ? "{\"OK\"}" : "{\"Copy URL\", \"OK\"}";
-        var script = $"display dialog {Quote(text)} with title {Quote(title)} buttons {buttons} default button \"OK\" with icon stop";
+        var (copy, ok) = (L("Copy URL"), L("OK"));
+        var buttons = url is null ? $"{{{Quote(ok)}}}" : $"{{{Quote(copy)}, {Quote(ok)}}}";
+        var script = $"display dialog {Quote(text)} with title {Quote(title)} buttons {buttons} default button {Quote(ok)} with icon stop";
 
         var info = new ProcessStartInfo("/usr/bin/osascript") { UseShellExecute = false, RedirectStandardOutput = true };
         info.ArgumentList.Add("-e");
@@ -26,7 +28,7 @@ public sealed class MacUserNotifier : IUserNotifier
             using var process = Process.Start(info);
             var output = process?.StandardOutput.ReadToEnd() ?? "";
             process?.WaitForExit(120_000);
-            if (url is not null && output.Contains("Copy URL", StringComparison.Ordinal))
+            if (url is not null && output.Contains(copy, StringComparison.Ordinal))
             {
                 CopyToClipboard(url.AbsoluteUri);
             }

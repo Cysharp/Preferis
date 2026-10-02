@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using AppKit;
+using Preferis.Core.Localization;
 using Preferis.Core.Picker;
+using Preferis.Platform;
 
 namespace Preferis.Picker.MacOS;
 
@@ -40,6 +42,8 @@ internal static class Program
             Console.Error.WriteLine("The request is not a valid picker request.");
             return 1;
         }
+
+        UiLanguages.Current = PickerMessages.LanguageOf(request, SystemLanguages.Preferred);
 
         NSApplication.Init();
         Mark("appkit");

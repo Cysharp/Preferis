@@ -21,6 +21,7 @@ internal static unsafe partial class Native
     public const int AsfwAny = -1;
     public const int SmCxIcon = 11;
     public const int DibRgbColors = 0;
+    public const uint MuiLanguageName = 0x8;
 
     [LibraryImport("shlwapi.dll", EntryPoint = "AssocQueryStringW", StringMarshalling = StringMarshalling.Utf16)]
     public static partial int AssocQueryString(int flags, int str, string assoc, string? extra, char* output, ref uint length);
@@ -110,6 +111,10 @@ internal static unsafe partial class Native
 
     [LibraryImport("kernel32.dll")]
     public static partial IntPtr GlobalFree(IntPtr memory);
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetUserPreferredUILanguages(uint flags, out uint count, char* languages, ref uint length);
 
     [StructLayout(LayoutKind.Sequential)]
     public struct IconInfo

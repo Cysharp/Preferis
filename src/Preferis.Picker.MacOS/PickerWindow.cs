@@ -5,6 +5,7 @@ using CoreGraphics;
 using Foundation;
 using ObjCRuntime;
 using Preferis.Core.Picker;
+using static Preferis.Core.Localization.CoreText;
 
 namespace Preferis.Picker.MacOS;
 
@@ -57,7 +58,7 @@ internal sealed class PickerWindow
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
 
-        _copyButton = IconButton("doc.on.doc", "Copy URL", CopyUrl);
+        _copyButton = IconButton("doc.on.doc", L("Copy URL"), CopyUrl);
         AddFullWidth(root, BuildHeader(request.Url, _copyButton));
         if (request.Message is { Length: > 0 } message)
         {
@@ -96,11 +97,11 @@ internal sealed class PickerWindow
         scroll.WidthAnchor.ConstraintEqualTo(root.WidthAnchor, 1, (nfloat)(-2 * (Margin - 8))).Active = true;
         root.SetCustomSpacing(4, root.ArrangedSubviews[^2]);
 
-        _openButton = NSButton.CreateButton("Open", () => Answer(_session.Confirm()));
+        _openButton = NSButton.CreateButton(L("Open"), () => Answer(_session.Confirm()));
         _openButton.KeyEquivalent = "\r";
         _openButton.ControlSize = NSControlSize.Large;
         _openButton.Enabled = request.Candidates.Count > 0;
-        var cancel = NSButton.CreateButton("Cancel", () => Answer(_session.Cancel()));
+        var cancel = NSButton.CreateButton(L("Cancel"), () => Answer(_session.Cancel()));
         cancel.KeyEquivalent = "\u001b";
         cancel.ControlSize = NSControlSize.Large;
 
@@ -108,7 +109,7 @@ internal sealed class PickerWindow
         if (_session.CanRemember)
         {
             NSButton? remember = null;
-            remember = NSButton.CreateCheckbox($"Always open {PickerDisplay.SplitUrl(request.Url).Host} with this choice", () =>
+            remember = NSButton.CreateCheckbox(L("Always open {0} with this choice", PickerDisplay.SplitUrl(request.Url).Host), () =>
                 _session.Remember = remember!.State == NSCellStateValue.On);
             remember.State = _session.Remember ? NSCellStateValue.On : NSCellStateValue.Off;
             remember.LineBreakMode = NSLineBreakMode.TruncatingMiddle;
@@ -246,8 +247,8 @@ internal sealed class PickerWindow
 
     private void UpdateOpenButton()
         => _openButton.Title = _session.AutoSelectRemaining is { } remaining
-            ? $"Open ({Math.Ceiling(remaining.TotalSeconds).ToString(CultureInfo.InvariantCulture)})"
-            : "Open";
+            ? L("Open ({0})", Math.Ceiling(remaining.TotalSeconds))
+            : L("Open");
 
     private void OnSelectionChanged()
     {

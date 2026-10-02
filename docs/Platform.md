@@ -253,6 +253,9 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
   ピッカーは表示時に `SetForegroundWindow` を呼ぶ。前面に出たかどうかを trace に書く (`shown` / `shown (not in front)`)。
   Router 自身が権利を持たない起動 (バックグラウンドのターミナル) では前面に出ない (Design.md §12 スパイク 6)。
 - 表示時間は目標内 (約 250 ms、§5) のため、`TaskDialogIndirect` による Win32 実装には切り替えない。
+- 表示言語はリクエストの `options.language` (Design.md §9.4)。無ければ `GetUserPreferredUILanguages` で Windows の言語に
+  従う。日本語のときはルート要素の `Language` を `ja-JP` にする: XAML は CJK の文字のフォールバック先のフォントを要素の言語で
+  選ぶため、英語の Windows では漢字が中国語のフォントで描かれることがある。
 - `PREFERIS_TRACE=1` で起動からの経過時間 (main, winui, built, loaded, shown) を標準エラーに書く。
   `PREFERIS_PICKER_SNAPSHOT=<png>` で表示 0.5 秒後の内容を PNG に書き出す (`RenderTargetBitmap`)。
 
@@ -288,6 +291,10 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
   非パッケージでも動く)、確認は `ContentDialog` (ボタン 3 つまで。最後のボタンが閉じるボタンで Esc に当たる)。
 - 自動保存は `DispatcherQueueTimer` (0.6 秒)。ウィンドウを閉じる時は `AppWindow.Closing` で待っている編集を書き込み、
   書けない時だけ尋ねる。アクティブになったら外部の変更を確かめる。
+- 表示言語は起動時、ViewModel を作る前に `config.json` から決める (`SettingsConfigLoader.UseConfiguredLanguage`、
+  Design.md §9.4)。ルートの `Language` はピッカーと同じく日本語のとき `ja-JP`。ファイル選択ダイアログ、テキストボックスの
+  メニューなど WinUI と OS が描く文字列は Windows の言語に従う (自己完結の出力に WinUI の各言語の `.mui` が入っている)。
+  ウィンドウのタイトル `Preferis Settings` は 2 つ目の起動が探す名前なので訳さない。
 - 単一インスタンス: 名前付きミューテックス `Local\Preferis.Settings` で 2 つ目の起動を検出し、起動中のウィンドウ
   (クラス `WinUIDesktopWin32WindowClass`、タイトル `Preferis Settings`) を前面に出して終了する。Router の `--settings` と
   引数なしの起動は、新しいプロセスが前に出られるよう `AllowSetForegroundWindow(ASFW_ANY)` を呼んでから起動する。
@@ -296,7 +303,9 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
   大きさは通常の起動と同じ既定サイズ (DIP)。`PREFERIS_SETTINGS_SNAPSHOT_WIDTH=<DIP>` で幅を変えて狭いウィンドウを確かめられる
   (最小幅は 900)。長いプロファイルの編集画面は末尾までスクロールした状態も書き出す。`PREFERIS_SETTINGS_SNAPSHOT_URL`、
   `PREFERIS_SETTINGS_SNAPSHOT_APPEARANCE=dark`、`PREFERIS_SETTINGS_SNAPSHOT_CONFIG` は macOS と同じ。チェックボックスの
-  チェックは `RenderTargetBitmap` では「−」に写る (実際の状態は UI Automation で確認した)。
+  チェックは `RenderTargetBitmap` では「−」に写る (実際の状態は UI Automation で確認した)。PNG の名前はページ (`general`、
+  `profiles` など) で表示言語によらない。日本語の画面は `PREFERIS_SETTINGS_SNAPSHOT_CONFIG` の `config.json` に
+  `"language": "ja"` を書いて写す (macOS も同じ)。
 
 ## 3. macOS
 
@@ -505,6 +514,8 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 - 数字キー 1〜9 は `NSEvent` のローカルモニターで拾う。マウス移動・スクロール・キー入力は `PickerSession.NoteActivity`
   として自動選択のカウントをやり直す。`DidFinishLaunching` で例外が起きた場合は AppKit に握りつぶされて見えないプロセスが
   残るため、標準エラーに書いて終了コード 1 で終える (Router がフォールバックする)。
+- 表示言語はリクエストの `options.language` (無ければ `NSLocale.preferredLanguages`。Design.md §9.4)。`Info.plist` の
+  `CFBundleLocalizations` に en と ja を宣言し、AppKit 自身の文字列も日本語の macOS では日本語にする。
 - `PREFERIS_TRACE=1` で起動からの経過時間 (main, appkit, shown) を標準エラーに書く。Router はこれを trace ログに転送する。
   `PREFERIS_PICKER_SNAPSHOT=<png>` で表示 0.5 秒後のパネル内容を PNG に書き出す (画面収録の権限なしで見た目を確認するための開発用)。
 - Router は `Contents/Helpers/Preferis Picker.app/Contents/MacOS/Preferis Picker` を直接 `posix_spawn` し、
@@ -554,6 +565,13 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
   1 回行い、プロファイル画面の「+」メニューの「Detect Browsers Again」でやり直す。フォルダー・ファイルの選択は `NSOpenPanel`、
   確認は `NSAlert` (どちらもモーダル)。
 - macOS 27 で Chromium のプロファイルデータが読めない場合 (§3.4) は、検出一覧に「フルディスクアクセスを与える」旨を表示する。
+- 表示言語は起動時に `config.json` から決める (§2.8 と同じ)。メニューバーも自前で作るため項目名を訳す (Apple の日本語の
+  用語に合わせる: 「… を非表示」「ほかを非表示」「しまう」など)。`NSPredicateEditor` の複合条件の行
+  (All / Any / None of the following are true) と `NSOpenPanel` の既定の部分は AppKit の文字列で、`Info.plist` の
+  `CFBundleLocalizations` (en, ja) のうち macOS の言語に合うもので表示される。Preferis の言語の設定には従わないため、英語の
+  macOS で日本語を選んでもこれらは英語のまま。比較の行の対象と演算子は項目名を書き換えているので Preferis の言語になる。
+  **未確認**: Windows で書いたため、macOS でのビルドと表示 (NSPredicateEditor の複合条件の行が日本語になるかを含む) を
+  確かめる必要がある。
 - Launch Services 経由で開いた場合 `HOME` などの環境変数はシェルのものではない。開発中に別の設定で試すときは、
   実行ファイルを直接 `HOME=<dir>` 付きで起動する。
 - `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で各ページ (とルール・プロファイル画面のいくつかの状態) を PNG に書き出して終了する。

@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Preferis.Core.Configuration;
 using Preferis.Settings.Services;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.ViewModels;
 
@@ -114,13 +115,13 @@ public sealed partial class SettingsViewModel : ObservableObject
             var parts = new List<string>();
             if (errors > 0)
             {
-                parts.Add(errors == 1 ? "1 error" : $"{errors} errors");
+                parts.Add(errors == 1 ? L("1 error") : L("{0} errors", errors));
             }
             if (warnings > 0)
             {
-                parts.Add(warnings == 1 ? "1 warning" : $"{warnings} warnings");
+                parts.Add(warnings == 1 ? L("1 warning") : L("{0} warnings", warnings));
             }
-            return string.Join(", ", parts);
+            return string.Join(L(", "), parts);
         }
     }
 
@@ -189,18 +190,18 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
         var held = HasExternalChanges || IsHoldingEditsForUnreadableFile;
         var (title, message) = HasExternalChanges
-            ? ("config.json was changed elsewhere while you were editing.", "Keep your changes to save them over it, or discard them to leave the file as it is.")
+            ? (L("config.json was changed elsewhere while you were editing."), L("Keep your changes to save them over it, or discard them to leave the file as it is."))
             : IsHoldingEditsForUnreadableFile
-                ? ("config.json could not be read.", "Keep your changes to replace the file with them, or discard them to leave the file as it is.")
-                : ("Your changes could not be saved.", StatusMessage ?? "");
-        string[] buttons = held ? ["Keep Mine", "Discard My Changes", "Cancel"] : ["Discard My Changes", "Cancel"];
+                ? (L("config.json could not be read."), L("Keep your changes to replace the file with them, or discard them to leave the file as it is."))
+                : (L("Your changes could not be saved."), StatusMessage ?? "");
+        // Cancel comes last and Discard My Changes right before it, with Keep Mine first when there is a choice.
+        string[] buttons = held ? [L("Keep Mine"), L("Discard My Changes"), L("Cancel")] : [L("Discard My Changes"), L("Cancel")];
         var answer = await Dialogs.AskAsync(title, message, buttons);
-        return (answer >= 0 && answer < buttons.Length ? buttons[answer] : "Cancel") switch
+        if (held && answer == 0)
         {
-            "Keep Mine" => SaveCore(force: true),
-            "Discard My Changes" => true,
-            _ => false,
-        };
+            return SaveCore(force: true);
+        }
+        return answer == buttons.Length - 2;
     }
 
     /// <summary>Detects the installed browsers again (after installing one) and rebuilds the pages that show them.</summary>
@@ -282,7 +283,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            StatusMessage = $"Could not save: {ex.Message}";
+            StatusMessage = L("Could not save: {0}", ex.Message);
             return false;
         }
 

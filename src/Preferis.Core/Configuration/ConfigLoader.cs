@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Preferis.Core.Hosting;
 using Preferis.Core.Profiles;
+using static Preferis.Core.Localization.CoreText;
 
 namespace Preferis.Core.Configuration;
 
@@ -65,7 +66,7 @@ public sealed class ConfigLoader : IConfigStore
             }
             catch (Exception ex) when (ex is JsonException or IOException)
             {
-                errors.Add($"local.json could not be read ({_paths.LocalConfigPath}): {ex.Message}");
+                errors.Add(L("local.json could not be read ({0}): {1}", _paths.LocalConfigPath, ex.Message));
             }
         }
 
@@ -84,7 +85,7 @@ public sealed class ConfigLoader : IConfigStore
             }
             catch (Exception ex) when (ex is JsonException or IOException)
             {
-                errors.Add($"config.json could not be read ({configPath}): {ex.Message}");
+                errors.Add(L("config.json could not be read ({0}): {1}", configPath, ex.Message));
                 config = PreferisConfig.CreateDefault();
             }
         }
@@ -110,7 +111,7 @@ public sealed class ConfigLoader : IConfigStore
         var samePlace = string.Equals(target, current, StringComparison.Ordinal);
         if (!samePlace && !overwrite && File.Exists(target))
         {
-            throw new IOException($"A file already exists at {target}.");
+            throw new IOException(L("A file already exists at {0}.", target));
         }
 
         // Write the new file before switching over, so that a failure leaves the old configuration in effect.
@@ -136,7 +137,7 @@ public sealed class ConfigLoader : IConfigStore
         var target = Path.GetFullPath(path);
         if (!File.Exists(target))
         {
-            throw new FileNotFoundException($"There is no file at {target}.", target);
+            throw new FileNotFoundException(L("There is no file at {0}.", target), target);
         }
         try
         {
@@ -144,7 +145,7 @@ public sealed class ConfigLoader : IConfigStore
         }
         catch (JsonException ex)
         {
-            throw new InvalidDataException($"{target} is not a Preferis configuration: {ex.Message}", ex);
+            throw new InvalidDataException(L("{0} is not a Preferis configuration: {1}", target, ex.Message), ex);
         }
         PointLocalConfigAt(target);
     }

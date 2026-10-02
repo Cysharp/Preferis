@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Preferis.Settings.ViewModels;
 using Preferis.Settings.Windows.Controls;
+using static Preferis.Settings.Localization.SettingsText;
 using VirtualKey = global::Windows.System.VirtualKey;
 
 namespace Preferis.Settings.Windows.Pages;
@@ -23,14 +24,14 @@ internal sealed class ProfilesPage : IPageView
         _page = page;
         _list = new ListPane<ProfileViewModel>(page.Profiles, Row, profile => page.SelectedProfile = profile, page.MoveProfile);
 
-        var add = Ui.IconButton(Ui.Glyphs.Add, "Add a profile");
+        var add = Ui.IconButton(Ui.Glyphs.Add, L("Add a profile"));
         var addMenu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
         // Built when it opens: the detected browsers change with "Detect Browsers Again".
         addMenu.Opening += (_, _) => FillAddMenu(addMenu);
         add.Flyout = addMenu;
-        var remove = Ui.IconButton(Ui.Glyphs.Remove, "Delete the selected profile");
+        var remove = Ui.IconButton(Ui.Glyphs.Remove, L("Delete the selected profile"));
         _bindings.Command(remove, page.DeleteCommand);
-        var more = Ui.IconButton(Ui.Glyphs.More, "More");
+        var more = Ui.IconButton(Ui.Glyphs.More, L("More"));
         more.Flyout = MoreMenu();
         _list.Bar.Children.Add(add);
         _list.Bar.Children.Add(remove);
@@ -79,19 +80,19 @@ internal sealed class ProfilesPage : IPageView
         var summary = Ui.Secondary("");
         bindings.Observe(profile, () =>
         {
-            name.Text = profile.Name.Length > 0 ? profile.Name : "(Unnamed)";
+            name.Text = profile.Name.Length > 0 ? profile.Name : L("(Unnamed)");
             summary.Text = profile.Summary;
         }, nameof(ProfileViewModel.Name), nameof(ProfileViewModel.Summary));
 
         var problem = Ui.Glyph(Ui.Glyphs.Error, 14, Ui.Brush("SystemFillColorCriticalBrush"));
-        ToolTipService.SetToolTip(problem, "This profile has problems");
+        ToolTipService.SetToolTip(problem, L("This profile has problems"));
         bindings.Visible(problem, profile, () => profile.HasErrors, nameof(ProfileViewModel.HasErrors));
         // Warnings only, typically a browser that this PC does not have: it still opens something.
         var warning = Ui.Glyph(Ui.Glyphs.Warning, 14, Ui.Brush("SystemFillColorCautionBrush"));
-        ToolTipService.SetToolTip(warning, "This profile cannot be used as configured on this computer");
+        ToolTipService.SetToolTip(warning, L("This profile cannot be used as configured on this computer"));
         bindings.Visible(warning, profile, () => profile.HasIssues && !profile.HasErrors, nameof(ProfileViewModel.Issues));
         var star = Ui.Glyph(Ui.Glyphs.Star, 14, Ui.Brush("SystemFillColorCautionBrush"));
-        ToolTipService.SetToolTip(star, "Default profile");
+        ToolTipService.SetToolTip(star, L("Default profile"));
         bindings.Visible(star, profile, () => profile.IsDefault, nameof(ProfileViewModel.IsDefault));
 
         return Ui.Columns(12, (icon, Ui.Auto), (Ui.VStack(0, name, summary), Ui.Star), (Ui.HStack(6, problem, warning, star), Ui.Auto));
@@ -101,7 +102,7 @@ internal sealed class ProfilesPage : IPageView
     private void FillAddMenu(MenuFlyout menu)
     {
         menu.Items.Clear();
-        menu.Items.Add(new MenuFlyoutItem { Text = "Browsers on This PC", IsEnabled = false });
+        menu.Items.Add(new MenuFlyoutItem { Text = L("Browsers on This PC"), IsEnabled = false });
         foreach (var browser in _page.DetectedBrowsers)
         {
             var icon = Images.FromPng(browser.IconPng);
@@ -118,7 +119,7 @@ internal sealed class ProfilesPage : IPageView
             }
             foreach (var item in browser.Items)
             {
-                var title = item.Profile is null ? $"{item.Title} (no specific profile)" : item.Subtitle is { } subtitle ? $"{item.Title} — {subtitle}" : item.Title;
+                var title = item.Profile is null ? L("{0} (no specific profile)", item.Title) : item.Subtitle is { } subtitle ? $"{item.Title} — {subtitle}" : item.Title;
                 sub.Items.Add(DetectedItem(item, title, Images.FromPng(item.Profile is null ? browser.IconPng : item.AvatarPng ?? browser.IconPng)));
             }
             if (browser.Note is { } note)
@@ -130,13 +131,13 @@ internal sealed class ProfilesPage : IPageView
         }
         if (_page.DetectedBrowsers.Count == 0)
         {
-            menu.Items.Add(new MenuFlyoutItem { Text = "No browser was found", IsEnabled = false });
+            menu.Items.Add(new MenuFlyoutItem { Text = L("No browser was found"), IsEnabled = false });
         }
         menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(Bindings.MenuItem("Add All Browsers and Profiles", _page.AddAllDetectedCommand));
-        menu.Items.Add(Bindings.MenuItem("Command…", _page.AddCommandProfileCommand));
+        menu.Items.Add(Bindings.MenuItem(L("Add All Browsers and Profiles"), _page.AddAllDetectedCommand));
+        menu.Items.Add(Bindings.MenuItem(L("Command…"), _page.AddCommandProfileCommand));
         menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(Bindings.MenuItem("Detect Browsers Again", _page.RefreshBrowsersCommand));
+        menu.Items.Add(Bindings.MenuItem(L("Detect Browsers Again"), _page.RefreshBrowsersCommand));
     }
 
     private MenuFlyoutItem DetectedItem(DetectedItemViewModel item, string title, Microsoft.UI.Xaml.Media.ImageSource? icon)
@@ -152,13 +153,13 @@ internal sealed class ProfilesPage : IPageView
     private MenuFlyout MoreMenu()
     {
         var menu = new MenuFlyout();
-        menu.Items.Add(Bindings.MenuItem("Duplicate", _page.DuplicateCommand));
-        var makeDefault = Bindings.MenuItem("Make Default Profile", _page.SetDefaultCommand);
+        menu.Items.Add(Bindings.MenuItem(L("Duplicate"), _page.DuplicateCommand));
+        var makeDefault = Bindings.MenuItem(L("Make Default Profile"), _page.SetDefaultCommand);
         makeDefault.Loaded += (_, _) => makeDefault.IsEnabled &= _page.SelectedProfile?.IsDefault == false;
         menu.Items.Add(makeDefault);
         menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(Bindings.MenuItem("Move Up", _page.MoveUpCommand));
-        menu.Items.Add(Bindings.MenuItem("Move Down", _page.MoveDownCommand));
+        menu.Items.Add(Bindings.MenuItem(L("Move Up"), _page.MoveUpCommand));
+        menu.Items.Add(Bindings.MenuItem(L("Move Down"), _page.MoveDownCommand));
         return menu;
     }
 
@@ -173,7 +174,7 @@ internal sealed class ProfilesPage : IPageView
         _editorBindings?.Dispose();
         _editorBindings = new Bindings();
         _editorHost.Content = _shown is null
-            ? Form.Empty("No Profile Selected", "Click + below the list to add the browsers found on this PC, or a command.")
+            ? Form.Empty(L("No Profile Selected"), L("Click + below the list to add the browsers found on this PC, or a command."))
             : Editor(_shown, _editorBindings);
     }
 
@@ -185,12 +186,12 @@ internal sealed class ProfilesPage : IPageView
         var subtitle = Ui.Secondary("");
         bindings.Observe(profile, () =>
         {
-            title.Text = profile.Name.Length > 0 ? profile.Name : "(Unnamed)";
+            title.Text = profile.Name.Length > 0 ? profile.Name : L("(Unnamed)");
             subtitle.Text = profile.Summary;
         }, nameof(ProfileViewModel.Name), nameof(ProfileViewModel.Summary));
         var header = EditorParts.Header(icon, title, subtitle, profile, nameof(ProfileViewModel.Issues), () => profile.Issues, bindings);
 
-        var name = Ui.TextBox("Name");
+        var name = Ui.TextBox(L("Name"));
         bindings.Text(name, profile, nameof(ProfileViewModel.Name), () => profile.Name, value => profile.Name = value);
 
         var isDefault = Ui.Switch();
@@ -210,13 +211,13 @@ internal sealed class ProfilesPage : IPageView
 
         var target = Ui.ComboBox(160);
         bindings.Choice(target, profile, nameof(ProfileViewModel.TargetKind),
-            [(ProfileTargetKind.Browser, "Browser"), (ProfileTargetKind.Command, "Command")],
+            [(ProfileTargetKind.Browser, L("Browser")), (ProfileTargetKind.Command, L("Command"))],
             () => profile.TargetKind, value => profile.TargetKind = value);
 
         var general = Form.Section(null,
-            Form.Card("Name", name, "Shown in the picker, so each profile needs a name of its own."),
-            Form.Card("Default profile", isDefault, "Opens links that the matching rule does not assign to a profile."),
-            Form.Card("Opens with", target));
+            Form.Card(L("Name"), name, L("Shown in the picker, so each profile needs a name of its own.")),
+            Form.Card(L("Default profile"), isDefault, L("Opens links that the matching rule does not assign to a profile.")),
+            Form.Card(L("Opens with"), target));
 
         var page = Form.Page(
             header,
@@ -226,7 +227,7 @@ internal sealed class ProfilesPage : IPageView
             LocalSection(profile, bindings),
             FallbackSection(profile, bindings),
             // Ids are numbers by default; most people never need to see them.
-            Form.Section("Advanced", IdCard(profile, bindings)));
+            Form.Section(L("Advanced"), IdCard(profile, bindings)));
         ((FrameworkElement)page.Content).Margin = new Thickness(0, 0, 0, 0);
         page.Padding = new Thickness(16, 0, 32, 0);
         return page;
@@ -235,7 +236,7 @@ internal sealed class ProfilesPage : IPageView
     /// <summary>The id, changed with a button (or Enter) rather than as typed: every reference to it is rewritten.</summary>
     private static UIElement IdCard(ProfileViewModel profile, Bindings bindings)
     {
-        const string Explanation = "How rules in config.json refer to the profile, for example “work” instead of a number. Changing it updates them, and other computers still find their own targets under the old one.";
+        var explanation = L("How rules in config.json refer to the profile, for example “work” instead of a number. Changing it updates them, and other computers still find their own targets under the old one.");
         var id = Ui.TextBox("work", monospaced: true, width: 200);
         bindings.Text(id, profile, nameof(ProfileViewModel.IdDraft), () => profile.IdDraft, value => profile.IdDraft = value);
         id.KeyDown += (_, e) =>
@@ -246,14 +247,14 @@ internal sealed class ProfilesPage : IPageView
                 e.Handled = true;
             }
         };
-        var change = Ui.Button("Change");
+        var change = Ui.Button(L("Change"));
         bindings.Command(change, profile.ChangeIdCommand);
 
         // The explanation gives way to what is wrong with the id being typed.
-        var description = Ui.Wrapping(Explanation);
+        var description = Ui.Wrapping(explanation);
         bindings.Observe(profile, () =>
         {
-            description.Text = profile.IdError ?? Explanation;
+            description.Text = profile.IdError ?? explanation;
             description.Foreground = Ui.Brush(profile.IdError is null ? "TextFillColorSecondaryBrush" : "SystemFillColorCriticalBrush");
         }, nameof(ProfileViewModel.IdError));
         return Form.Card(Ui.Label("ID"), Ui.HStack(8, id, change), description);
@@ -276,18 +277,18 @@ internal sealed class ProfilesPage : IPageView
         var args = Ui.LinesBox("--new-window");
         bindings.Text(args, profile, nameof(ProfileViewModel.ExtraArgs), () => profile.ExtraArgs, value => profile.ExtraArgs = value);
 
-        var browserCard = Form.Card("Browser", browser);
-        var windowsCard = Form.Card("Browser on Windows", windows);
-        var macCard = Form.Card("Browser on macOS", mac);
-        var profileCard = Form.Card("Browser profile", browserProfile, "Opens the browser with this profile signed in.");
-        var section = Form.Section("Browser",
+        var browserCard = Form.Card(L("Browser"), browser);
+        var windowsCard = Form.Card(L("Browser on Windows"), windows);
+        var macCard = Form.Card(L("Browser on macOS"), mac);
+        var profileCard = Form.Card(L("Browser profile"), browserProfile, L("Opens the browser with this profile signed in."));
+        var section = Form.Section(L("Browser"),
             browserCard,
-            Form.Card("Different browser on each OS", perOs, "For a configuration shared with Mac computers."),
+            Form.Card(L("Different browser on each OS"), perOs, L("For a configuration shared with Mac computers.")),
             windowsCard,
             macCard,
             profileCard,
-            Form.Card("Private window", isPrivate, "InPrivate in Edge, incognito in Chrome."),
-            Form.Card("Extra arguments", args, "One per line."));
+            Form.Card(L("Private window"), isPrivate, L("InPrivate in Edge, incognito in Chrome.")),
+            Form.Card(L("Extra arguments"), args, L("One per line.")));
 
         bindings.Observe(profile, () =>
         {
@@ -304,7 +305,7 @@ internal sealed class ProfilesPage : IPageView
     {
         var windowsPath = Ui.TextBox(@"%LOCALAPPDATA%\Programs\Foo\foo.exe");
         bindings.Text(windowsPath, profile, nameof(ProfileViewModel.WindowsCommandPath), () => profile.WindowsCommandPath, value => profile.WindowsCommandPath = value);
-        var browse = Ui.Button("Browse…");
+        var browse = Ui.Button(L("Browse…"));
         bindings.Command(browse, profile.BrowseWindowsCommandCommand);
         var windowsArgs = Ui.LinesBox("{url}");
         bindings.Text(windowsArgs, profile, nameof(ProfileViewModel.WindowsCommandArgs), () => profile.WindowsCommandArgs, value => profile.WindowsCommandArgs = value);
@@ -313,12 +314,12 @@ internal sealed class ProfilesPage : IPageView
         var macArgs = Ui.LinesBox("{url}");
         bindings.Text(macArgs, profile, nameof(ProfileViewModel.MacOSCommandArgs), () => profile.MacOSCommandArgs, value => profile.MacOSCommandArgs = value);
 
-        var section = Form.Section("Command",
-            "{url} in the arguments is replaced with the URL; without it the URL is added at the end. Environment variables such as %LOCALAPPDATA% are expanded.",
-            Form.Card("Program on Windows", Ui.HStack(8, windowsPath, browse)),
-            Form.Card("Arguments on Windows", windowsArgs, "One per line."),
-            Form.Card("Program on macOS", macPath, "For a configuration shared with Mac computers."),
-            Form.Card("Arguments on macOS", macArgs, "One per line."));
+        var section = Form.Section(L("Command"),
+            L("{url} in the arguments is replaced with the URL; without it the URL is added at the end. Environment variables such as %LOCALAPPDATA% are expanded."),
+            Form.Card(L("Program on Windows"), Ui.HStack(8, windowsPath, browse)),
+            Form.Card(L("Arguments on Windows"), windowsArgs, L("One per line.")),
+            Form.Card(L("Program on macOS"), macPath, L("For a configuration shared with Mac computers.")),
+            Form.Card(L("Arguments on macOS"), macArgs, L("One per line.")));
         bindings.Observe(profile, () => Ui.Show(section, profile.IsCommand), nameof(ProfileViewModel.TargetKind));
         return section;
     }
@@ -349,8 +350,8 @@ internal sealed class ProfilesPage : IPageView
         }, nameof(ProfileViewModel.LocalTarget));
         bindings.Add(() => targetBindings?.Dispose());
 
-        return Form.Section("This Computer",
-            Form.Card("Open something else on this computer", uses, "In place of the browser or command above, for example another browser profile. Saved on this computer only; rules and other computers are not affected."),
+        return Form.Section(L("This Computer"),
+            Form.Card(L("Open something else on this computer"), uses, L("In place of the browser or command above, for example another browser profile. Saved on this computer only; rules and other computers are not affected.")),
             cards);
     }
 
@@ -358,7 +359,7 @@ internal sealed class ProfilesPage : IPageView
     {
         var kind = Ui.ComboBox(160);
         bindings.Choice(kind, target, nameof(LocalTargetViewModel.TargetKind),
-            [(ProfileTargetKind.Browser, "Browser"), (ProfileTargetKind.Command, "Command")],
+            [(ProfileTargetKind.Browser, L("Browser")), (ProfileTargetKind.Command, L("Command"))],
             () => target.TargetKind, value => target.TargetKind = value);
         var browser = Ui.ComboBox(260);
         bindings.Popup(browser, target, nameof(LocalTargetViewModel.Browser), () => target.BrowserChoices, () => target.Browser, value => target.Browser = value, c => c.Title, c => c.IconPng);
@@ -370,17 +371,17 @@ internal sealed class ProfilesPage : IPageView
         bindings.Text(args, target, nameof(LocalTargetViewModel.ExtraArgs), () => target.ExtraArgs, value => target.ExtraArgs = value);
         var path = Ui.TextBox(@"%LOCALAPPDATA%\Programs\Foo\foo.exe");
         bindings.Text(path, target, nameof(LocalTargetViewModel.CommandPath), () => target.CommandPath, value => target.CommandPath = value);
-        var browse = Ui.Button("Browse…");
+        var browse = Ui.Button(L("Browse…"));
         bindings.Command(browse, target.BrowseCommandCommand);
         var commandArgs = Ui.LinesBox("{url}");
         bindings.Text(commandArgs, target, nameof(LocalTargetViewModel.CommandArgs), () => target.CommandArgs, value => target.CommandArgs = value);
 
-        var browserCard = Form.Card("Browser", browser);
-        var profileCard = Form.Card("Browser profile", browserProfile, "Opens the browser with this profile signed in.");
-        var privateCard = Form.Card("Private window", isPrivate, "InPrivate in Edge, incognito in Chrome.");
-        var argsCard = Form.Card("Extra arguments", args, "One per line.");
-        var pathCard = Form.Card("Program", Ui.HStack(8, path, browse));
-        var commandArgsCard = Form.Card("Arguments", commandArgs, "One per line. {url} is replaced with the URL; without it the URL is added at the end.");
+        var browserCard = Form.Card(L("Browser"), browser);
+        var profileCard = Form.Card(L("Browser profile"), browserProfile, L("Opens the browser with this profile signed in."));
+        var privateCard = Form.Card(L("Private window"), isPrivate, L("InPrivate in Edge, incognito in Chrome."));
+        var argsCard = Form.Card(L("Extra arguments"), args, L("One per line."));
+        var pathCard = Form.Card(L("Program"), Ui.HStack(8, path, browse));
+        var commandArgsCard = Form.Card(L("Arguments"), commandArgs, L("One per line. {url} is replaced with the URL; without it the URL is added at the end."));
         bindings.Observe(target, () =>
         {
             foreach (var card in new[] { browserCard, privateCard, argsCard })
@@ -392,14 +393,14 @@ internal sealed class ProfilesPage : IPageView
             Ui.Show(commandArgsCard, target.IsCommand);
         }, nameof(LocalTargetViewModel.TargetKind), nameof(LocalTargetViewModel.HasBrowserProfiles));
 
-        return [Form.Card("Opens with", kind), browserCard, profileCard, privateCard, argsCard, pathCard, commandArgsCard];
+        return [Form.Card(L("Opens with"), kind), browserCard, profileCard, privateCard, argsCard, pathCard, commandArgsCard];
     }
 
     private static UIElement FallbackSection(ProfileViewModel profile, Bindings bindings)
     {
         var fallback = Ui.ComboBox(260);
         bindings.Popup(fallback, profile, nameof(ProfileViewModel.Fallback), () => profile.FallbackChoices, () => profile.Fallback, value => profile.Fallback = value, c => c.Title);
-        return Form.Section("When Not Available",
-            Form.Card("Use instead", fallback, "For example when the browser is not installed on another computer that shares this configuration."));
+        return Form.Section(L("When Not Available"),
+            Form.Card(L("Use instead"), fallback, L("For example when the browser is not installed on another computer that shares this configuration.")));
     }
 }

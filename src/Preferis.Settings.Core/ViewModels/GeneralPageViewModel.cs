@@ -1,8 +1,8 @@
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Preferis.Core;
 using Preferis.Core.Configuration;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.ViewModels;
 
@@ -39,7 +39,7 @@ public sealed partial class GeneralPageViewModel : PageViewModel
         _ready = true;
     }
 
-    public override string Title => "General";
+    public override string Title => L("General");
 
     // ---- configuration file -----------------------------------------------------------------
 
@@ -54,7 +54,7 @@ public sealed partial class GeneralPageViewModel : PageViewModel
     [RelayCommand]
     private async Task MoveConfig()
     {
-        var folder = await Settings.Dialogs.PickFolderAsync("Choose the folder to keep config.json in");
+        var folder = await Settings.Dialogs.PickFolderAsync(L("Choose the folder to keep config.json in"));
         if (folder is not null)
         {
             await MoveTo(Path.Combine(folder, "config.json"));
@@ -65,7 +65,7 @@ public sealed partial class GeneralPageViewModel : PageViewModel
     [RelayCommand]
     private async Task UseExistingConfig()
     {
-        var file = await Settings.Dialogs.PickFileAsync("Choose an existing config.json");
+        var file = await Settings.Dialogs.PickFileAsync(L("Choose an existing config.json"));
         if (file is not null)
         {
             await Adopt(file);
@@ -93,14 +93,14 @@ public sealed partial class GeneralPageViewModel : PageViewModel
         }
         if (Settings.ConfigUnreadable)
         {
-            Settings.StatusMessage = "The current config.json cannot be read. Save a working configuration before moving it.";
+            Settings.StatusMessage = L("The current config.json cannot be read. Save a working configuration before moving it.");
             return;
         }
         // Moving writes the configuration shown here; take in what was saved to the file meanwhile, or stop on a conflict.
         Settings.CheckForExternalChanges();
         if (Settings.HasExternalChanges)
         {
-            Settings.StatusMessage = "config.json changed on disk while it was being edited here. Reload or save first, then move it.";
+            Settings.StatusMessage = L("config.json changed on disk while it was being edited here. Reload or save first, then move it.");
             return;
         }
 
@@ -109,9 +109,9 @@ public sealed partial class GeneralPageViewModel : PageViewModel
             if (File.Exists(target))
             {
                 var answer = await Settings.Dialogs.AskAsync(
-                    "A configuration already exists there",
-                    $"{target} already exists, for example synced from another computer. Use it, or replace it with the configuration shown here?",
-                    ["Use It", "Replace It", "Cancel"]);
+                    L("A configuration already exists there"),
+                    L("{0} already exists, for example synced from another computer. Use it, or replace it with the configuration shown here?", target),
+                    [L("Use It"), L("Replace It"), L("Cancel")]);
                 switch (answer)
                 {
                     case 0:
@@ -132,14 +132,14 @@ public sealed partial class GeneralPageViewModel : PageViewModel
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Settings.StatusMessage = $"Could not move the configuration: {ex.Message}";
+            Settings.StatusMessage = L("Could not move the configuration: {0}", ex.Message);
         }
     }
 
     private async Task Adopt(string path)
     {
         if (Settings.IsDirty
-            && await Settings.Dialogs.AskAsync("Discard unsaved changes?", "Switching to another configuration file discards the changes made here.", ["Discard Changes", "Cancel"]) != 0)
+            && await Settings.Dialogs.AskAsync(L("Discard unsaved changes?"), L("Switching to another configuration file discards the changes made here."), [L("Discard Changes"), L("Cancel")]) != 0)
         {
             return;
         }
@@ -195,17 +195,17 @@ public sealed partial class GeneralPageViewModel : PageViewModel
         {
             IsDefaultBrowser = false;
             RegistrationText = platform.Platform == HostPlatform.Windows
-                ? "Registering needs Preferis Settings to run next to Preferis.exe (build it with build/Preferis.Build.proj)."
-                : "Registering needs Preferis Settings to run from inside Preferis.app (build it with build/Preferis.Build.proj).";
+                ? L("Registering needs Preferis Settings to run next to Preferis.exe (build it with build/Preferis.Build.proj).")
+                : L("Registering needs Preferis Settings to run from inside Preferis.app (build it with build/Preferis.Build.proj).");
             return;
         }
 
         var status = platform.GetRegistrationStatus();
         IsDefaultBrowser = status.IsDefault;
-        var text = status.IsDefault ? "Preferis is the default browser."
-            : status.CurrentDefault is { } current ? $"The default browser is {DisplayName(current)}."
-            : "The default browser could not be determined.";
-        RegistrationText = status.IsRegistered || status.IsDefault ? text : text + " Preferis is not registered with the system yet.";
+        var text = status.IsDefault ? L("Preferis is the default browser.")
+            : status.CurrentDefault is { } current ? L("The default browser is {0}.", DisplayName(current))
+            : L("The default browser could not be determined.");
+        RegistrationText = status.IsRegistered || status.IsDefault ? text : L("{0} Preferis is not registered with the system yet.", text);
     }
 
     // macOS reports the handler's path (/Applications/Safari.app), Windows its name ("Firefox 128.0").
@@ -215,8 +215,8 @@ public sealed partial class GeneralPageViewModel : PageViewModel
 
     private static readonly IReadOnlyList<EnumChoice<PickerPosition>> PickerPositionChoices =
     [
-        new(PickerPosition.Cursor, "Near the pointer"),
-        new(PickerPosition.Center, "In the center of the screen"),
+        new(PickerPosition.Cursor, L("Near the pointer")),
+        new(PickerPosition.Center, L("In the center of the screen")),
     ];
 
     [ObservableProperty]
@@ -242,7 +242,8 @@ public sealed partial class GeneralPageViewModel : PageViewModel
 
     private static readonly IReadOnlyList<LanguageChoice> LanguageChoices =
     [
-        new("auto", "Same as the system"),
+        new("auto", L("Same as the system")),
+        // Each language by its own name, so that it can be found whatever the settings are shown in.
         new("en", "English"),
         new("ja", "日本語"),
     ];
@@ -284,6 +285,16 @@ public sealed partial class GeneralPageViewModel : PageViewModel
 
     public IReadOnlyList<string> LogLevels => LogLevelChoices;
 
+    /// <summary>What the drop-down shows for a value of <see cref="LogLevels"/>.</summary>
+    public static string LogLevelTitle(string level) => level switch
+    {
+        "off" => L("Off"),
+        "error" => L("Error"),
+        "info" => L("Info"),
+        "trace" => L("Trace"),
+        _ => level,
+    };
+
     [ObservableProperty]
     public partial string LogLevel { get; set; }
 
@@ -319,5 +330,5 @@ public sealed partial class GeneralPageViewModel : PageViewModel
 
     public string Version => typeof(GeneralPageViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
-    public string ConfigPathHint => string.Format(CultureInfo.InvariantCulture, "Keep config.json in a synced folder (OneDrive, Google Drive, iCloud Drive...) to share it with other computers. {0} stays on this computer and remembers where it is.", Path.GetFileName(Settings.Loader.Paths.LocalConfigPath));
+    public string ConfigPathHint => L("Keep config.json in a synced folder (OneDrive, Google Drive, iCloud Drive...) to share it with other computers. {0} stays on this computer and remembers where it is.", Path.GetFileName(Settings.Loader.Paths.LocalConfigPath));
 }

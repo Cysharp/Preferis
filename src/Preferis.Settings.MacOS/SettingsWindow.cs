@@ -5,6 +5,7 @@ using ObjCRuntime;
 using Preferis.Settings.MacOS.Controls;
 using Preferis.Settings.MacOS.Pages;
 using Preferis.Settings.ViewModels;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.MacOS;
 
@@ -253,8 +254,8 @@ internal sealed class Banner
         var icon = NSImageView.FromImage(Images.Symbol("exclamationmark.triangle.fill", 14)!);
         icon.ContentTintColor = NSColor.SystemOrange;
         var text = Ui.Wrapping("", 520, 12, NSColor.Label);
-        var theirs = Ui.Button("Use Theirs");
-        var mine = Ui.Button("Keep Mine");
+        var theirs = Ui.Button(L("Use Theirs"));
+        var mine = Ui.Button(L("Keep Mine"));
         bindings.Command(theirs, settings.UseTheirsCommand);
         bindings.Command(mine, settings.KeepMineCommand);
         var row = Ui.HStack(10, icon, text, Ui.Spacer(), theirs, mine);
@@ -275,14 +276,14 @@ internal sealed class Banner
         bindings.Observe(settings, () =>
         {
             var message = settings.HasExternalChanges
-                ? "config.json was changed outside the settings (for example by “Always open … with this choice” or a sync client) before your latest changes were saved. Use the file as it is now, or save your changes over it."
+                ? L("config.json was changed outside the settings (for example by “Always open … with this choice” or a sync client) before your latest changes were saved. Use the file as it is now, or save your changes over it.")
                 : settings.IsHoldingEditsForUnreadableFile
-                    ? $"{settings.LoadError} Your changes to it are not saved until you replace the file with them."
+                    ? L("{0} Your changes to it are not saved until you replace the file with them.", settings.LoadError)
                     : settings.StatusMessage ?? settings.LoadError;
             text.StringValue = message ?? "";
             theirs.Hidden = !settings.HasExternalChanges;
             mine.Hidden = !(settings.HasExternalChanges || settings.IsHoldingEditsForUnreadableFile);
-            mine.Title = settings.HasExternalChanges ? "Keep Mine" : "Replace";
+            mine.Title = settings.HasExternalChanges ? L("Keep Mine") : L("Replace");
             box.Hidden = message is null;
         }, nameof(SettingsViewModel.HasExternalChanges), nameof(SettingsViewModel.IsHoldingEditsForUnreadableFile), nameof(SettingsViewModel.StatusMessage), nameof(SettingsViewModel.LoadError));
     }

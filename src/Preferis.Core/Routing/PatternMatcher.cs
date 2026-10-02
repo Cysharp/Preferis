@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using Preferis.Core.Configuration;
+using static Preferis.Core.Localization.CoreText;
 
 namespace Preferis.Core.Routing;
 
@@ -40,7 +41,7 @@ public sealed class PatternMatcher
             MatchKind.Contains => new(s => s.Contains(pattern, comparison), null),
             MatchKind.Wildcard => FromRegex(WildcardToRegex(pattern), ignoreCase),
             MatchKind.Regex => FromRegex(pattern, ignoreCase),
-            _ => new(_ => false, $"Unsupported match kind: {kind}"),
+            _ => new(_ => false, L("Unsupported match kind: {0}", kind)),
         };
     }
 

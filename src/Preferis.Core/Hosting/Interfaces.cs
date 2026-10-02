@@ -61,6 +61,10 @@ public interface IRoutingLog
 }
 
 /// <summary>Everything <see cref="RoutingService"/> depends on, supplied by the Router executable.</summary>
+/// <param name="SystemLanguages">
+/// The OS's preferred UI languages, for <c>settings.language: "auto"</c> (docs/Design.md §9.4). Null leaves the language of
+/// the texts as it is.
+/// </param>
 public sealed record RoutingServices(
     IConfigStore Config,
     HostPlatform HostPlatform,
@@ -72,7 +76,8 @@ public sealed record RoutingServices(
     IUserNotifier Notifier,
     IRoutingLog Log,
     Func<string, string?> GetEnvironmentVariable,
-    string HomeDirectory);
+    string HomeDirectory,
+    Func<IEnumerable<string>>? SystemLanguages = null);
 
 public enum HandleOutcome
 {

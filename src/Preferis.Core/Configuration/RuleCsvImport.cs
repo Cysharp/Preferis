@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using static Preferis.Core.Localization.CoreText;
 
 namespace Preferis.Core.Configuration;
 
@@ -42,7 +43,7 @@ public static partial class RuleCsvImport
         foreach (var (profile, conditions) in groups)
         {
             // Rule names follow the profile names' rule: an existing rule of the same name gets a number.
-            var name = ProfileNames.Unique($"Imported Rule for {profile.Name.Trim()}", names);
+            var name = ProfileNames.Unique(L("Imported Rule for {0}", profile.Name.Trim()), names);
             var id = IdGenerator.ForName(name, "rule", ids);
             names.Add(name);
             ids.Add(id);
@@ -63,16 +64,16 @@ public static partial class RuleCsvImport
     {
         if (fields.Count < 2 || fields[0].Length == 0 || fields[1].Length == 0)
         {
-            return "A URL or domain and a profile name are needed.";
+            return L("A URL or domain and a profile name are needed.");
         }
         var (pattern, name) = (fields[0], fields[1]);
         if (config.Profiles.FirstOrDefault(p => ProfileNames.Same(p.Name, name)) is not { } profile)
         {
-            return $"No profile is named “{name}”.";
+            return L("No profile is named “{0}”.", name);
         }
         if (ToCondition(pattern) is not { } condition)
         {
-            return $"“{pattern}” is neither a URL (it would start with a scheme such as https://) nor a domain.";
+            return L("“{0}” is neither a URL (it would start with a scheme such as https://) nor a domain.", pattern);
         }
 
         var index = groups.FindIndex(g => ReferenceEquals(g.Profile, profile));
@@ -85,7 +86,7 @@ public static partial class RuleCsvImport
         // Both kinds of condition compare without case here: hosts always, URLs by default.
         if (conditions.Any(c => c.GetType() == condition.GetType() && string.Equals(c.Pattern, condition.Pattern, StringComparison.OrdinalIgnoreCase)))
         {
-            return $"“{pattern}” is already in the rule for “{profile.Name.Trim()}”.";
+            return L("“{0}” is already in the rule for “{1}”.", pattern, profile.Name.Trim());
         }
         conditions.Add(condition);
         return null;

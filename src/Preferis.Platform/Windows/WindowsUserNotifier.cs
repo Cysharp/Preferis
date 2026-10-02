@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using Preferis.Core.Hosting;
 using Preferis.Core.Routing;
+using static Preferis.Core.Localization.CoreText;
 
 namespace Preferis.Platform.Windows;
 
@@ -13,7 +14,7 @@ public sealed class WindowsUserNotifier : IUserNotifier
 {
     public void ShowError(string title, string message, RoutingUrl? url)
     {
-        var text = url is null ? message : $"{message}\n\n{url.AbsoluteUri}\n\nCopy the URL to the clipboard?";
+        var text = url is null ? message : L("{0}\n\n{1}\n\nCopy the URL to the clipboard?", message, url.AbsoluteUri);
         var buttons = url is null ? 0 : Native.MbYesNo;
         var answer = Native.MessageBox(IntPtr.Zero, text, title, buttons | Native.MbIconError | Native.MbSetForeground | Native.MbTopmost);
         if (url is not null && answer == Native.IdYes)

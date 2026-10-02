@@ -3,6 +3,7 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Preferis.Core.Configuration;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.ViewModels;
 
@@ -18,7 +19,7 @@ public sealed partial class RulesPageViewModel : PageViewModel
         IsCatchAllSelected = SelectedRule is null;
     }
 
-    public override string Title => "Rules";
+    public override string Title => L("Rules");
 
     public ObservableCollection<RuleViewModel> Rules { get; }
 
@@ -71,7 +72,7 @@ public sealed partial class RulesPageViewModel : PageViewModel
     [RelayCommand]
     private void AddRule()
     {
-        var name = "New rule";
+        var name = L("New rule");
         var rule = new Rule
         {
             Id = IdGenerator.ForName(name, "rule", Settings.Config.Rules.Select(r => r.Id)),
@@ -88,7 +89,7 @@ public sealed partial class RulesPageViewModel : PageViewModel
         var source = SelectedRule!;
         var copy = JsonSerializer.Deserialize(JsonSerializer.Serialize(source.Model, PreferisJsonContext.Default.Rule), PreferisJsonContext.Default.Rule)!;
         copy.Id = IdGenerator.Unique(source.Id, Settings.Config.Rules.Select(r => r.Id));
-        copy.Name = source.Name + " copy";
+        copy.Name = L("{0} copy", source.Name);
         Insert(copy, Rules.IndexOf(source) + 1);
     }
 
@@ -99,7 +100,7 @@ public sealed partial class RulesPageViewModel : PageViewModel
     [RelayCommand]
     private async Task ImportRules()
     {
-        if (await Settings.Dialogs.PickFileAsync("Choose a CSV file of URLs or domains and profile names") is not { } path)
+        if (await Settings.Dialogs.PickFileAsync(L("Choose a CSV file of URLs or domains and profile names")) is not { } path)
         {
             return;
         }
@@ -111,7 +112,7 @@ public sealed partial class RulesPageViewModel : PageViewModel
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            await Settings.Dialogs.AskAsync("The file could not be read.", ex.Message, ["OK"]);
+            await Settings.Dialogs.AskAsync(L("The file could not be read."), ex.Message, [L("OK")]);
             return;
         }
 
@@ -127,35 +128,35 @@ public sealed partial class RulesPageViewModel : PageViewModel
             Settings.MarkChanged();
         }
         var (title, message) = Report(result);
-        await Settings.Dialogs.AskAsync(title, message, ["OK"]);
+        await Settings.Dialogs.AskAsync(title, message, [L("OK")]);
     }
 
     private static (string Title, string Message) Report(RuleImportResult result)
     {
         const int ShownSkipped = 10;
-        static string Lines(int count) => count == 1 ? "1 line" : $"{count} lines";
+        static string Lines(int count) => count == 1 ? L("1 line") : L("{0} lines", count);
 
         var parts = new List<string>();
         if (result.Rules.Count > 0)
         {
-            parts.Add((result.Rules.Count == 1 ? "Added 1 rule:" : $"Added {result.Rules.Count} rules:")
+            parts.Add((result.Rules.Count == 1 ? L("Added 1 rule:") : L("Added {0} rules:", result.Rules.Count))
                 + string.Concat(result.Rules.Select(r => $"\n• {r.Name} ({Lines(r.Condition is OrCondition or ? or.Conditions.Count : 1)})")));
         }
         if (result.Skipped.Count > 0)
         {
-            var skipped = $"Skipped {Lines(result.Skipped.Count)}:"
-                + string.Concat(result.Skipped.Take(ShownSkipped).Select(s => $"\n• Line {s.Line}: {s.Reason}"));
+            var skipped = L("Skipped {0}:", Lines(result.Skipped.Count))
+                + string.Concat(result.Skipped.Take(ShownSkipped).Select(s => "\n• " + L("Line {0}: {1}", s.Line, s.Reason)));
             if (result.Skipped.Count > ShownSkipped)
             {
-                skipped += $"\n• … and {result.Skipped.Count - ShownSkipped} more";
+                skipped += "\n• " + L("… and {0} more", result.Skipped.Count - ShownSkipped);
             }
             parts.Add(skipped);
         }
         if (parts.Count == 0)
         {
-            parts.Add("The file has no lines to import.");
+            parts.Add(L("The file has no lines to import."));
         }
-        var title = result.ImportedLines == 0 ? "No rules were imported." : $"Imported {Lines(result.ImportedLines)}.";
+        var title = result.ImportedLines == 0 ? L("No rules were imported.") : L("Imported {0}.", Lines(result.ImportedLines));
         return (title, string.Join("\n\n", parts));
     }
 
@@ -376,39 +377,40 @@ internal static class RuleSummary
 
     public static string DescribeCondition(Condition? condition) => condition switch
     {
-        null => "no condition",
-        AndCondition and => $"all of {Count(and.Conditions.Count)}",
-        OrCondition or => $"any of {Count(or.Conditions.Count)}",
-        NotCondition not => $"not {DescribeCondition(not.Condition)}",
-        HostCondition host => $"host {Verb(host.Match)} {host.Pattern}",
-        UrlCondition url => $"url {Verb(url.Match)} {url.Pattern}",
-        _ => $"{condition.Type} (unknown)",
+        null => L("no condition"),
+        AndCondition and => L("all of {0}", Count(and.Conditions.Count)),
+        OrCondition or => L("any of {0}", Count(or.Conditions.Count)),
+        NotCondition not => L("not {0}", DescribeCondition(not.Condition)),
+        HostCondition host => Comparison(L("host"), host.Match, host.Pattern),
+        UrlCondition url => Comparison(L("url"), url.Match, url.Pattern),
+        _ => L("{0} (unknown)", condition.Type),
     };
 
     public static string DescribeActions(List<RoutingAction> actions, PreferisConfig config)
-        => actions.Count == 0 ? "no action" : string.Join(", ", actions.Select(a => DescribeAction(a, config)));
+        => actions.Count == 0 ? L("no action") : string.Join(L(", "), actions.Select(a => DescribeAction(a, config)));
 
-    public static string Verb(MatchKind match) => match switch
+    // A sentence for each comparison, as languages place the pattern differently.
+    private static string Comparison(string subject, MatchKind match, string pattern) => match switch
     {
-        MatchKind.Regex => "matches regex",
-        MatchKind.Wildcard => "matches",
-        MatchKind.StartsWith => "starts with",
-        MatchKind.EndsWith => "ends with",
-        MatchKind.Contains => "contains",
-        _ => "is",
+        MatchKind.Regex => L("{0} matches regex {1}", subject, pattern),
+        MatchKind.Wildcard => L("{0} matches {1}", subject, pattern),
+        MatchKind.StartsWith => L("{0} starts with {1}", subject, pattern),
+        MatchKind.EndsWith => L("{0} ends with {1}", subject, pattern),
+        MatchKind.Contains => L("{0} contains {1}", subject, pattern),
+        _ => L("{0} is {1}", subject, pattern),
     };
 
     private static string DescribeAction(RoutingAction action, PreferisConfig config) => action switch
     {
-        OpenAction { Profiles.Count: > 0 } open => "open " + string.Join(", ", open.Profiles.Select(id => config.Profiles.FirstOrDefault(p => p.Id == id)?.Name ?? id)),
-        OpenAction => "open the default profile",
-        SystemAction => "hand to the system default",
-        NoneAction => "do nothing",
-        RewriteAction { Mode: RewriteMode.QueryParameter } rewrite => $"rewrite (query parameter {rewrite.Parameter})",
-        RewriteAction => "rewrite (regex)",
-        RerouteAction => "reroute",
-        _ => $"{action.Type} (unknown)",
+        OpenAction { Profiles.Count: > 0 } open => L("open {0}", string.Join(L(", "), open.Profiles.Select(id => config.Profiles.FirstOrDefault(p => p.Id == id)?.Name ?? id))),
+        OpenAction => L("open the default profile"),
+        SystemAction => L("hand to the system default"),
+        NoneAction => L("do nothing"),
+        RewriteAction { Mode: RewriteMode.QueryParameter } rewrite => L("rewrite (query parameter {0})", rewrite.Parameter),
+        RewriteAction => L("rewrite (regex)"),
+        RerouteAction => L("reroute"),
+        _ => L("{0} (unknown)", action.Type),
     };
 
-    private static string Count(int count) => count == 1 ? "1 condition" : $"{count} conditions";
+    private static string Count(int count) => count == 1 ? L("1 condition") : L("{0} conditions", count);
 }

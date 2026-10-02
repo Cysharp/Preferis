@@ -1,4 +1,5 @@
 using Preferis.Core.Routing;
+using static Preferis.Core.Localization.CoreText;
 
 namespace Preferis.Core.Picker;
 
@@ -45,7 +46,7 @@ public static class PickerDisplay
         }
         if (candidate.Private)
         {
-            parts.Add("Private");
+            parts.Add(L("Private"));
         }
         return string.Join(" · ", parts);
     }

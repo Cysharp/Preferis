@@ -1,6 +1,7 @@
 using Preferis.Core.Browsers;
 using Preferis.Core.Configuration;
 using Preferis.Core.Hosting;
+using Preferis.Core.Localization;
 using Preferis.Core.Picker;
 using Preferis.Core.Profiles;
 using Preferis.Core.Routing;
@@ -50,13 +51,23 @@ internal sealed class FakeHost
         return this;
     }
 
+    /// <summary>The language of the texts while the configuration was last loaded (its load errors are in it).</summary>
+    public UiLanguage? LanguageWhileLoading { get; private set; }
+
+    /// <summary>The OS's preferred languages; null leaves the language of the texts as it is (English in tests).</summary>
+    public Func<IEnumerable<string>>? SystemLanguages { get; set; }
+
     public RoutingService CreateService() => new(new RoutingServices(
         new Store(this), HostPlatform.MacOS, new Detector(this), new Profiles(this), new Launcher(this),
-        new SystemOpener(this), new Picker(this), new Notifier(this), new Logger(this), _ => null, "/Users/me"));
+        new SystemOpener(this), new Picker(this), new Notifier(this), new Logger(this), _ => null, "/Users/me", SystemLanguages));
 
     private sealed class Store(FakeHost host) : IConfigStore
     {
-        public ConfigLoadResult Load() => new(host.Config, host.Local, "/Users/me/config.json", host.ConfigExists, host.ConfigError);
+        public ConfigLoadResult Load()
+        {
+            host.LanguageWhileLoading = UiLanguages.Current;
+            return new(host.Config, host.Local, "/Users/me/config.json", host.ConfigExists, host.ConfigError);
+        }
 
         public void Save(PreferisConfig config, string configPath) => host.SavedConfig = config;
     }

@@ -3,6 +3,7 @@ using Preferis.Core.Browsers;
 using Preferis.Core.Configuration;
 using Preferis.Core.Profiles;
 using Preferis.Settings.Services;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.ViewModels;
 
@@ -22,7 +23,7 @@ internal static class ProfileAvailability
             var isLocal = !ReferenceEquals(effective.Profiles[i], config.Profiles[i]);
             if (Problem(effective.Profiles[i], isLocal, browsers, platform) is { } problem)
             {
-                yield return new ConfigIssue(IssueSeverity.Warning, IssueScope.Profile, config.Profiles[i].Id, $"{problem}; {Instead(effective, effective.Profiles[i], browsers, platform)}");
+                yield return new ConfigIssue(IssueSeverity.Warning, IssueScope.Profile, config.Profiles[i].Id, L("{0}; {1}", problem, Instead(effective, effective.Profiles[i], browsers, platform)));
             }
         }
     }
@@ -39,26 +40,26 @@ internal static class ProfileAvailability
             }
             if (isLocal)
             {
-                return "The command of this computer has no program";
+                return L("The command of this computer has no program");
             }
             // Without a program for any OS the validator reports it already.
             var other = platform == HostPlatform.MacOS ? command.Windows : command.MacOS;
-            return string.IsNullOrWhiteSpace(other?.Path) ? null : $"The command has no program for {os}";
+            return string.IsNullOrWhiteSpace(other?.Path) ? null : L("The command has no program for {0}", os);
         }
 
         if (profile.Browser?.For(platform) is not { } browserId)
         {
             if (isLocal)
             {
-                return "No browser is chosen for this computer";
+                return L("No browser is chosen for this computer");
             }
             // Without a browser for any OS the validator reports it already.
-            return profile.Browser is null ? null : $"No browser is set for {os}";
+            return profile.Browser is null ? null : L("No browser is set for {0}", os);
         }
 
         if (browsers.FirstOrDefault(b => b.Browser.Id == browserId) is not { } detected)
         {
-            return $"{BrowserCatalog.Find(browserId)?.DisplayName ?? browserId} is not installed on this computer";
+            return L("{0} is not installed on this computer", BrowserCatalog.Find(browserId)?.DisplayName ?? browserId);
         }
 
         // Profiles that could not be read are passed through as stored; the browser decides.
@@ -66,7 +67,7 @@ internal static class ProfileAvailability
         if (profile.BrowserProfile is { } reference && family != BrowserFamily.Other && detected.Profiles is { Count: > 0 } profiles
             && BrowserProfileMatcher.Match(profiles, reference, family) is null)
         {
-            return $"“{reference.Name ?? reference.Email ?? reference.Directory}” was not found in {detected.Browser.DisplayName} on this computer";
+            return L("“{0}” was not found in {1} on this computer", reference.Name ?? reference.Email ?? reference.Directory, detected.Browser.DisplayName);
         }
         return null;
     }
@@ -81,10 +82,10 @@ internal static class ProfileAvailability
             // The validator's problems (no target at all) make a fallback unusable too.
             if (Problem(fallback, isLocal: true, browsers, platform) is null)
             {
-                return $"“{fallback.Name}” is used instead.";
+                return L("“{0}” is used instead.", fallback.Name);
             }
             current = fallback;
         }
-        return "the default profile or the picker is used instead.";
+        return L("the default profile or the picker is used instead.");
     }
 }

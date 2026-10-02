@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Preferis.Settings.ViewModels;
 using Preferis.Settings.Windows.Controls;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.Windows.Pages;
 
@@ -24,10 +25,10 @@ internal sealed class TestPage : IPageView
                 e.Handled = true;
             }
         };
-        var test = Ui.AccentButton("Test");
+        var test = Ui.AccentButton(L("Test"));
         _bindings.Command(test, page.RunCommand);
-        var open = Ui.Button("Open");
-        ToolTipService.SetToolTip(open, "Open the URL with Preferis, as if a link was clicked: the picker appears when the rules say so.");
+        var open = Ui.Button(L("Open"));
+        ToolTipService.SetToolTip(open, L("Open the URL with Preferis, as if a link was clicked: the picker appears when the rules say so."));
         _bindings.Command(open, page.OpenCommand);
         var input = Form.Wide(Ui.Columns(8, (url, Ui.Star), (test, Ui.Auto), (open, Ui.Auto)));
 
@@ -39,8 +40,9 @@ internal sealed class TestPage : IPageView
         }, nameof(TestPageViewModel.Error));
 
         var intro = Form.Section(null,
-            "Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so the picker and the browser can be tried for real."
-                + (page.CanOpenUrls ? "" : " Open needs Preferis Settings to run next to Preferis.exe."),
+            page.CanOpenUrls
+                ? L("Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so the picker and the browser can be tried for real.")
+                : L("Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so the picker and the browser can be tried for real. Open needs Preferis Settings to run next to Preferis.exe."),
             input,
             error);
         intro.Margin = new Thickness(0, 8, 0, 0);
@@ -58,13 +60,13 @@ internal sealed class TestPage : IPageView
         decision.TextWrapping = TextWrapping.Wrap;
         var routed = Ui.Wrapping("");
         var candidates = new StackPanel { Spacing = 8 };
-        var section = Form.Section("Result", Form.Wide(Ui.VStack(8, decision, routed, candidates)));
+        var section = Form.Section(L("Result"), Form.Wide(Ui.VStack(8, decision, routed, candidates)));
 
         _bindings.Observe(page, () =>
         {
             Ui.Show(section, page.HasResult);
             decision.Text = page.Decision ?? "";
-            routed.Text = page.RoutedUrl is { } url ? $"URL after rewriting: {url}" : "";
+            routed.Text = page.RoutedUrl is { } url ? L("URL after rewriting: {0}", url) : "";
             Ui.Show(routed, page.RoutedUrl is not null);
         }, nameof(TestPageViewModel.Decision), nameof(TestPageViewModel.RoutedUrl));
         _bindings.ObserveCollection(page.Candidates, () =>
@@ -86,7 +88,7 @@ internal sealed class TestPage : IPageView
     {
         var result = Ui.Label("", semibold: true);
         var output = Ui.Code("");
-        var section = Form.Section("Opened", Form.Wide(Ui.VStack(6, result, output)));
+        var section = Form.Section(L("Opened"), Form.Wide(Ui.VStack(6, result, output)));
         _bindings.Observe(page, () =>
         {
             Ui.Show(section, page.OpenResult is not null);
@@ -100,7 +102,7 @@ internal sealed class TestPage : IPageView
     private UIElement Steps(TestPageViewModel page)
     {
         var rows = new StackPanel { Spacing = 6 };
-        var section = Form.Section("Steps", Form.Wide(rows));
+        var section = Form.Section(L("Steps"), Form.Wide(rows));
         _bindings.ObserveCollection(page.Trace, () =>
         {
             Ui.Show(section, page.Trace.Count > 0);
@@ -130,10 +132,10 @@ internal sealed class TestPage : IPageView
     private UIElement History(TestPageViewModel page)
     {
         var rows = new StackPanel { Spacing = 4 };
-        var empty = Ui.Secondary("Nothing yet.");
-        var clear = Ui.Button("Clear History");
+        var empty = Ui.Secondary(L("Nothing yet."));
+        var clear = Ui.Button(L("Clear History"));
         _bindings.Command(clear, page.ClearHistoryCommand);
-        var section = Ui.VStack(Form.CardSpacing, Form.Header("Recently Opened", clear), Form.Wide(Ui.VStack(4, empty, rows)));
+        var section = Ui.VStack(Form.CardSpacing, Form.Header(L("Recently Opened"), clear), Form.Wide(Ui.VStack(4, empty, rows)));
 
         _bindings.Visible(section, page, () => page.IsHistoryEnabled, nameof(TestPageViewModel.IsHistoryEnabled));
         _bindings.ObserveCollection(page.History, () =>
@@ -145,7 +147,7 @@ internal sealed class TestPage : IPageView
                 var url = Ui.Label(entry.Url, 12);
                 url.FontFamily = Ui.Monospace;
                 ToolTipService.SetToolTip(url, entry.Url);
-                var again = Ui.Button("Test");
+                var again = Ui.Button(L("Test"));
                 again.Padding = new Thickness(8, 2, 8, 2);
                 var line = entry;
                 again.Click += (_, _) => page.TestHistoryEntryCommand.Execute(line);

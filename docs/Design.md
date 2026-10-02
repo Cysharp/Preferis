@@ -502,7 +502,8 @@ M3 での実装の要点:
   (`Preferis <url>`)、ピッカーや実際の起動を試せる。Router はファイルを読むため、待っている編集を先に書き込む。
   書き込めない (保留中の) 場合だけ、ディスク上の設定で開くかを尋ねる。Router のログ出力と結果を表示し、ピッカーで「記憶する」を
   選んだ場合はその場で読み直す。
-- **言語**: M3 の UI は英語のみ。`settings.language` は保存するが表示には未反映 (多言語化は §12 のユーザー判断事項)。
+- **言語**: 英語と日本語 (§9.4)。一般ページで変えた言語は、設定 UI には次に開いたときから、ピッカーには次のリンクから
+  反映される。
 
 M4 (Windows) での実装の要点 (詳細は Platform.md §2.8):
 
@@ -584,7 +585,7 @@ Router がピッカーを子プロセスとして起動し、標準入力にリ�
       "browserProfile": { "directory": "Profile 1", "name": "Work" } },
     { "profileId": "edge-private", "name": "Edge (InPrivate)", "browser": "edge", "private": true }
   ],
-  "options": { "position": "cursor", "autoSelectSeconds": 0, "rememberChoiceDefault": false, "allowRemember": true },
+  "options": { "position": "cursor", "autoSelectSeconds": 0, "rememberChoiceDefault": false, "allowRemember": true, "language": "ja" },
   "message": null
 }
 ```
@@ -593,6 +594,8 @@ Router がピッカーを子プロセスとして起動し、標準入力にリ�
   起動に使うものと同じ値。
 - `message` はフォールバック時の説明 (「設定ファイルを読み込めませんでした」など)。通常は `null`。
 - `options.allowRemember` が `false` の時、ピッカーは「記憶する」を出さず、応答の `remember` は常に `false`。
+- `options.language` は表示する言語 (`en` / `ja`)。Router が `settings.language` を解決して渡し (§9.4)、`message` も同じ言語で
+  書く。無い場合 (この項目より古い Router) はピッカーが OS の言語に従う。
 
 応答:
 
@@ -610,6 +613,40 @@ Router がピッカーを子プロセスとして起動し、標準入力にリ�
   不整合はフォールバックで吸収すれば十分であり、バージョン管理の手間に見合わない。
 - 複数の URL が同時に開かれた場合は Router とピッカーがその数だけ並列に起動する。Windows の
   「アプリを選択」と同じ挙動であり、初期リリースでは直列化しない。
+
+### 9.4 表示言語
+
+UI は英語と日本語です。`settings.language` (Configuration.md §2.9) で選び、`auto` (既定) は OS の優先言語
+(Windows: `GetUserPreferredUILanguages`、macOS: `NSLocale.preferredLanguages`) を先頭から見て、最初に Preferis が持つ言語を
+使います (無ければ英語)。値が無い場合と、新しいバージョンが追加した知らない値も `auto` と同じです。
+
+- **翻訳表**: 文字列は英語の原文をキーにした翻訳表 (Core の `TextCatalog`) から引く。表はアセンブリごとに 1 つで、
+  `CoreText` (Core、Platform、Router、ピッカー) と `SettingsText` (設定 UI の ViewModel と両 OS の画面)。コードは
+  `using static` で `L("Open")`、`L("Delete “{0}”?", name)` と書き、原文がそのままコードに残る。訳の無い文字列は英語で出る。
+  日本語の表 (`*.ja.cs`) は日本語を表示するときだけ作る。
+- **.resx を使わない理由**: ResourceManager はカルチャで言語を選ぶが、InvariantGlobalization ではカルチャがインバリアントに
+  固定される。サテライトアセンブリを NativeAOT の各ビルド (macOS のバンドルを含む) に含める手間もかかる。翻訳表は
+  ただの C# の辞書で、起動時間にも影響しない。
+- **訳の検査**: `CoreTextTests` / `SettingsTextTests` がソースを走査し、`L` に渡した文字列すべてに訳があること、使われない訳が
+  無いこと、`{0}` などのプレースホルダーと `{url}` のような語が原文と訳で一致することを確かめる。Windows ではビルドできない
+  macOS のプロジェクトもソースとして検査される。このため `L` には必ず文字列リテラル (書式なら引数を続ける) を渡し、
+  文字列補間は使わない。語順が言語で変わる文は、部品をつなげず文ごとに書式を用意する (ルールの概要の「host is …」など)。
+- **言語を決める時**: 言語はプロセス全体で 1 つ (`UiLanguages.Current`)。設定 UI は起動時に `config.json` から決める。
+  ViewModel のドロップダウンの選択肢は一度だけ作るため、一般ページで変えた言語は次に設定 UI を開いたときに反映される。
+  Router は URL ごとに読み込んだ設定から決め (読み込み中と、読めない場合は OS の言語)、OS には最初に文字列を作るときに
+  尋ねる。ピッカーには解決済みの言語をリクエストの `options.language` で渡す (§9.3)。
+- **翻訳する範囲**: 画面に出る文字列。設定 UI、ピッカー、Router がピッカーや最後の手段のダイアログに出す理由、設定 UI に
+  表示される Core のメッセージ (設定の検証、ルーティングの手順、プロファイルの解決、CSV のインポート)。CLI (`--dry-run`、
+  `--register`、`--status`、使い方) の出力とログだけに出すメッセージは英語のまま。画面とログに共通のメッセージ
+  (解決できない理由など) は、ログにも設定した言語で書かれる。
+- 設定 UI が新しく作る名前 (「新しいルール」「… のコピー」、コマンドのプロファイル、CSV からインポートしたルール) も
+  表示言語で付ける。言語名は選択肢でそれぞれの言語で書く (English / 日本語)。
+- **OS が描く部分は OS の言語**: Windows のファイル選択ダイアログやテキストボックスのメニュー、macOS の開くパネルや
+  NSPredicateEditor の複合条件の行。macOS のバンドルは `CFBundleLocalizations` に en と ja を宣言し、日本語の macOS では
+  AppKit 自身の文字列も日本語になる (Platform.md §3.7, §3.8)。WinUI 3 は日本語のときウィンドウのルートの `Language` を
+  `ja-JP` にし、英語の Windows でも漢字を日本語のフォントで描く (Platform.md §2.6, §2.8)。
+- Windows の条件エディターの複合条件は「次のすべてを満たす」のように文全体を 1 つの選択肢にする (英語も
+  「All of the following are true」)。以前の「[All] of the following are true」は選択肢の前後の語が言語で違い、訳せないため。
 
 ## 10. OS への登録と検出 (概要)
 
@@ -715,7 +752,6 @@ Windows のスパイクは使い捨てのコードではなく、M4 の製品コ
 
 ユーザー判断が必要な事項:
 
-- 対応言語 (日本語 / 英語の両方を想定)
 - 配布形態 (Windows: zip / winget、macOS: zip / dmg / Homebrew cask) と Apple Developer ID の有無
 - Windows で `.html` 等のファイル関連付けも登録するか (既定は URL のみ)
 - 送信元アプリケーション (どのアプリが URL を開いたか) を条件に加えるか (将来拡張)
@@ -753,6 +789,8 @@ Windows のスパイクは使い捨てのコードではなく、M4 の製品コ
 | 2026-10-02 | プロファイルは役割として扱い、マシンごとにターゲット全体を `local.json` の `profileTargets` で置き換えられるようにする。OS ごとのブラウザー指定は残す。エイリアスと実体の 2 階層は作らない | 同じ OS の 2 台、アカウントの違うブラウザープロファイルを OS ごとの指定では表せない。置き換えが無ければ今までどおりで、必要になったマシンでだけ見える (利用者と検討して決定)。OS ごとの指定は「Mac は全部 Safari」を同期で配るのに便利 |
 | 2026-10-02 | プロファイル ID は名前から付けるが、設定 UI で変更でき、参照も書き換える。元の ID は `previousIds` に残す | 名前から付けた ID はブラウザー名を含み、役割の名前にならない。他のマシンの置き換えは古い ID のキーのままなので引き当てに使う。ランダムな ID は JSON を読む時に分かりにくい |
 | 2026-10-02 | (前の行を改める) プロファイル ID は `profile-<番号>` の連番で付け、ID の変更は編集画面の Advanced に置く。番号は今ある ID、`previousIds`、このマシンの置き換えのキーの最大 + 1 で、空きは埋めない。名前はプロファイルの間で一意にし、ログには ID と名前を出す | 名前から付けると、最初の名前 (ブラウザー名) が、すぐ名前を変えても ID に残る (利用者の指摘)。マシンごとのターゲットでは別のブラウザーを開くこともあり誤解を招く。番号を使い回すと他のマシンに残った置き換えが無関係なプロファイルに当たる。名前をキーにする案は、名前の変更が参照の書き換えになり、他のマシンとのつながりも切れやすいため採らない (利用者と検討して決定) |
+| 2026-10-02 | UI を英語と日本語にする (§9.4)。`settings.language` の `auto` は OS の優先言語に従う。文字列は英語の原文をキーにした C# の翻訳表から引き、.resx (ResourceManager、サテライトアセンブリ) は使わない | 利用者の要望 (§12 の判断事項)。ResourceManager はカルチャで言語を選ぶが InvariantGlobalization ではインバリアントに固定され、サテライトアセンブリを各 NativeAOT ビルドに含める手間もかかる。原文がコードに残って読みやすく、訳の漏れはソースを走査するテストで検出できる |
+| 2026-10-02 | 設定 UI の言語の変更は次に設定 UI を開いたときに反映する。ピッカー IPC の `options` に `language` を追加し、Router が解決した言語を渡す (バージョン番号は引き続き持たない) | ViewModel は選択肢を一度だけ作り、画面も作り直さない構成のまま保つ。ピッカーは URL ごとに起動するので次のリンクから反映される。古いピッカーは未知のプロパティを無視し、`language` の無いリクエストではピッカーが OS の言語に従う |
 | 2026-10-02 | ルールの CSV インポート (URL かドメイン, プロファイル名) を設定 UI に置く。スキームの有無で `url` / `host`、どちらもワイルドカード。パスの無い URL には `/*` を補う。プロファイルごとに 1 つのルールにまとめ、既存のルールの後に加える | 他のツールからの移行用 (利用者の要望)。URL 条件は正規化した URL 全体と照合するので、`https://*.slack.com` はそのままでは何にも当たらない。既存のルールにまとめないのは、手で直したルールを書き換えないため |
 
 ## 14. マイルストーンと現在の状態
@@ -767,8 +805,12 @@ Windows 対応で追加するのは Platform の Windows 実装、Router の Win
 | M0 | スパイク (§12 の macOS 項目 1〜5) と計測方法の確立 | macOS 起動経路とピッカー構成の方式が確定している | 完了 (2026-10-01)。残件はヘルパーのネスト配置時の再確認で、M2 で行う。`tools/bench` は測る対象の Router ができる M2 で作る |
 | M1 | Core: 設定モデル、JSON、条件、ルーティング、プロファイル解決、IPC メッセージ、`--dry-run` | ユニットテストで §6〜§7 の仕様を網羅。`--dry-run` で設定ファイルの評価結果を確認できる | 完了 (2026-10-01)。`Preferis.Core` + 111 テスト、`Preferis.Router` は `--dry-run` のみ。NativeAOT publish 確認済み |
 | M2 | macOS Platform + Router 高速経路: Launch Services 検出、プロファイル列挙、LaunchPlan 実行、既定ブラウザー登録、Apple Event 受信。**`PublishMacOS` ターゲットで ad-hoc 署名済みの `Preferis.app` 一式を生成** | `artifacts/` の `Preferis.app` を既定ブラウザーにし、単一候補のルールで日常利用できる | 完了 (2026-10-01)。`open -a` 経由と argv 経由で Chrome / Edge Dev への振り分けを確認。既定ブラウザー化は `--register` をユーザーが実行して確認する。ピッカー不在時は既定プロファイルへフォールバック。Platform.md §5 に計測値 |
-| M3 | macOS ピッカー (AppKit, ヘルパーバンドル) + 設定 UI (AppKit)。両者を `Preferis.app` に同梱 | macOS で全機能が揃い、設定ファイルを手で編集せずに運用できる | 実装完了、目視確認待ち (2026-10-02)。`Preferis Picker.app` (6.8 MB) と `Preferis Settings.app` (8.7 MB。Avalonia 版 26 MB から AppKit に置き換え) はどちらも AppKit + NativeAOT で、`Contents/Helpers/` に同梱し内側から署名 (`Preferis.app` 全体で 20 MB)。Router 経由でピッカー表示まで 120 ms、「記憶する」、オプトイン履歴、`Preferis.app` を直接開くと設定 UI。テスト 367 件 (Core 221, Platform 35, Settings.Core 111)。描画はウィンドウのキャプチャで確認済みだが、実際のリンククリックからのピッカーの前面表示と設定 UI の手操作は開発者の目視確認が必要。未実装: UI の日本語化、アプリアイコン |
-| M4 | Windows: スパイク (§12 の 6〜9)、Platform の Windows 実装、Router の Windows 経路、WinUI 3 ピッカー、WinUI 3 の設定 UI (`Preferis.Settings.Core` の ViewModel を使う)。**`PublishWindows` ターゲットで exe 一式のフォルダーを生成** | `artifacts/` の `Preferis.exe` を既定ブラウザーにし、M3 と同等の機能が揃う。同一の設定ファイルを両 OS で共有できる | 実装完了、目視確認待ち (2026-10-02)。`dotnet build build/Preferis.Build.proj` で `artifacts/win-x64/Preferis/` (82 MB: Router 4.9 MB、ピッカー 7.6 MB、設定 10 MB と Windows App SDK) を生成。3 つとも NativeAOT。レジストリからのブラウザー検出、HKCU への登録、`--single-argument`、ピッカー (Router 起動から表示まで約 270 ms)、設定 UI (Windows 11 の設定アプリ風、条件は行のエディター)、テストページからの Router 実行を確認。テスト 424 件 (Core 221, Platform 80, Settings.Core 123)。macOS 側の変更 (ViewModel、`RouterProcess`) は Windows ではビルドとテストのみで、AppKit の 2 プロジェクトは macOS での確認が必要。未確認: 既定ブラウザーにしてのリンククリック (前面表示、スパイク 6)、既定のアプリ一覧への表示 (スパイク 8)、起動中ブラウザーへの受け渡し (スパイク 9)、Firefox。未実装: アプリアイコン、UI の日本語化 |
+| M3 | macOS ピッカー (AppKit, ヘルパーバンドル) + 設定 UI (AppKit)。両者を `Preferis.app` に同梱 | macOS で全機能が揃い、設定ファイルを手で編集せずに運用できる | 実装完了、目視確認待ち (2026-10-02)。`Preferis Picker.app` (6.8 MB) と `Preferis Settings.app` (8.7 MB。Avalonia 版 26 MB から AppKit に置き換え) はどちらも AppKit + NativeAOT で、`Contents/Helpers/` に同梱し内側から署名 (`Preferis.app` 全体で 20 MB)。Router 経由でピッカー表示まで 120 ms、「記憶する」、オプトイン履歴、`Preferis.app` を直接開くと設定 UI。テスト 367 件 (Core 221, Platform 35, Settings.Core 111)。描画はウィンドウのキャプチャで確認済みだが、実際のリンククリックからのピッカーの前面表示と設定 UI の手操作は開発者の目視確認が必要。未実装: アプリアイコン |
+| M4 | Windows: スパイク (§12 の 6〜9)、Platform の Windows 実装、Router の Windows 経路、WinUI 3 ピッカー、WinUI 3 の設定 UI (`Preferis.Settings.Core` の ViewModel を使う)。**`PublishWindows` ターゲットで exe 一式のフォルダーを生成** | `artifacts/` の `Preferis.exe` を既定ブラウザーにし、M3 と同等の機能が揃う。同一の設定ファイルを両 OS で共有できる | 実装完了、目視確認待ち (2026-10-02)。`dotnet build build/Preferis.Build.proj` で `artifacts/win-x64/Preferis/` (82 MB: Router 4.9 MB、ピッカー 7.6 MB、設定 10 MB と Windows App SDK) を生成。3 つとも NativeAOT。レジストリからのブラウザー検出、HKCU への登録、`--single-argument`、ピッカー (Router 起動から表示まで約 270 ms)、設定 UI (Windows 11 の設定アプリ風、条件は行のエディター)、テストページからの Router 実行を確認。テスト 424 件 (Core 221, Platform 80, Settings.Core 123)。macOS 側の変更 (ViewModel、`RouterProcess`) は Windows ではビルドとテストのみで、AppKit の 2 プロジェクトは macOS での確認が必要。未確認: 既定ブラウザーにしてのリンククリック (前面表示、スパイク 6)、既定のアプリ一覧への表示 (スパイク 8)、起動中ブラウザーへの受け渡し (スパイク 9)、Firefox。未実装: アプリアイコン |
 | M5 | リリース: Developer ID 署名と公証、インストーラー (macOS: dmg / Homebrew cask、Windows: zip / winget 等)、ベンチ結果の記録、利用者向けドキュメント | 配布物を第三者が導入できる | 未着手 |
+
+M3・M4 の後、UI を英語と日本語の 2 言語にした (§9.4、2026-10-02)。Windows では設定 UI とピッカーを NativeAOT で発行し、
+日本語の表示をスナップショットで確認した。AppKit の 2 プロジェクト (メニューバー、`CFBundleLocalizations`、NSPredicateEditor の
+表示を含む) は macOS でのビルドと確認が必要。
 
 本ドキュメントは設計段階のものです。実装と齟齬が出た場合は実装側の判断を本書に反映してください。

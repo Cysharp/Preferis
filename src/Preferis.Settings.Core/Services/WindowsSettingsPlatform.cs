@@ -6,6 +6,7 @@ using Preferis.Core.Configuration;
 using Preferis.Core.Hosting;
 using Preferis.Platform.Browsers;
 using Preferis.Platform.Windows;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.Services;
 
@@ -74,5 +75,5 @@ public sealed class WindowsSettingsPlatform : ISettingsPlatform
     private static Task<RouterRunResult> RunRouterAsync(string argument)
         => RouterPath is { } router
             ? RouterProcess.RunAsync(router, argument)
-            : Task.FromResult(new RouterRunResult(2, ["Preferis.exe was not found next to Preferis.Settings.exe."]));
+            : Task.FromResult(new RouterRunResult(2, [L("Preferis.exe was not found next to Preferis.Settings.exe.")]));
 }

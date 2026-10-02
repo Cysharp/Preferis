@@ -1,6 +1,7 @@
 using Preferis.Core.Browsers;
 using Preferis.Core.Configuration;
 using Preferis.Core.Routing;
+using static Preferis.Core.Localization.CoreText;
 
 namespace Preferis.Core.Profiles;
 
@@ -40,7 +41,7 @@ public sealed class ProfileResolver
             var profile = config.Profiles.FirstOrDefault(p => p.Id == currentId);
             if (profile is null)
             {
-                return new ResolveResult.Unresolved($"Profile '{currentId}' does not exist.");
+                return new ResolveResult.Unresolved(L("Profile '{0}' does not exist.", currentId));
             }
 
             switch (Resolve(profile, url))
@@ -48,7 +49,7 @@ public sealed class ProfileResolver
                 case ResolveResult.Resolved resolved:
                     return new ResolveResult.Resolved(resolved.Plan, [.. warnings, .. resolved.Warnings], currentId);
                 case ResolveResult.Unresolved unresolved when profile.Fallback is { } fallback && visited.Add(fallback):
-                    warnings.Add($"Profile {ProfileNames.Describe(profile)} could not be resolved ({unresolved.Reason}); using fallback {ProfileNames.Describe(config, fallback)}.");
+                    warnings.Add(L("Profile {0} could not be resolved ({1}); using fallback {2}.", ProfileNames.Describe(profile), unresolved.Reason, ProfileNames.Describe(config, fallback)));
                     currentId = fallback;
                     continue;
                 case ResolveResult.Unresolved unresolved:
@@ -67,13 +68,13 @@ public sealed class ProfileResolver
         var browserId = profile.Browser?.For(_platform);
         if (browserId is null)
         {
-            return new ResolveResult.Unresolved($"Profile {ProfileNames.Describe(profile)} has no browser or command for {_platform}.");
+            return new ResolveResult.Unresolved(L("Profile {0} has no browser or command for {1}.", ProfileNames.Describe(profile), _platform));
         }
 
         var browser = _locator.TryResolve(browserId);
         if (browser is null)
         {
-            return new ResolveResult.Unresolved($"Browser '{browserId}' is not installed.");
+            return new ResolveResult.Unresolved(L("Browser '{0}' is not installed.", browserId));
         }
 
         var warnings = new List<string>();
@@ -112,7 +113,7 @@ public sealed class ProfileResolver
             default:
                 if (profile.BrowserProfile is not null)
                 {
-                    warnings.Add($"Browser '{browser.Id}' does not support selecting a browser profile; ignoring it.");
+                    warnings.Add(L("Browser '{0}' does not support selecting a browser profile; ignoring it.", browser.Id));
                 }
                 break;
         }
@@ -122,7 +123,7 @@ public sealed class ProfileResolver
             var flag = browser.CatalogEntry?.PrivateModeArgument ?? DefaultPrivateFlag(browser.Family);
             if (flag is null)
             {
-                warnings.Add($"Browser '{browser.Id}' has no known private mode flag; ignoring it.");
+                warnings.Add(L("Browser '{0}' has no known private mode flag; ignoring it.", browser.Id));
             }
             else
             {
@@ -135,7 +136,7 @@ public sealed class ProfileResolver
             // Safari and unknown macOS apps do not take URLs on their command line; let Launch Services open it.
             if (profile.ExtraArgs is { Count: > 0 })
             {
-                warnings.Add($"Browser '{browser.Id}' is opened through the OS; extra arguments are ignored.");
+                warnings.Add(L("Browser '{0}' is opened through the OS; extra arguments are ignored.", browser.Id));
             }
             return new ResolveResult.Resolved(
                 new LaunchPlan(LaunchKind.OpenWithApplication, browser.ApplicationPath ?? browser.ExecutablePath, [url.AbsoluteUri], browser, null),
@@ -163,7 +164,7 @@ public sealed class ProfileResolver
         var spec = profile.Command!.For(_platform);
         if (spec is null || string.IsNullOrWhiteSpace(spec.Path))
         {
-            return new ResolveResult.Unresolved($"Profile {ProfileNames.Describe(profile)} has no command for {_platform}.");
+            return new ResolveResult.Unresolved(L("Profile {0} has no command for {1}.", ProfileNames.Describe(profile), _platform));
         }
 
         var path = EnvironmentExpander.Expand(spec.Path, _platform, _getEnvironmentVariable, _homeDirectory);
@@ -185,16 +186,16 @@ public sealed class ProfileResolver
         {
             if (!string.IsNullOrEmpty(reference.Directory))
             {
-                warnings.Add($"Profile data of '{browser.Id}' could not be read; using the stored directory '{reference.Directory}'.");
+                warnings.Add(L("Profile data of '{0}' could not be read; using the stored directory '{1}'.", browser.Id, reference.Directory));
                 return (reference.Directory, null);
             }
-            return (null, $"Profile data of '{browser.Id}' could not be read and no profile directory is stored.");
+            return (null, L("Profile data of '{0}' could not be read and no profile directory is stored.", browser.Id));
         }
 
         var match = BrowserProfileMatcher.Match(profiles, reference, BrowserFamily.Chromium);
 
         return match is null
-            ? (null, $"Browser profile {Describe(reference)} was not found in '{browser.Id}'.")
+            ? (null, L("Browser profile {0} was not found in '{1}'.", Describe(reference), browser.Id))
             : (match.Directory, null);
     }
 
@@ -203,19 +204,19 @@ public sealed class ProfileResolver
         var requested = reference.Name ?? reference.Directory;
         if (string.IsNullOrEmpty(requested))
         {
-            return (null, $"Browser profile for '{browser.Id}' has no name.");
+            return (null, L("Browser profile for '{0}' has no name.", browser.Id));
         }
 
         var profiles = _profiles.Enumerate(browser);
         if (profiles is null || profiles.Count == 0)
         {
-            warnings.Add($"Profile data of '{browser.Id}' could not be read; using the stored name '{requested}'.");
+            warnings.Add(L("Profile data of '{0}' could not be read; using the stored name '{1}'.", browser.Id, requested));
             return (requested, null);
         }
 
         var match = BrowserProfileMatcher.Match(profiles, reference, BrowserFamily.Firefox);
         return match?.Name is null
-            ? (null, $"Browser profile {Describe(reference)} was not found in '{browser.Id}'.")
+            ? (null, L("Browser profile {0} was not found in '{1}'.", Describe(reference), browser.Id))
             : (match.Name, null);
     }
 

@@ -3,10 +3,12 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Preferis.Core.Localization;
 using Preferis.Settings.ViewModels;
 using Preferis.Settings.Windows.Controls;
 using Preferis.Settings.Windows.Pages;
 using Windows.Graphics;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.Windows;
 
@@ -80,6 +82,11 @@ internal sealed class SettingsWindow
         _navigation.Content = content;
 
         var root = new Grid();
+        if (UiLanguages.Current == UiLanguage.Japanese)
+        {
+            // Text falls back to the fonts of this language: kanji in a Chinese font on an English Windows otherwise.
+            root.Language = "ja-JP";
+        }
         root.RowDefinitions.Add(new RowDefinition { Height = Ui.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = Ui.Star });
         root.Children.Add(titleBar);
@@ -210,9 +217,9 @@ internal sealed class SettingsWindow
     /// </summary>
     private static InfoBar Banner(SettingsViewModel settings, Bindings bindings)
     {
-        var theirs = Ui.Button("Use Theirs");
+        var theirs = Ui.Button(L("Use Theirs"));
         bindings.Command(theirs, settings.UseTheirsCommand);
-        var mine = Ui.Button("Keep Mine");
+        var mine = Ui.Button(L("Keep Mine"));
         bindings.Command(mine, settings.KeepMineCommand);
         var actions = Ui.HStack(8, theirs, mine);
         var bar = new InfoBar
@@ -225,14 +232,14 @@ internal sealed class SettingsWindow
         bindings.Observe(settings, () =>
         {
             var message = settings.HasExternalChanges
-                ? "config.json was changed outside the settings (for example by “Always open … with this choice” or a sync client) before your latest changes were saved. Use the file as it is now, or save your changes over it."
+                ? L("config.json was changed outside the settings (for example by “Always open … with this choice” or a sync client) before your latest changes were saved. Use the file as it is now, or save your changes over it.")
                 : settings.IsHoldingEditsForUnreadableFile
-                    ? $"{settings.LoadError} Your changes to it are not saved until you replace the file with them."
+                    ? L("{0} Your changes to it are not saved until you replace the file with them.", settings.LoadError)
                     : settings.StatusMessage ?? settings.LoadError;
             bar.Message = message ?? "";
             Ui.Show(theirs, settings.HasExternalChanges);
             Ui.Show(mine, settings.HasExternalChanges || settings.IsHoldingEditsForUnreadableFile);
-            mine.Content = settings.HasExternalChanges ? "Keep Mine" : "Replace";
+            mine.Content = settings.HasExternalChanges ? L("Keep Mine") : L("Replace");
             Ui.Show(actions, settings.HasExternalChanges || settings.IsHoldingEditsForUnreadableFile);
             bar.IsOpen = message is not null;
             Ui.Show(bar, message is not null);

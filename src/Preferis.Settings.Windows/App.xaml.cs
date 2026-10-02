@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Preferis.Settings.Services;
 using Preferis.Settings.ViewModels;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.Windows;
 
@@ -19,7 +20,7 @@ public partial class App : Application
             if (_settings is not null)
             {
                 e.Handled = true;
-                _settings.StatusMessage = $"Something went wrong: {e.Exception.Message}";
+                _settings.StatusMessage = L("Something went wrong: {0}", e.Exception.Message);
             }
         };
     }
@@ -27,6 +28,7 @@ public partial class App : Application
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         var loader = SettingsConfigLoader.Create();
+        SettingsConfigLoader.UseConfiguredLanguage(loader);
         _settings = new SettingsViewModel(loader, new WindowsSettingsPlatform(loader.LoadLocal()), new WinUIDialogService(() => _window?.Window), new DispatcherSaveScheduler());
         _window = new SettingsWindow(_settings);
 

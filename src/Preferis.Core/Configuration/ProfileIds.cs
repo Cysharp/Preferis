@@ -1,3 +1,5 @@
+using static Preferis.Core.Localization.CoreText;
+
 namespace Preferis.Core.Configuration;
 
 /// <summary>Changing a profile's id and everything that refers to it (docs/Configuration.md §2.11).</summary>
@@ -21,24 +23,24 @@ public static class ProfileIds
         }
         if (newId.Length == 0)
         {
-            return "The ID cannot be empty.";
+            return L("The ID cannot be empty.");
         }
         if (newId.Length > MaxLength)
         {
-            return $"The ID can have at most {MaxLength} characters.";
+            return L("The ID can have at most {0} characters.", MaxLength);
         }
         // ":" is out: the picker names detected browsers "browser:<id>".
         if (!newId.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.'))
         {
-            return "Use only ASCII letters, digits, “-”, “_” and “.”.";
+            return L("Use only ASCII letters, digits, “-”, “_” and “.”.");
         }
         if (config.Profiles.FirstOrDefault(p => p.Id == newId) is { } owner)
         {
-            return $"“{newId}” is already the ID of “{owner.Name}”.";
+            return L("“{0}” is already the ID of “{1}”.", newId, owner.Name);
         }
         if (config.Profiles.FirstOrDefault(p => p.Id != currentId && p.PreviousIds?.Contains(newId) == true) is { } former)
         {
-            return $"“{newId}” was the ID of “{former.Name}”, and other computers may still know it by it.";
+            return L("“{0}” was the ID of “{1}”, and other computers may still know it by it.", newId, former.Name);
         }
         return null;
     }

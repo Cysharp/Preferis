@@ -3,6 +3,7 @@ using Foundation;
 using ObjCRuntime;
 using Preferis.Settings.Services;
 using Preferis.Settings.ViewModels;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.MacOS;
 
@@ -53,6 +54,7 @@ internal sealed class AppDelegate : NSApplicationDelegate
     private void Start()
     {
         var loader = SettingsConfigLoader.Create();
+        SettingsConfigLoader.UseConfiguredLanguage(loader);
         _settings = new SettingsViewModel(loader, new MacSettingsPlatform(loader.LoadLocal()), new AppKitDialogService(), new TimerSaveScheduler());
         _window = new SettingsWindow(_settings);
         NSApplication.SharedApplication.MainMenu = MainMenu.Build();
@@ -101,35 +103,35 @@ internal static class MainMenu
         var menu = new NSMenu();
 
         var app = new NSMenu("Preferis Settings");
-        app.AddItem(new NSMenuItem("About Preferis Settings", new Selector("orderFrontStandardAboutPanel:"), ""));
+        app.AddItem(new NSMenuItem(L("About Preferis Settings"), new Selector("orderFrontStandardAboutPanel:"), ""));
         app.AddItem(NSMenuItem.SeparatorItem);
-        app.AddItem(new NSMenuItem("Hide Preferis Settings", new Selector("hide:"), "h"));
-        var hideOthers = new NSMenuItem("Hide Others", new Selector("hideOtherApplications:"), "h") { KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.AlternateKeyMask };
+        app.AddItem(new NSMenuItem(L("Hide Preferis Settings"), new Selector("hide:"), "h"));
+        var hideOthers = new NSMenuItem(L("Hide Others"), new Selector("hideOtherApplications:"), "h") { KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.AlternateKeyMask };
         app.AddItem(hideOthers);
-        app.AddItem(new NSMenuItem("Show All", new Selector("unhideAllApplications:"), ""));
+        app.AddItem(new NSMenuItem(L("Show All"), new Selector("unhideAllApplications:"), ""));
         app.AddItem(NSMenuItem.SeparatorItem);
-        app.AddItem(new NSMenuItem("Quit Preferis Settings", new Selector("terminate:"), "q"));
+        app.AddItem(new NSMenuItem(L("Quit Preferis Settings"), new Selector("terminate:"), "q"));
         menu.AddItem(new NSMenuItem("Preferis Settings") { Submenu = app });
 
         // No Save or Revert: edits save themselves.
-        var file = new NSMenu("File");
-        file.AddItem(new NSMenuItem("Close", new Selector("performClose:"), "w"));
-        menu.AddItem(new NSMenuItem("File") { Submenu = file });
+        var file = new NSMenu(L("File"));
+        file.AddItem(new NSMenuItem(L("Close"), new Selector("performClose:"), "w"));
+        menu.AddItem(new NSMenuItem(L("File")) { Submenu = file });
 
-        var edit = new NSMenu("Edit");
-        edit.AddItem(new NSMenuItem("Undo", new Selector("undo:"), "z"));
-        edit.AddItem(new NSMenuItem("Redo", new Selector("redo:"), "Z"));
+        var edit = new NSMenu(L("Edit"));
+        edit.AddItem(new NSMenuItem(L("Undo"), new Selector("undo:"), "z"));
+        edit.AddItem(new NSMenuItem(L("Redo"), new Selector("redo:"), "Z"));
         edit.AddItem(NSMenuItem.SeparatorItem);
-        edit.AddItem(new NSMenuItem("Cut", new Selector("cut:"), "x"));
-        edit.AddItem(new NSMenuItem("Copy", new Selector("copy:"), "c"));
-        edit.AddItem(new NSMenuItem("Paste", new Selector("paste:"), "v"));
-        edit.AddItem(new NSMenuItem("Select All", new Selector("selectAll:"), "a"));
-        menu.AddItem(new NSMenuItem("Edit") { Submenu = edit });
+        edit.AddItem(new NSMenuItem(L("Cut"), new Selector("cut:"), "x"));
+        edit.AddItem(new NSMenuItem(L("Copy"), new Selector("copy:"), "c"));
+        edit.AddItem(new NSMenuItem(L("Paste"), new Selector("paste:"), "v"));
+        edit.AddItem(new NSMenuItem(L("Select All"), new Selector("selectAll:"), "a"));
+        menu.AddItem(new NSMenuItem(L("Edit")) { Submenu = edit });
 
-        var window = new NSMenu("Window");
-        window.AddItem(new NSMenuItem("Minimize", new Selector("performMiniaturize:"), "m"));
-        window.AddItem(new NSMenuItem("Zoom", new Selector("performZoom:"), ""));
-        menu.AddItem(new NSMenuItem("Window") { Submenu = window });
+        var window = new NSMenu(L("Window"));
+        window.AddItem(new NSMenuItem(L("Minimize"), new Selector("performMiniaturize:"), "m"));
+        window.AddItem(new NSMenuItem(L("Zoom"), new Selector("performZoom:"), ""));
+        menu.AddItem(new NSMenuItem(L("Window")) { Submenu = window });
         NSApplication.SharedApplication.WindowsMenu = window;
 
         return menu;

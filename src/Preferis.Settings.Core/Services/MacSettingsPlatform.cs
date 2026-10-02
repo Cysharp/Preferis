@@ -6,6 +6,7 @@ using Preferis.Core.Configuration;
 using Preferis.Core.Hosting;
 using Preferis.Platform.Browsers;
 using Preferis.Platform.MacOS;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.Services;
 
@@ -54,7 +55,7 @@ public sealed class MacSettingsPlatform : ISettingsPlatform
     {
         if (RouterPath is not { } router)
         {
-            return new RegistrationResult(false, "Preferis.app was not found next to Preferis Settings.");
+            return new RegistrationResult(false, L("Preferis.app was not found next to Preferis Settings."));
         }
 
         // The Router registers itself so that Launch Services records the bundle URLs are delivered to.
@@ -62,7 +63,7 @@ public sealed class MacSettingsPlatform : ISettingsPlatform
         info.ArgumentList.Add("--register");
         try
         {
-            using var process = Process.Start(info) ?? throw new InvalidOperationException("The Router could not be started.");
+            using var process = Process.Start(info) ?? throw new InvalidOperationException(L("The Router could not be started."));
             var output = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
             var error = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
             await process.WaitForExitAsync().ConfigureAwait(false);
@@ -71,7 +72,7 @@ public sealed class MacSettingsPlatform : ISettingsPlatform
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
-            return new RegistrationResult(false, $"Could not run Preferis --register: {ex.Message}");
+            return new RegistrationResult(false, L("Could not run Preferis --register: {0}", ex.Message));
         }
     }
 
@@ -81,7 +82,7 @@ public sealed class MacSettingsPlatform : ISettingsPlatform
     public Task<RouterRunResult> OpenUrlAsync(string url)
         => RouterPath is { } router
             ? RouterProcess.RunAsync(router, url)
-            : Task.FromResult(new RouterRunResult(2, ["Preferis.app was not found next to Preferis Settings."]));
+            : Task.FromResult(new RouterRunResult(2, [L("Preferis.app was not found next to Preferis Settings.")]));
 
     public void Reveal(string path)
     {

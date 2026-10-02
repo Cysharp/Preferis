@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Preferis.Core.Configuration;
 using Preferis.Core.Routing;
 using Preferis.Settings.ViewModels;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.Windows.Controls;
 
@@ -17,27 +18,28 @@ internal sealed class ConditionEditor
 
     private static readonly (PredicateField Field, string Title)[] Fields =
     [
-        (PredicateField.Host, "Host"),
-        (PredicateField.Url, "URL"),
-        (PredicateField.UrlCaseSensitive, "URL (case-sensitive)"),
+        (PredicateField.Host, L("Host")),
+        (PredicateField.Url, L("URL")),
+        (PredicateField.UrlCaseSensitive, L("URL (case-sensitive)")),
     ];
 
-    // The titles follow the rule summaries of the list (RuleSummary.Verb).
+    // The titles follow the rule summaries of the list (RuleSummary).
     private static readonly (MatchKind Match, string Title)[] Operators =
     [
-        (MatchKind.Exact, "is"),
-        (MatchKind.StartsWith, "starts with"),
-        (MatchKind.EndsWith, "ends with"),
-        (MatchKind.Contains, "contains"),
-        (MatchKind.Wildcard, "matches"),
-        (MatchKind.Regex, "matches regex"),
+        (MatchKind.Exact, L("is")),
+        (MatchKind.StartsWith, L("starts with")),
+        (MatchKind.EndsWith, L("ends with")),
+        (MatchKind.Contains, L("contains")),
+        (MatchKind.Wildcard, L("matches")),
+        (MatchKind.Regex, L("matches regex")),
     ];
 
+    // Whole sentences rather than "[All] of the following are true": the words around the choice differ by language.
     private static readonly (CompoundKind Kind, string Title)[] Compounds =
     [
-        (CompoundKind.All, "All"),
-        (CompoundKind.Any, "Any"),
-        (CompoundKind.None, "None"),
+        (CompoundKind.All, L("All of the following are true")),
+        (CompoundKind.Any, L("Any of the following are true")),
+        (CompoundKind.None, L("None of the following are true")),
     ];
 
     private readonly Node _root;
@@ -80,7 +82,7 @@ internal sealed class ConditionEditor
             }
             if (node.Children.Count == 0 && parent is null)
             {
-                var empty = Ui.Secondary("No conditions: the rule never matches. Add one with +.");
+                var empty = Ui.Secondary(L("No conditions: the rule never matches. Add one with +."));
                 empty.Margin = new Thickness(Indent, 0, 0, 0);
                 _rows.Children.Add(empty);
             }
@@ -104,7 +106,7 @@ internal sealed class ConditionEditor
                 Publish();
             }
         };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(kind, "Which conditions must be true");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(kind, L("Which conditions must be true"));
 
         var add = AddButton(node, insertAfter: null);
         var buttons = Ui.HStack(0, add);
@@ -113,8 +115,7 @@ internal sealed class ConditionEditor
             buttons.Children.Add(RemoveButton(node, parent));
         }
         var row = Ui.Columns(8,
-            (kind, Ui.Auto),
-            (Ui.Label("of the following are true"), Ui.Star),
+            (kind, Ui.Star),
             (buttons, Ui.Auto));
         row.Margin = new Thickness(depth * Indent, 0, 0, 0);
         return row;
@@ -129,7 +130,7 @@ internal sealed class ConditionEditor
             field.Items.Add(title);
         }
         field.SelectedIndex = Array.FindIndex(Fields, f => f.Field == node.Field);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(field, "What to look at");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(field, L("What to look at"));
 
         var op = Ui.ComboBox(140);
         op.HorizontalAlignment = HorizontalAlignment.Left;
@@ -138,10 +139,10 @@ internal sealed class ConditionEditor
             op.Items.Add(title);
         }
         op.SelectedIndex = Array.FindIndex(Operators, o => o.Match == node.Match);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(op, "How to compare");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(op, L("How to compare"));
 
-        var pattern = new TextBox { Text = node.Pattern, PlaceholderText = "Pattern", FontFamily = Ui.Monospace };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(pattern, "Pattern");
+        var pattern = new TextBox { Text = node.Pattern, PlaceholderText = L("Pattern"), FontFamily = Ui.Monospace };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(pattern, L("Pattern"));
         var error = Ui.Wrapping("", 12, Ui.Brush("SystemFillColorCriticalBrush"));
         void ShowError()
         {
@@ -196,11 +197,11 @@ internal sealed class ConditionEditor
     // "+": a condition, or a group of conditions, below this row (or at the end of the group).
     private Button AddButton(Node group, Node? insertAfter)
     {
-        var button = Ui.IconButton(Ui.Glyphs.Add, "Add a condition or a group");
+        var button = Ui.IconButton(Ui.Glyphs.Add, L("Add a condition or a group"));
         var menu = new MenuFlyout();
-        var condition = new MenuFlyoutItem { Text = "Add Condition" };
+        var condition = new MenuFlyoutItem { Text = L("Add Condition") };
         condition.Click += (_, _) => Insert(group, insertAfter, Node.Comparison(PredicateField.Host, MatchKind.Exact, ""));
-        var nested = new MenuFlyoutItem { Text = "Add Group" };
+        var nested = new MenuFlyoutItem { Text = L("Add Group") };
         nested.Click += (_, _) => Insert(group, insertAfter, Node.Group(CompoundKind.Any, [Node.Comparison(PredicateField.Host, MatchKind.Exact, "")]));
         menu.Items.Add(condition);
         menu.Items.Add(nested);
@@ -210,7 +211,7 @@ internal sealed class ConditionEditor
 
     private Button RemoveButton(Node node, Node parent)
     {
-        var button = Ui.IconButton(Ui.Glyphs.Remove, "Remove");
+        var button = Ui.IconButton(Ui.Glyphs.Remove, L("Remove"));
         button.Click += (_, _) =>
         {
             parent.Children.Remove(node);

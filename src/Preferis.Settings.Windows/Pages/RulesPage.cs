@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 using Preferis.Core.Configuration;
 using Preferis.Settings.ViewModels;
 using Preferis.Settings.Windows.Controls;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.Windows.Pages;
 
@@ -47,18 +48,18 @@ internal sealed class RulesPage : IPageView
         Grid.SetRow(catchAllBox, 1);
         _rules.View.Children.Add(catchAllBox);
 
-        var add = Ui.IconButton(Ui.Glyphs.Add, "Add a rule below the selected one");
+        var add = Ui.IconButton(Ui.Glyphs.Add, L("Add a rule below the selected one"));
         _bindings.Command(add, page.AddRuleCommand);
-        var remove = Ui.IconButton(Ui.Glyphs.Remove, "Delete the selected rule");
+        var remove = Ui.IconButton(Ui.Glyphs.Remove, L("Delete the selected rule"));
         _bindings.Command(remove, page.DeleteRuleCommand);
-        var more = Ui.IconButton(Ui.Glyphs.More, "More");
+        var more = Ui.IconButton(Ui.Glyphs.More, L("More"));
         var menu = new MenuFlyout();
-        menu.Items.Add(Bindings.MenuItem("Duplicate", page.DuplicateRuleCommand));
+        menu.Items.Add(Bindings.MenuItem(L("Duplicate"), page.DuplicateRuleCommand));
         menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(Bindings.MenuItem("Move Up", page.MoveRuleUpCommand));
-        menu.Items.Add(Bindings.MenuItem("Move Down", page.MoveRuleDownCommand));
+        menu.Items.Add(Bindings.MenuItem(L("Move Up"), page.MoveRuleUpCommand));
+        menu.Items.Add(Bindings.MenuItem(L("Move Down"), page.MoveRuleDownCommand));
         menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(Bindings.MenuItem("Import from CSV…", page.ImportRulesCommand));
+        menu.Items.Add(Bindings.MenuItem(L("Import from CSV…"), page.ImportRulesCommand));
         more.Flyout = menu;
         _rules.Bar.Children.Add(add);
         _rules.Bar.Children.Add(remove);
@@ -80,15 +81,15 @@ internal sealed class RulesPage : IPageView
     private static UIElement Row(RuleViewModel rule, Bindings bindings)
     {
         var enabled = new CheckBox { MinWidth = 0, Padding = new Thickness(0), VerticalAlignment = VerticalAlignment.Center };
-        ToolTipService.SetToolTip(enabled, "Turn the rule on or off");
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(enabled, "Enabled");
+        ToolTipService.SetToolTip(enabled, L("Turn the rule on or off"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(enabled, L("Enabled"));
         bindings.Check(enabled, rule, nameof(RuleViewModel.Enabled), () => rule.Enabled, value => rule.Enabled = value);
 
         var name = Ui.Label("");
         var summary = Ui.Secondary("");
         bindings.Observe(rule, () =>
         {
-            name.Text = rule.Name.Length > 0 ? rule.Name : "(Unnamed)";
+            name.Text = rule.Name.Length > 0 ? rule.Name : L("(Unnamed)");
             name.Foreground = Ui.Brush(rule.Enabled ? "TextFillColorPrimaryBrush" : "TextFillColorDisabledBrush");
             summary.Text = rule.Summary;
             ToolTipService.SetToolTip(summary, rule.Summary);
@@ -111,13 +112,13 @@ internal sealed class RulesPage : IPageView
         bindings.Visible(problem, catchAll, () => catchAll.HasIssues, nameof(CatchAllViewModel.HasIssues));
         var icon = Ui.Glyph(Ui.Glyphs.Next, 14, Ui.Brush("TextFillColorSecondaryBrush"));
         icon.Width = 28;
-        return Ui.Columns(4, (icon, Ui.Auto), (Ui.VStack(0, Ui.Label("When No Rule Matches"), summary), Ui.Star), (problem, Ui.Auto));
+        return Ui.Columns(4, (icon, Ui.Auto), (Ui.VStack(0, Ui.Label(L("When No Rule Matches")), summary), Ui.Star), (problem, Ui.Auto));
     }
 
     private static FontIcon ProblemBadge()
     {
         var badge = Ui.Glyph(Ui.Glyphs.Error, 14, Ui.Brush("SystemFillColorCriticalBrush"));
-        ToolTipService.SetToolTip(badge, "This rule has problems");
+        ToolTipService.SetToolTip(badge, L("This rule has problems"));
         return badge;
     }
 
@@ -143,7 +144,7 @@ internal sealed class RulesPage : IPageView
         {
             RuleViewModel rule => RuleEditor(rule, _editorBindings),
             CatchAllViewModel catchAll => CatchAllEditor(catchAll, _editorBindings),
-            _ => Form.Empty("No Rule Selected", "Click + below the list to add a rule."),
+            _ => Form.Empty(L("No Rule Selected"), L("Click + below the list to add a rule.")),
         };
     }
 
@@ -153,32 +154,32 @@ internal sealed class RulesPage : IPageView
         var subtitle = Ui.Secondary("");
         bindings.Observe(rule, () =>
         {
-            title.Text = rule.Name.Length > 0 ? rule.Name : "(Unnamed)";
+            title.Text = rule.Name.Length > 0 ? rule.Name : L("(Unnamed)");
             subtitle.Text = rule.Summary;
         }, nameof(RuleViewModel.Name), nameof(RuleViewModel.Summary));
         var header = EditorParts.Header(Ui.Badge(Ui.Glyphs.Branch, Colors.DarkOrange), title, subtitle, rule, nameof(RuleViewModel.Issues), () => rule.Issues, bindings);
 
-        var name = Ui.TextBox("Name");
+        var name = Ui.TextBox(L("Name"));
         bindings.Text(name, rule, nameof(RuleViewModel.Name), () => rule.Name, value => rule.Name = value);
         var enabled = Ui.Switch();
         bindings.Switch(enabled, rule, nameof(RuleViewModel.Enabled), () => rule.Enabled, value => rule.Enabled = value);
         var general = Form.Section(null,
-            Form.Card("Name", name, $"Id: {rule.Id}"),
-            Form.Card("Enabled", enabled, "Routing skips a rule that is turned off."));
+            Form.Card(L("Name"), name, L("ID: {0}", rule.Id)),
+            Form.Card(L("Enabled"), enabled, L("Routing skips a rule that is turned off.")));
 
         return EditorPage(
             header,
             general,
             ConditionSection(rule),
-            ActionsSection(rule.Actions, "the rewritten URL goes on to the next rule.", bindings));
+            ActionsSection(rule.Actions, L("Actions run from top to bottom. Every action but Rewrite ends the routing; when only rewrites ran, the rewritten URL goes on to the next rule."), bindings));
     }
 
     private static UIElement CatchAllEditor(CatchAllViewModel catchAll, Bindings bindings)
     {
-        var title = Ui.Label("When No Rule Matches");
-        var subtitle = Ui.Secondary("The catch-all rule comes after every other rule and has no condition; only its actions can be changed.");
+        var title = Ui.Label(L("When No Rule Matches"));
+        var subtitle = Ui.Secondary(L("The catch-all rule comes after every other rule and has no condition; only its actions can be changed."));
         var header = EditorParts.Header(Ui.Badge(Ui.Glyphs.Next, Colors.SlateGray), title, subtitle, catchAll, nameof(CatchAllViewModel.Issues), () => catchAll.Issues, bindings);
-        return EditorPage(header, ActionsSection(catchAll.Actions, "the default profile opens the rewritten URL.", bindings));
+        return EditorPage(header, ActionsSection(catchAll.Actions, L("Actions run from top to bottom. Every action but Rewrite ends the routing; when only rewrites ran, the default profile opens the rewritten URL."), bindings));
     }
 
     private static ScrollViewer EditorPage(params UIElement[] sections)
@@ -190,32 +191,30 @@ internal sealed class RulesPage : IPageView
 
     private UIElement ConditionSection(RuleViewModel rule)
     {
-        const string Footer = "Host is the host name alone (www.example.com) and never case-sensitive; URL is the whole URL. "
-            + "“matches” takes * for any characters and ? for one; “matches regex” takes a .NET regular expression. "
-            + "A rule without a condition never matches.";
+        var footer = L("Host is the host name alone (www.example.com) and never case-sensitive; URL is the whole URL. “matches” takes * for any characters and ? for one; “matches regex” takes a .NET regular expression. A rule without a condition never matches.");
         if (ConditionPredicates.ToEditor(rule.Model.Condition) is not { } tree)
         {
             // A condition type from a newer Preferis: kept as it is, and only replaceable as a whole.
             var json = Ui.Code(JsonSerializer.SerializeToElement(rule.Model, PreferisJsonContext.Default.Rule).GetProperty("condition").ToString());
-            var replace = Ui.Button("Replace with a New Condition", () =>
+            var replace = Ui.Button(L("Replace with a New Condition"), () =>
             {
                 rule.SetCondition(new HostCondition { Match = MatchKind.Exact, Pattern = "" });
                 ShowEditor();
             });
-            return Form.Section("If",
-                Form.Card("This condition comes from a newer version of Preferis", replace, "It cannot be edited here and is saved unchanged."),
+            return Form.Section(L("If"),
+                Form.Card(L("This condition comes from a newer version of Preferis"), replace, L("It cannot be edited here and is saved unchanged.")),
                 Form.Wide(json));
         }
 
         var editor = new ConditionEditor(tree, edited => rule.SetCondition(ConditionPredicates.FromEditor(edited)));
-        return Form.Section("If", Footer, Form.Wide(editor.View));
+        return Form.Section(L("If"), footer, Form.Wide(editor.View));
     }
 
     /// <summary>"Then": one card per action, in the order they run, with "Add Action" beside the title.</summary>
-    /// <param name="afterRewrites">What happens when only rewrites ran (docs/Design.md §6.1).</param>
-    private static UIElement ActionsSection(ActionListViewModel actions, string afterRewrites, Bindings bindings)
+    /// <param name="footer">How the actions run, ending with what happens when only rewrites ran (docs/Design.md §6.1).</param>
+    private static UIElement ActionsSection(ActionListViewModel actions, string footer, Bindings bindings)
     {
-        var add = new DropDownButton { Content = "Add Action" };
+        var add = new DropDownButton { Content = L("Add Action") };
         var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedRight };
         foreach (var kind in ActionListViewModel.Kinds)
         {
@@ -225,9 +224,9 @@ internal sealed class RulesPage : IPageView
 
         var cards = new StackPanel { Spacing = Form.CardSpacing };
         var section = Ui.VStack(Form.CardSpacing,
-            Form.Header("Then", add),
+            Form.Header(L("Then"), add),
             cards,
-            Form.Footer("Actions run from top to bottom. Every action but Rewrite ends the routing; when only rewrites ran, " + afterRewrites));
+            Form.Footer(footer));
 
         Bindings? itemBindings = null;
         bindings.Add(() => itemBindings?.Dispose());
@@ -238,7 +237,7 @@ internal sealed class RulesPage : IPageView
             cards.Children.Clear();
             if (actions.Items.Count == 0)
             {
-                cards.Children.Add(Form.Card(Ui.Label("No actions yet: a rule needs at least one.", color: Ui.Brush("SystemFillColorCriticalBrush")), null));
+                cards.Children.Add(Form.Card(Ui.Label(L("No actions yet: a rule needs at least one."), color: Ui.Brush("SystemFillColorCriticalBrush")), null));
             }
             foreach (var action in actions.Items)
             {
@@ -251,9 +250,9 @@ internal sealed class RulesPage : IPageView
     private static UIElement ActionCard(ActionViewModel action, Bindings bindings)
     {
         var buttons = Ui.HStack(0,
-            SmallButton(Ui.Glyphs.Up, "Move up", action.MoveUpCommand, bindings),
-            SmallButton(Ui.Glyphs.Down, "Move down", action.MoveDownCommand, bindings),
-            SmallButton(Ui.Glyphs.Delete, "Remove this action", action.RemoveCommand, bindings));
+            SmallButton(Ui.Glyphs.Up, L("Move up"), action.MoveUpCommand, bindings),
+            SmallButton(Ui.Glyphs.Down, L("Move down"), action.MoveDownCommand, bindings),
+            SmallButton(Ui.Glyphs.Delete, L("Remove this action"), action.RemoveCommand, bindings));
         var title = Ui.Label($"{action.Number}  {action.Title}", semibold: true);
         var header = Ui.Columns(8, (title, Ui.Star), (buttons, Ui.Auto));
 
@@ -262,7 +261,7 @@ internal sealed class RulesPage : IPageView
             OpenActionViewModel open => OpenBody(open, bindings),
             RewriteActionViewModel rewrite => RewriteBody(rewrite, bindings),
             SimpleActionViewModel simple => Ui.Wrapping(simple.Description),
-            UnknownActionViewModel unknown => Ui.VStack(6, Ui.Wrapping("From a newer version of Preferis; saved unchanged."), Ui.Code(unknown.Json)),
+            UnknownActionViewModel unknown => Ui.VStack(6, Ui.Wrapping(L("From a newer version of Preferis; saved unchanged.")), Ui.Code(unknown.Json)),
             _ => null,
         };
         var content = body is null ? (UIElement)header : Ui.VStack(10, header, body);
@@ -286,22 +285,22 @@ internal sealed class RulesPage : IPageView
             if (toggle.IsMissing)
             {
                 check.Foreground = Ui.Brush("SystemFillColorCriticalBrush");
-                ToolTipService.SetToolTip(check, "No profile has this id any more; uncheck it to remove it.");
+                ToolTipService.SetToolTip(check, L("No profile has this id any more; uncheck it to remove it."));
             }
             bindings.Check(check, toggle, nameof(ProfileToggleViewModel.IsSelected), () => toggle.IsSelected, value => toggle.IsSelected = value);
             checks.Children.Add(check);
         }
         if (open.Profiles.Count == 0)
         {
-            checks.Children.Add(Ui.Secondary("Add profiles on the Profiles page.", 14));
+            checks.Children.Add(Ui.Secondary(L("Add profiles on the Profiles page."), 14));
         }
         var note = Ui.Wrapping("");
         // Every check and uncheck raises UsesDefaultProfile.
         bindings.Observe(open, () => note.Text = open.Profiles.Count(p => p.IsSelected) switch
         {
-            0 => "None checked: the default profile opens the URL.",
-            1 => "The checked profile opens the URL.",
-            _ => "The picker offers the checked profiles, in the order of the Profiles page.",
+            0 => L("None checked: the default profile opens the URL."),
+            1 => L("The checked profile opens the URL."),
+            _ => L("The picker offers the checked profiles, in the order of the Profiles page."),
         }, nameof(OpenActionViewModel.UsesDefaultProfile));
         return Ui.VStack(4, checks, note);
     }
@@ -321,9 +320,9 @@ internal sealed class RulesPage : IPageView
         var parameter = Ui.TextBox("url", monospaced: true, width: 300);
         bindings.Text(parameter, rewrite, nameof(RewriteActionViewModel.Parameter), () => rewrite.Parameter, value => rewrite.Parameter = value);
 
-        var patternRow = Ui.VStack(2, Line("Pattern", pattern, null), error);
-        var replacementRow = Line("Replace with", replacement, "Applied to the whole URL, with a lower-case scheme and host and no default port. $1, $2… insert the groups.");
-        var parameterRow = Line("Parameter", parameter, "Its value becomes the URL, as with links wrapped by mail and chat services.");
+        var patternRow = Ui.VStack(2, Line(L("Pattern"), pattern, null), error);
+        var replacementRow = Line(L("Replace with"), replacement, L("Applied to the whole URL, with a lower-case scheme and host and no default port. $1, $2… insert the groups."));
+        var parameterRow = Line(L("Parameter"), parameter, L("Its value becomes the URL, as with links wrapped by mail and chat services."));
         bindings.Observe(rewrite, () =>
         {
             error.Text = rewrite.PatternError ?? "";
@@ -332,7 +331,7 @@ internal sealed class RulesPage : IPageView
             Ui.Show(replacementRow, rewrite.IsRegex);
             Ui.Show(parameterRow, rewrite.IsQueryParameter);
         }, nameof(RewriteActionViewModel.Mode), nameof(RewriteActionViewModel.PatternError));
-        return Ui.VStack(8, Line("Method", mode, null), patternRow, replacementRow, parameterRow);
+        return Ui.VStack(8, Line(L("Method"), mode, null), patternRow, replacementRow, parameterRow);
     }
 
     // A label and its control inside an action card.

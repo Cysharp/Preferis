@@ -1,0 +1,131 @@
+namespace Preferis.Core.Localization;
+
+public static partial class CoreText
+{
+    // English text → Japanese. Names and ids in quotes are 「」, sentences end with 。, and ASCII words are set off by
+    // spaces, as in the Japanese docs. CoreTextTests checks this table against the code.
+    private static Dictionary<string, string> Japanese() => new(StringComparer.Ordinal)
+    {
+        // ---- configuration files ----
+        { "local.json could not be read ({0}): {1}", "local.json を読み込めませんでした ({0}): {1}" },
+        { "config.json could not be read ({0}): {1}", "config.json を読み込めませんでした ({0}): {1}" },
+        { "A file already exists at {0}.", "{0} には既にファイルがあります。" },
+        { "There is no file at {0}.", "{0} にファイルがありません。" },
+        { "{0} is not a Preferis configuration: {1}", "{0} は Preferis の設定ファイルではありません: {1}" },
+
+        // ---- configuration issues ----
+        { "The default profile '{0}' does not exist.", "既定のプロファイル「{0}」は存在しません。" },
+        { "Another profile is already named “{0}”.", "「{0}」という名前のプロファイルがほかにもあります。" },
+        { "Rule '{0}' has no id.", "ルール「{0}」に ID がありません。" },
+        { "The rule id '{0}' is used more than once.", "ルール ID「{0}」が複数のルールで使われています。" },
+        { "The rule has no condition and never matches.", "条件がないため、このルールはどの URL にも一致しません。" },
+        { "The rule has no action.", "アクションがありません。" },
+        { "Profile '{0}' has no id.", "プロファイル「{0}」に ID がありません。" },
+        { "The profile id '{0}' is used more than once.", "プロファイル ID「{0}」が複数のプロファイルで使われています。" },
+        { "The profile has both a browser and a command; the command is used.", "ブラウザーとコマンドの両方が設定されています。コマンドが使われます。" },
+        { "The command has no executable path for any OS.", "どの OS のコマンドにも実行ファイルのパスがありません。" },
+        { "The profile has neither a browser nor a command.", "ブラウザーもコマンドも設定されていません。" },
+        { "'{0}' is not a known browser id.", "「{0}」は既知のブラウザー ID ではありません。" },
+        { "The profile falls back to itself.", "フォールバック先が自分自身になっています。" },
+        { "The fallback profile '{0}' does not exist.", "フォールバック先のプロファイル「{0}」は存在しません。" },
+        { "An empty \"all of\" group matches every URL.", "条件が空の「すべて」のグループは、すべての URL に一致します。" },
+        { "An empty \"any of\" group never matches.", "条件が空の「いずれか」のグループは、どの URL にも一致しません。" },
+        { "A \"not\" group without a condition never matches.", "条件が空の「否定」のグループは、どの URL にも一致しません。" },
+        { "The URL pattern is empty.", "URL のパターンが空です。" },
+        { "The host pattern is empty.", "ホストのパターンが空です。" },
+        { "The URL pattern '{0}' is invalid: {1}", "URL のパターン「{0}」が正しくありません: {1}" },
+        { "The host pattern '{0}' is invalid: {1}", "ホストのパターン「{0}」が正しくありません: {1}" },
+        { "The condition type '{0}' comes from a newer Preferis and never matches here.", "条件の種類「{0}」は新しいバージョンの Preferis のもので、このバージョンでは一致しません。" },
+        { "The profile '{0}' does not exist and is ignored.", "プロファイル「{0}」は存在しないため無視されます。" },
+        { "The rewrite has no pattern.", "書き換えのパターンがありません。" },
+        { "The rewrite pattern '{0}' is invalid: {1}", "書き換えのパターン「{0}」が正しくありません: {1}" },
+        { "The rewrite has no query parameter name.", "書き換えに使うクエリパラメーターの名前がありません。" },
+        { "Reroute without a rewrite before it starts over with the same URL and always fails as a loop.", "前に書き換えのない振り分け直しは、同じ URL で最初からやり直すため、ループとして必ず失敗します。" },
+        { "The action type '{0}' comes from a newer Preferis; routing fails when it is reached.", "アクションの種類「{0}」は新しいバージョンの Preferis のものです。ここに達すると振り分けは失敗します。" },
+        { "The actions after '{0}' never run.", "「{0}」より後のアクションは実行されません。" },
+
+        // ---- profile ids ----
+        { "The ID cannot be empty.", "ID を空にすることはできません。" },
+        { "The ID can have at most {0} characters.", "ID は {0} 文字以内にしてください。" },
+        { "Use only ASCII letters, digits, “-”, “_” and “.”.", "半角英数字と「-」「_」「.」だけを使ってください。" },
+        { "“{0}” is already the ID of “{1}”.", "「{0}」は既に「{1}」の ID です。" },
+        { "“{0}” was the ID of “{1}”, and other computers may still know it by it.", "「{0}」は「{1}」の以前の ID で、ほかのコンピューターではまだその ID で参照されている可能性があります。" },
+
+        // ---- importing rules ----
+        { "Imported Rule for {0}", "{0} 用にインポートしたルール" },
+        { "A URL or domain and a profile name are needed.", "URL またはドメインと、プロファイル名が必要です。" },
+        { "No profile is named “{0}”.", "「{0}」という名前のプロファイルはありません。" },
+        { "“{0}” is neither a URL (it would start with a scheme such as https://) nor a domain.", "「{0}」は URL (https:// などのスキームで始まるもの) でもドメインでもありません。" },
+        { "“{0}” is already in the rule for “{1}”.", "「{0}」は既に「{1}」のルールに含まれています。" },
+
+        // ---- routing and resolving ----
+        { "No profiles are configured yet.", "プロファイルがまだ設定されていません。" },
+        { "The picker could not be shown.", "ピッカーを表示できませんでした。" },
+        { "The system default handler is Preferis itself.", "OS の既定のハンドラーが Preferis 自身になっています。" },
+        { "Unexpected decision {0}.", "予期しない振り分け結果です: {0}" },
+        { "Could not start {0}: {1}", "{0} を起動できませんでした: {1}" },
+        { "Unexpected resolution result.", "プロファイルの解決結果が予期しないものでした。" },
+        { "The URL could not be opened: {0}", "URL を開けませんでした: {0}" },
+        { "Could not start {0}.", "{0} を起動できませんでした。" },
+        { "Could not start '{0}': {1}", "「{0}」を起動できませんでした: {1}" },
+        { "The process could not be started: {0}", "プロセスを起動できませんでした: {0}" },
+        { "Profile '{0}' does not exist.", "プロファイル「{0}」は存在しません。" },
+        { "Profile {0} could not be resolved ({1}); using fallback {2}.", "プロファイル {0} を解決できなかったため ({1})、フォールバック先の {2} を使います。" },
+        { "Profile {0} has no browser or command for {1}.", "プロファイル {0} には {1} 用のブラウザーもコマンドもありません。" },
+        { "Browser '{0}' is not installed.", "ブラウザー「{0}」はインストールされていません。" },
+        { "Browser '{0}' does not support selecting a browser profile; ignoring it.", "ブラウザー「{0}」はブラウザープロファイルの指定に対応していないため、指定を無視します。" },
+        { "Browser '{0}' has no known private mode flag; ignoring it.", "ブラウザー「{0}」をプライベートモードで開く方法が分からないため、指定を無視します。" },
+        { "Browser '{0}' is opened through the OS; extra arguments are ignored.", "ブラウザー「{0}」は OS 経由で開くため、追加の引数は無視されます。" },
+        { "Profile {0} has no command for {1}.", "プロファイル {0} には {1} 用のコマンドがありません。" },
+        { "Profile data of '{0}' could not be read; using the stored directory '{1}'.", "「{0}」のプロファイル情報を読み込めなかったため、保存されているディレクトリ「{1}」を使います。" },
+        { "Profile data of '{0}' could not be read and no profile directory is stored.", "「{0}」のプロファイル情報を読み込めず、プロファイルのディレクトリも保存されていません。" },
+        { "Browser profile {0} was not found in '{1}'.", "ブラウザープロファイル {0} が「{1}」に見つかりません。" },
+        { "Browser profile for '{0}' has no name.", "「{0}」のブラウザープロファイルに名前がありません。" },
+        { "Profile data of '{0}' could not be read; using the stored name '{1}'.", "「{0}」のプロファイル情報を読み込めなかったため、保存されている名前「{1}」を使います。" },
+        { "Unsupported match kind: {0}", "未対応の比較方法です: {0}" },
+
+        // ---- the steps of routing (the Test page of the settings) ----
+        { "Reroute hop limit ({0}) exceeded.", "振り分け直しの上限 ({0} 回) を超えました。" },
+        { "Reroute loop detected at '{0}'.", "「{0}」で振り分け直しがループしています。" },
+        { "Reroute #{0} with {1}", "振り分け直し #{0}: {1}" },
+        { "Disabled", "無効" },
+        { "No match for {0}", "{0} は一致しません" },
+        { "Matched {0}", "{0} が一致しました" },
+        { "No terminal action; continuing with {0}", "振り分けを終えるアクションがないため、{0} で次のルールに進みます" },
+        { "No rule matched; applying the catch-all rule", "どのルールにも一致しないため、キャッチオールルールを適用します" },
+        { "Rewrite failed.", "書き換えに失敗しました。" },
+        { "Unknown action type '{0}'.", "アクションの種類「{0}」は不明です。" },
+        { "Profile '{0}' does not exist and was ignored", "プロファイル「{0}」は存在しないため無視しました" },
+        { "Default profile '{0}' does not exist", "既定のプロファイル「{0}」は存在しません" },
+        { "open {0} with [{1}] ({2})", "{0} を [{1}] で開く ({2})" },
+        { "system {0}", "{0} を OS の既定のハンドラーに渡す" },
+        { "none", "何もしない" },
+        { "open", "開く" },
+        { "system", "OS の既定に渡す" },
+        { "rewrite", "書き換え" },
+        { "reroute", "振り分け直し" },
+        { "Explicit", "ルールで指定" },
+        { "DefaultProfile", "既定のプロファイル" },
+        { "AllProfiles", "すべてのプロファイル" },
+        { "failed: {0}", "失敗: {0}" },
+        { "Unsupported rewrite mode: {0}", "未対応の書き換え方法です: {0}" },
+        { "Regex rewrite has no pattern.", "正規表現による書き換えにパターンがありません。" },
+        { "Invalid rewrite pattern: {0}", "書き換えのパターンが正しくありません: {0}" },
+        { "Rewrite pattern timed out.", "書き換えのパターンの処理がタイムアウトしました。" },
+        { "Query parameter rewrite has no parameter name.", "クエリパラメーターによる書き換えにパラメーター名がありません。" },
+        { "Query parameter '{0}' not found.", "クエリパラメーター「{0}」が見つかりません。" },
+        { "Rewrite produced an invalid URL: '{0}'", "書き換えた結果が正しい URL ではありません: 「{0}」" },
+
+        // ---- the last-resort dialog ----
+        { "Copy URL", "URL をコピー" },
+        { "OK", "OK" },
+        { "{0}\n\n{1}\n\nCopy the URL to the clipboard?", "{0}\n\n{1}\n\nURL をクリップボードにコピーしますか?" },
+
+        // ---- the picker ----
+        { "Private", "プライベート" },
+        { "Open", "開く" },
+        { "Cancel", "キャンセル" },
+        { "Open ({0})", "開く ({0})" },
+        { "Always open {0} with this choice", "{0} は常にこの選択で開く" },
+    };
+}

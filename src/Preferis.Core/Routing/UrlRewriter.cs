@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Preferis.Core.Configuration;
+using static Preferis.Core.Localization.CoreText;
 
 namespace Preferis.Core.Routing;
 
@@ -13,14 +14,14 @@ public static class UrlRewriter
     {
         RewriteMode.Regex => RewriteWithRegex(action, url),
         RewriteMode.QueryParameter => RewriteFromQueryParameter(action, url),
-        _ => (null, $"Unsupported rewrite mode: {action.Mode}"),
+        _ => (null, L("Unsupported rewrite mode: {0}", action.Mode)),
     };
 
     private static (RoutingUrl?, string?) RewriteWithRegex(RewriteAction action, RoutingUrl url)
     {
         if (string.IsNullOrEmpty(action.Pattern))
         {
-            return (null, "Regex rewrite has no pattern.");
+            return (null, L("Regex rewrite has no pattern."));
         }
 
         Regex regex;
@@ -37,7 +38,7 @@ public static class UrlRewriter
         }
         catch (ArgumentException ex)
         {
-            return (null, $"Invalid rewrite pattern: {ex.Message}");
+            return (null, L("Invalid rewrite pattern: {0}", ex.Message));
         }
 
         string rewritten;
@@ -47,7 +48,7 @@ public static class UrlRewriter
         }
         catch (RegexMatchTimeoutException)
         {
-            return (null, "Rewrite pattern timed out.");
+            return (null, L("Rewrite pattern timed out."));
         }
 
         return Finish(rewritten);
@@ -57,7 +58,7 @@ public static class UrlRewriter
     {
         if (string.IsNullOrEmpty(action.Parameter))
         {
-            return (null, "Query parameter rewrite has no parameter name.");
+            return (null, L("Query parameter rewrite has no parameter name."));
         }
 
         var query = url.Uri.Query;
@@ -80,9 +81,9 @@ public static class UrlRewriter
             return Finish(value);
         }
 
-        return (null, $"Query parameter '{action.Parameter}' not found.");
+        return (null, L("Query parameter '{0}' not found.", action.Parameter));
     }
 
     private static (RoutingUrl?, string?) Finish(string candidate)
-        => RoutingUrl.TryParse(candidate, out var url) ? (url, null) : (null, $"Rewrite produced an invalid URL: '{candidate}'");
+        => RoutingUrl.TryParse(candidate, out var url) ? (url, null) : (null, L("Rewrite produced an invalid URL: '{0}'", candidate));
 }

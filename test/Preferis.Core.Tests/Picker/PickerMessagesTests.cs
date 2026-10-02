@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Preferis.Core.Configuration;
+using Preferis.Core.Localization;
 using Preferis.Core.Picker;
 using Preferis.Core.Routing;
 
@@ -43,6 +44,28 @@ public class PickerMessagesTests
         Assert.Equal("safari", request.Candidates[0].Browser);
         Assert.True(request.Candidates[1].Private);
         Assert.Equal("設定ファイルを読み込めませんでした", request.Message);
+    }
+
+    [Fact]
+    public void The_request_names_the_language_to_show()
+    {
+        var config = Sample();
+
+        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.MacOS, null);
+
+        Assert.Equal("en", request.Options.Language);
+        Assert.Contains("\"language\": \"en\"", PickerMessages.Serialize(request), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_picker_shows_the_language_of_the_request_or_without_one_the_systems()
+    {
+        static PickerRequest Request(string? language) => new() { Options = new PickerOptions { Language = language } };
+
+        Assert.Equal(UiLanguage.Japanese, PickerMessages.LanguageOf(Request("ja"), () => ["en-US"]));
+        Assert.Equal(UiLanguage.English, PickerMessages.LanguageOf(Request("en"), () => ["ja-JP"]));
+        // From a Router older than the language option.
+        Assert.Equal(UiLanguage.Japanese, PickerMessages.LanguageOf(Request(null), () => ["ja-JP"]));
     }
 
     [Fact]

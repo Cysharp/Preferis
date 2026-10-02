@@ -7,6 +7,7 @@ using Preferis.Core.Configuration;
 using Preferis.Core.Picker;
 using Preferis.Core.Profiles;
 using Preferis.Settings.Services;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.ViewModels;
 
@@ -31,8 +32,8 @@ public sealed record ProfileChoice(string? Id, string Title) : Choice(Title);
 /// </summary>
 public sealed partial class ProfileViewModel : ObservableObject
 {
-    private static readonly BrowserProfileChoice NoBrowserProfile = new(null, "(None)");
-    private static readonly ProfileChoice NoFallback = new(null, "(None)");
+    private static readonly BrowserProfileChoice NoBrowserProfile = new(null, L("(None)"));
+    private static readonly ProfileChoice NoFallback = new(null, L("(None)"));
 
     private readonly SettingsViewModel _settings;
     private bool _syncing;
@@ -165,15 +166,15 @@ public sealed partial class ProfileViewModel : ObservableObject
         {
             if (LocalTarget is { } local)
             {
-                return $"This computer: {local.Summary}";
+                return L("This computer: {0}", local.Summary);
             }
             if (IsCommand)
             {
                 return CommandSummary(Platform == HostPlatform.MacOS ? MacOSCommandPath : WindowsCommandPath);
             }
             var browser = PerOs
-                ? $"{MacOSBrowser?.Title ?? "?"} on macOS, {WindowsBrowser?.Title ?? "?"} on Windows"
-                : Browser?.Title ?? "No browser";
+                ? L("{0} on macOS, {1} on Windows", MacOSBrowser?.Title ?? "?", WindowsBrowser?.Title ?? "?")
+                : Browser?.Title ?? L("No browser");
             return BrowserSummary(browser, BrowserProfile?.Reference, Private);
         }
     }
@@ -239,7 +240,7 @@ public sealed partial class ProfileViewModel : ObservableObject
             }
             if (Model.Fallback is { } fallback && FallbackChoices.All(c => c.Id != fallback))
             {
-                FallbackChoices.Add(new ProfileChoice(fallback, $"{fallback} (missing)"));
+                FallbackChoices.Add(new ProfileChoice(fallback, L("{0} (missing)", fallback)));
             }
             Fallback = FallbackChoices.First(c => c.Id == Model.Fallback);
             // Another profile may have taken (or given up) the id being typed.
@@ -413,7 +414,7 @@ public sealed partial class ProfileViewModel : ObservableObject
     [RelayCommand]
     private async Task BrowseMacOSCommand()
     {
-        if (await _settings.Dialogs.PickFileAsync("Choose an application or executable") is not { } path)
+        if (await _settings.Dialogs.PickFileAsync(L("Choose an application or executable")) is not { } path)
         {
             return;
         }
@@ -441,7 +442,7 @@ public sealed partial class ProfileViewModel : ObservableObject
     [RelayCommand]
     private async Task BrowseWindowsCommand()
     {
-        if (await _settings.Dialogs.PickFileAsync("Choose a program") is { } path)
+        if (await _settings.Dialogs.PickFileAsync(L("Choose a program")) is { } path)
         {
             WindowsCommandPath = path;
         }
@@ -491,11 +492,11 @@ public sealed partial class ProfileViewModel : ObservableObject
     internal static List<string> Lines(string text)
         => text.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
 
-    internal static string CommandSummary(string path) => path.Length == 0 ? "Command" : $"Command: {Path.GetFileName(path)}";
+    internal static string CommandSummary(string path) => path.Length == 0 ? L("Command") : L("Command: {0}", Path.GetFileName(path));
 
     internal static string BrowserSummary(string browser, BrowserProfileRef? reference, bool isPrivate)
     {
-        var details = reference is not null ? PickerDisplay.DetailLine(new PickerCandidate { BrowserProfile = reference, Private = isPrivate }) : isPrivate ? "Private" : "";
+        var details = reference is not null ? PickerDisplay.DetailLine(new PickerCandidate { BrowserProfile = reference, Private = isPrivate }) : isPrivate ? L("Private") : "";
         return details.Length == 0 ? browser : $"{browser} · {details}";
     }
 
@@ -552,7 +553,7 @@ public sealed partial class ProfileViewModel : ObservableObject
         if (stored is not null && match is null)
         {
             // Keep what is stored even when this machine does not have it: it may exist on another one.
-            selected = new BrowserProfileChoice(stored, $"{stored.Name ?? stored.Email ?? stored.Directory} (not found on this computer)");
+            selected = new BrowserProfileChoice(stored, L("{0} (not found on this computer)", stored.Name ?? stored.Email ?? stored.Directory));
             choices.Add(selected);
         }
         return selected;
@@ -564,7 +565,7 @@ public sealed partial class ProfileViewModel : ObservableObject
         var choices = browsers.Select(b => new BrowserChoice(b.Browser.Id, b.Browser.DisplayName, true, b.IconPng)).ToList();
         choices.AddRange(BrowserCatalog.Entries
             .Where(e => choices.All(c => c.Id != e.Id) && ExistsOn(e, platform))
-            .Select(e => new BrowserChoice(e.Id, $"{e.DisplayName} (not installed)", false, null)));
+            .Select(e => new BrowserChoice(e.Id, L("{0} (not installed)", e.DisplayName), false, null)));
         AddStoredIds(choices, storedIds);
         return choices;
     }
@@ -589,7 +590,7 @@ public sealed partial class ProfileViewModel : ObservableObject
     {
         foreach (var id in ids.OfType<string>().Distinct().Where(id => choices.All(c => c.Id != id)))
         {
-            choices.Add(new BrowserChoice(id, $"{id} (not installed)", false, null));
+            choices.Add(new BrowserChoice(id, L("{0} (not installed)", id), false, null));
         }
     }
 

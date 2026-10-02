@@ -1,8 +1,8 @@
-using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Preferis.Settings.ViewModels;
 using Preferis.Settings.Windows.Controls;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.Windows.Pages;
 
@@ -32,9 +32,9 @@ internal sealed class GeneralPage : IPageView
     {
         var status = Ui.Label("");
         status.TextWrapping = TextWrapping.Wrap;
-        var make = Ui.AccentButton("Make Default");
+        var make = Ui.AccentButton(L("Make Default"));
         _bindings.Command(make, page.RegisterCommand);
-        var settings = Ui.Button("Open Windows Settings");
+        var settings = Ui.Button(L("Open Windows Settings"));
         _bindings.Command(settings, page.OpenSystemSettingsCommand);
         _bindings.Observe(page, () =>
         {
@@ -50,8 +50,8 @@ internal sealed class GeneralPage : IPageView
                 Ui.Brush(page.IsDefaultBrowser ? "SystemFillColorSuccessBrush" : "TextFillColorTertiaryBrush")));
         }, nameof(GeneralPageViewModel.IsDefaultBrowser));
 
-        var section = Form.Section("Default Browser",
-            "Windows lets you choose the default browser only in its Settings: Make Default registers Preferis and opens that page. Preferis then receives every link and opens it according to the rules.",
+        var section = Form.Section(L("Default Browser"),
+            L("Windows lets you choose the default browser only in its Settings: Make Default registers Preferis and opens that page. Preferis then receives every link and opens it according to the rules."),
             Form.Card(status, Ui.HStack(8, settings, make), icon: icon));
         section.Children[0].SetValue(FrameworkElement.MarginProperty, new Thickness(1, 8, 0, 4));
         return section;
@@ -66,18 +66,18 @@ internal sealed class GeneralPage : IPageView
             path.Text = page.ConfigPath;
             ToolTipService.SetToolTip(path, page.ConfigPath);
         }, nameof(GeneralPageViewModel.ConfigPath));
-        var reveal = Ui.Button("Show in Explorer");
+        var reveal = Ui.Button(L("Show in Explorer"));
         _bindings.Command(reveal, page.RevealConfigCommand);
 
-        var change = new DropDownButton { Content = "Change Location" };
+        var change = new DropDownButton { Content = L("Change Location") };
         var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedRight };
-        menu.Items.Add(Bindings.MenuItem("Move To…", page.MoveConfigCommand));
-        menu.Items.Add(Bindings.MenuItem("Use Existing File…", page.UseExistingConfigCommand));
+        menu.Items.Add(Bindings.MenuItem(L("Move To…"), page.MoveConfigCommand));
+        menu.Items.Add(Bindings.MenuItem(L("Use Existing File…"), page.UseExistingConfigCommand));
         menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(Bindings.MenuItem("Move Back to the Default Location", page.MoveToDefaultLocationCommand));
+        menu.Items.Add(Bindings.MenuItem(L("Move Back to the Default Location"), page.MoveToDefaultLocationCommand));
         change.Flyout = menu;
 
-        return Form.Section("Configuration File", page.ConfigPathHint,
+        return Form.Section(L("Configuration File"), page.ConfigPathHint,
             Form.Card(Ui.Label("config.json"), Ui.HStack(8, reveal, change), path, Ui.Glyph(Ui.Glyphs.Folder, 20, Ui.Brush("TextFillColorSecondaryBrush"))));
     }
 
@@ -85,7 +85,7 @@ internal sealed class GeneralPage : IPageView
     {
         var position = Ui.ComboBox();
         _bindings.Choice(position, page, nameof(GeneralPageViewModel.PickerPosition),
-            [(PickerPosition.Cursor, "Near the pointer"), (PickerPosition.Center, "Center of the screen")],
+            [(PickerPosition.Cursor, L("Near the pointer")), (PickerPosition.Center, L("Center of the screen"))],
             () => page.PickerPosition, value => page.PickerPosition = value);
 
         var seconds = new NumberBox { Minimum = 0, Maximum = 60, SmallChange = 1, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline, MinWidth = 120 };
@@ -94,24 +94,24 @@ internal sealed class GeneralPage : IPageView
         var remember = Ui.Switch();
         _bindings.Switch(remember, page, nameof(GeneralPageViewModel.RememberChoiceDefault), () => page.RememberChoiceDefault, value => page.RememberChoiceDefault = value);
 
-        return Form.Section("Picker", "Shown when a rule offers several profiles. These settings are shared with every computer using this configuration.",
-            Form.Card("Position", position),
-            Form.Card("Choose automatically after", seconds, "In seconds. 0 keeps the picker open until you choose."),
-            Form.Card("Remember the choice by default", remember, "Checks “Always open this host with this choice” when the picker opens."));
+        return Form.Section(L("Picker"), L("Shown when a rule offers several profiles. These settings are shared with every computer using this configuration."),
+            Form.Card(L("Position"), position),
+            Form.Card(L("Choose automatically after"), seconds, L("In seconds. 0 keeps the picker open until you choose.")),
+            Form.Card(L("Remember the choice by default"), remember, L("Checks “Always open this host with this choice” when the picker opens.")));
     }
 
     private UIElement Language(GeneralPageViewModel page)
     {
         var language = Ui.ComboBox();
         _bindings.Popup(language, page, nameof(GeneralPageViewModel.Language), () => page.Languages, () => page.Language, value => page.Language = value, l => l.Title);
-        return Form.Section("Language", Form.Card("Language", language, "Preferis is in English for now; the choice is kept for when other languages arrive."));
+        return Form.Section(L("Language"), Form.Card(L("Language"), language, L("The picker shows a new language from the next link on, the settings the next time they open.")));
     }
 
     private UIElement ThisPC(GeneralPageViewModel page)
     {
         var level = Ui.ComboBox(120);
-        _bindings.Choice(level, page, nameof(GeneralPageViewModel.LogLevel), page.LogLevels.Select(l => (l, Title(l))).ToList(), () => page.LogLevel, value => page.LogLevel = value);
-        var logs = Ui.Button("Show Logs");
+        _bindings.Choice(level, page, nameof(GeneralPageViewModel.LogLevel), page.LogLevels.Select(l => (l, GeneralPageViewModel.LogLevelTitle(l))).ToList(), () => page.LogLevel, value => page.LogLevel = value);
+        var logs = Ui.Button(L("Show Logs"));
         _bindings.Command(logs, page.OpenLogFolderCommand);
 
         var history = Ui.Switch();
@@ -120,11 +120,9 @@ internal sealed class GeneralPage : IPageView
         _bindings.Number(size, page, nameof(GeneralPageViewModel.HistorySize), () => page.HistorySize, value => page.HistorySize = (int)value);
         _bindings.Observe(page, () => size.IsEnabled = page.IsHistoryEnabled, nameof(GeneralPageViewModel.IsHistoryEnabled));
 
-        return Form.Section("This PC", "Kept in local.json on this PC only, never synced.",
-            Form.Card("Log level", Ui.HStack(8, level, logs)),
-            Form.Card("Keep a history of opened links", history, "Shown on the Test page to try them again. Contains URLs."),
-            Form.Card("Links to keep", size));
-
-        static string Title(string level) => CultureInfo.InvariantCulture.TextInfo.ToTitleCase(level);
+        return Form.Section(L("This PC"), L("Kept in local.json on this PC only, never synced."),
+            Form.Card(L("Log level"), Ui.HStack(8, level, logs)),
+            Form.Card(L("Keep a history of opened links"), history, L("Shown on the Test page to try them again. Contains URLs.")),
+            Form.Card(L("Links to keep"), size));
     }
 }

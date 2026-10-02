@@ -1,5 +1,7 @@
 using Preferis.Core;
 using Preferis.Core.Configuration;
+using Preferis.Core.Localization;
+using Preferis.Platform;
 
 namespace Preferis.Settings.Services;
 
@@ -22,4 +24,11 @@ public static class SettingsConfigLoader
         }
         return ConfigLoader.ForCurrentMachine();
     }
+
+    /// <summary>
+    /// Shows the settings in the language of <c>config.json</c> (docs/Design.md §9.4). Called once before the window and its
+    /// view models exist, as their drop-down lists are built once; a change shows the next time the settings open.
+    /// </summary>
+    public static void UseConfiguredLanguage(ConfigLoader loader)
+        => UiLanguages.Current = UiLanguages.Resolve(loader.Load().Config.Settings?.Language, SystemLanguages.Preferred);
 }

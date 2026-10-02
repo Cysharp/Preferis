@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Preferis.Core;
 using Preferis.Core.Hosting;
 using Preferis.Core.Profiles;
+using static Preferis.Core.Localization.CoreText;
 
 namespace Preferis.Platform.Launching;
 
@@ -18,7 +19,7 @@ public sealed class LaunchPlanExecutor : IBrowserLauncher
     public void Launch(LaunchPlan plan)
     {
         using var process = Process.Start(CreateStartInfo(plan, _platform))
-            ?? throw new InvalidOperationException($"The process could not be started: {plan.Path}");
+            ?? throw new InvalidOperationException(L("The process could not be started: {0}", plan.Path));
     }
 
     /// <summary>Arguments are passed one by one (never joined into a string) so URLs are not re-quoted.</summary>

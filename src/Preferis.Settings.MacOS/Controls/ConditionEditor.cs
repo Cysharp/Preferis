@@ -3,6 +3,7 @@ using CoreData;
 using Foundation;
 using Preferis.Core.Configuration;
 using Preferis.Settings.ViewModels;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.MacOS.Controls;
 
@@ -15,20 +16,21 @@ internal sealed class ConditionEditor : IDisposable
 {
     private static readonly (PredicateField Field, string KeyPath, string Title)[] Fields =
     [
-        (PredicateField.Host, "host", "Host"),
-        (PredicateField.Url, "url", "URL"),
-        (PredicateField.UrlCaseSensitive, "urlCaseSensitive", "URL (case-sensitive)"),
+        (PredicateField.Host, "host", L("Host")),
+        (PredicateField.Url, "url", L("URL")),
+        (PredicateField.UrlCaseSensitive, "urlCaseSensitive", L("URL (case-sensitive)")),
     ];
 
-    // The titles follow the rule summaries of the list (RuleSummary.Verb).
+    // The titles follow the rule summaries of the list (RuleSummary). The compound rows are AppKit's own, in the language
+    // of the system when the bundle lists it (CFBundleLocalizations).
     private static readonly (MatchKind Match, NSPredicateOperatorType Operator, string Title)[] Operators =
     [
-        (MatchKind.Exact, NSPredicateOperatorType.EqualTo, "is"),
-        (MatchKind.StartsWith, NSPredicateOperatorType.BeginsWith, "starts with"),
-        (MatchKind.EndsWith, NSPredicateOperatorType.EndsWith, "ends with"),
-        (MatchKind.Contains, NSPredicateOperatorType.Contains, "contains"),
-        (MatchKind.Wildcard, NSPredicateOperatorType.Like, "matches"),
-        (MatchKind.Regex, NSPredicateOperatorType.Matches, "matches regex"),
+        (MatchKind.Exact, NSPredicateOperatorType.EqualTo, L("is")),
+        (MatchKind.StartsWith, NSPredicateOperatorType.BeginsWith, L("starts with")),
+        (MatchKind.EndsWith, NSPredicateOperatorType.EndsWith, L("ends with")),
+        (MatchKind.Contains, NSPredicateOperatorType.Contains, L("contains")),
+        (MatchKind.Wildcard, NSPredicateOperatorType.Like, L("matches")),
+        (MatchKind.Regex, NSPredicateOperatorType.Matches, L("matches regex")),
     ];
 
     private readonly NSPredicateEditor _editor;
@@ -133,7 +135,7 @@ internal sealed class ConditionEditor : IDisposable
                     item.Title = title;
                 }
             }
-            pattern.PlaceholderString = "Pattern";
+            pattern.PlaceholderString = L("Pattern");
         }
         return template;
     }

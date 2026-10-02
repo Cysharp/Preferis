@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Preferis.Core;
 using Preferis.Core.Configuration;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.ViewModels;
 
@@ -85,7 +86,7 @@ public sealed partial class LocalTargetViewModel : ObservableObject
     /// <summary>What it opens, for the profile list.</summary>
     public string Summary => IsCommand
         ? ProfileViewModel.CommandSummary(CommandPath.Trim())
-        : ProfileViewModel.BrowserSummary(Browser?.Title ?? "No browser", BrowserProfile?.Reference, Private);
+        : ProfileViewModel.BrowserSummary(Browser?.Title ?? L("No browser"), BrowserProfile?.Reference, Private);
 
     /// <summary>The browser it opens; null for a command.</summary>
     public string? BrowserId => IsBrowser ? Browser?.Id : null;
@@ -117,7 +118,7 @@ public sealed partial class LocalTargetViewModel : ObservableObject
     [RelayCommand]
     private async Task BrowseCommand()
     {
-        var title = Platform == HostPlatform.MacOS ? "Choose an application or executable" : "Choose a program";
+        var title = Platform == HostPlatform.MacOS ? L("Choose an application or executable") : L("Choose a program");
         if (await _settings.Dialogs.PickFileAsync(title) is not { } path)
         {
             return;

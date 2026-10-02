@@ -2,7 +2,9 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Preferis.Core.Localization;
 using Preferis.Core.Picker;
+using Preferis.Platform;
 
 namespace Preferis.Picker.Windows;
 
@@ -43,6 +45,8 @@ internal static partial class Program
             Console.Error.WriteLine("The request is not a valid picker request.");
             return 1;
         }
+
+        UiLanguages.Current = PickerMessages.LanguageOf(request, SystemLanguages.Preferred);
 
         // Meanwhile WinUI starts, which takes as long.
         var images = CandidateImages.StartLoading(request);

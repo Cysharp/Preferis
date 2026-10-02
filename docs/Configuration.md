@@ -244,7 +244,7 @@ Firefox のプロファイルは `-P <name>` で選ぶため `name` だけを保
 | `picker.position` | `cursor` | `cursor` / `center` |
 | `picker.autoSelectSeconds` | `0` | 0 で無効。N 秒無操作で選択中の候補 (初期状態は先頭) を選択。キーやマウスの操作でカウントはやり直し。自動選択では「記憶する」は働かない |
 | `picker.rememberChoiceDefault` | `false` | 「記憶する」チェックの初期状態 |
-| `language` | `auto` | `auto` / `en` / `ja`。M3 時点の UI は英語のみで、値は保存されるだけ |
+| `language` | `auto` | `auto` / `en` / `ja`。UI の言語 (Design.md §9.4)。`auto` は OS の優先言語のうち Preferis が持つ最初のもの (無ければ英語)。知らない値は `auto` と同じ。設定 UI には次に開いたときから、ピッカーには次のリンクから反映される |
 
 ### 2.10 ID の生成
 

@@ -12,12 +12,14 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Ellipse = Microsoft.UI.Xaml.Shapes.Ellipse;
+using Preferis.Core.Localization;
 using Preferis.Core.Picker;
 using Preferis.Platform.Windows;
 using Windows.Foundation;
 using Windows.Graphics;
 using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
+using static Preferis.Core.Localization.CoreText;
 using VirtualKey = Windows.System.VirtualKey;
 using Windows.UI.Core;
 
@@ -124,19 +126,24 @@ internal sealed class PickerWindow
 
         _open = new Button
         {
-            Content = "Open",
+            Content = L("Open"),
             Style = Resource<Style>("AccentButtonStyle"),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             IsEnabled = request.Candidates.Count > 0,
         };
         _open.Click += (_, _) => Answer(_session.Confirm());
-        var cancel = new Button { Content = "Cancel", HorizontalAlignment = HorizontalAlignment.Stretch };
+        var cancel = new Button { Content = L("Cancel"), HorizontalAlignment = HorizontalAlignment.Stretch };
         cancel.Click += (_, _) => Answer(_session.Cancel());
         // Windows puts the primary action first, and a dialog's buttons share the width equally.
         var footer = Columns(8, (_open, new GridLength(1, GridUnitType.Star)), (cancel, new GridLength(1, GridUnitType.Star)));
         footer.Padding = new Thickness(DialogPadding);
 
         _root = new Grid { Background = Brush("ContentDialogBackground") };
+        if (UiLanguages.Current == UiLanguage.Japanese)
+        {
+            // Text falls back to the fonts of this language: kanji in a Chinese font on an English Windows otherwise.
+            _root.Language = "ja-JP";
+        }
         _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _root.Children.Add(content);
@@ -297,8 +304,8 @@ internal sealed class PickerWindow
 
     private void UpdateOpenButton()
         => _open.Content = _session.AutoSelectRemaining is { } remaining
-            ? $"Open ({Math.Ceiling(remaining.TotalSeconds).ToString(CultureInfo.InvariantCulture)})"
-            : "Open";
+            ? L("Open ({0})", Math.Ceiling(remaining.TotalSeconds))
+            : L("Open");
 
     private void CopyUrl()
     {
@@ -376,7 +383,7 @@ internal sealed class PickerWindow
             VerticalAlignment = VerticalAlignment.Center,
             Padding = new Thickness(8),
         };
-        ToolTipService.SetToolTip(copy, "Copy URL");
+        ToolTipService.SetToolTip(copy, L("Copy URL"));
         copy.Click += (_, _) => CopyUrl();
 
         var header = Columns(12, (icon, GridLength.Auto), (texts, new GridLength(1, GridUnitType.Star)), (copy, GridLength.Auto));
@@ -400,7 +407,7 @@ internal sealed class PickerWindow
         }
         var remember = new CheckBox
         {
-            Content = new TextBlock { Text = $"Always open {PickerDisplay.SplitUrl(request.Url).Host} with this choice", TextTrimming = TextTrimming.CharacterEllipsis },
+            Content = new TextBlock { Text = L("Always open {0} with this choice", PickerDisplay.SplitUrl(request.Url).Host), TextTrimming = TextTrimming.CharacterEllipsis },
             IsChecked = _session.Remember,
         };
         remember.Checked += (_, _) => _session.Remember = true;

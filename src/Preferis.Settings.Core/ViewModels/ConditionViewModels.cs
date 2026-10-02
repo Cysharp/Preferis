@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Preferis.Core.Configuration;
 using Preferis.Core.Routing;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.ViewModels;
 
@@ -138,7 +139,7 @@ public sealed partial class GroupConditionViewModel : ConditionNodeViewModel
     [ObservableProperty]
     public partial GroupKind Kind { get; set; }
 
-    public static IReadOnlyList<EnumChoice<GroupKind>> Kinds { get; } = [new(GroupKind.All, "All of"), new(GroupKind.Any, "Any of")];
+    public static IReadOnlyList<EnumChoice<GroupKind>> Kinds { get; } = [new(GroupKind.All, L("All of")), new(GroupKind.Any, L("Any of"))];
 
     public EnumChoice<GroupKind> SelectedKind
     {
@@ -203,16 +204,16 @@ public sealed partial class LeafConditionViewModel : ConditionNodeViewModel
         IgnoreCase = model is not UrlCondition url || url.IgnoreCase;
     }
 
-    public static IReadOnlyList<EnumChoice<ConditionTarget>> Targets { get; } = [new(ConditionTarget.Host, "Host"), new(ConditionTarget.Url, "URL")];
+    public static IReadOnlyList<EnumChoice<ConditionTarget>> Targets { get; } = [new(ConditionTarget.Host, L("Host")), new(ConditionTarget.Url, L("URL"))];
 
     public static IReadOnlyList<EnumChoice<MatchKind>> Matches { get; } =
     [
-        new(MatchKind.Exact, "is"),
-        new(MatchKind.Wildcard, "matches (wildcard)"),
-        new(MatchKind.StartsWith, "starts with"),
-        new(MatchKind.EndsWith, "ends with"),
-        new(MatchKind.Contains, "contains"),
-        new(MatchKind.Regex, "matches regex"),
+        new(MatchKind.Exact, L("is")),
+        new(MatchKind.Wildcard, L("matches (wildcard)")),
+        new(MatchKind.StartsWith, L("starts with")),
+        new(MatchKind.EndsWith, L("ends with")),
+        new(MatchKind.Contains, L("contains")),
+        new(MatchKind.Regex, L("matches regex")),
     ];
 
     [ObservableProperty]

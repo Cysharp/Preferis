@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.Services;
 
@@ -61,7 +62,7 @@ internal static class RouterProcess
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
-            return new RouterRunResult(2, [$"Could not run Preferis: {ex.Message}"]);
+            return new RouterRunResult(2, [L("Could not run Preferis: {0}", ex.Message)]);
         }
     }
 }

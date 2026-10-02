@@ -30,7 +30,10 @@ public sealed class RoutingService
             Log(LogLevel.Warning, loaded.Error);
         }
 
-        var result = new Router(loaded.Config).Route(url);
+        // What this machine opens: its own targets in place of the shared ones (docs/Design.md §7.4). Remembering a
+        // choice writes to the file as loaded again, so these never reach config.json.
+        var config = LocalProfileTargets.Apply(loaded.Config, loaded.Local);
+        var result = new Router(config).Route(url);
         foreach (var entry in result.Trace)
         {
             Log(LogLevel.Trace, entry.RuleId is null ? $"[{entry.Kind}] {entry.Message}" : $"[{entry.Kind}] {entry.RuleId}: {entry.Message}");
@@ -38,7 +41,7 @@ public sealed class RoutingService
 
         // Everything from here on (launching, the picker, remembering, the fallbacks) works on the URL the rules
         // produced: after a rewrite (e.g. an unwrapped Safe Link) that is no longer the URL that came in.
-        var context = new Context(result.Decision.Url, loaded, new ProfileResolver(_services.HostPlatform, _services.Browsers, _services.BrowserProfiles, _services.GetEnvironmentVariable, _services.HomeDirectory));
+        var context = new Context(result.Decision.Url, loaded, config, new ProfileResolver(_services.HostPlatform, _services.Browsers, _services.BrowserProfiles, _services.GetEnvironmentVariable, _services.HomeDirectory));
         return Execute(context, result.Decision, loaded.Error) with { RuleId = result.RuleId };
     }
 
@@ -263,8 +266,6 @@ public sealed class RoutingService
 
     private void Log(LogLevel level, string message) => _services.Log.Write(level, message);
 
-    private sealed record Context(RoutingUrl Url, ConfigLoadResult Loaded, ProfileResolver Resolver)
-    {
-        public PreferisConfig Config => Loaded.Config;
-    }
+    /// <param name="Config">The configuration with this machine's targets applied; <see cref="Loaded"/> has it as the file has it.</param>
+    private sealed record Context(RoutingUrl Url, ConfigLoadResult Loaded, PreferisConfig Config, ProfileResolver Resolver);
 }

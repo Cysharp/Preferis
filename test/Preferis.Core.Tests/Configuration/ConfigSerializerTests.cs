@@ -249,6 +249,28 @@ public class ConfigSerializerTests
         Assert.Equal("error", local.Logging?.Level);
         Assert.False(local.Logging?.History);
         Assert.Equal(50, local.Logging?.HistorySize);
+
+        var targets = local.ProfileTargets!;
+        Assert.Equal("safari", targets["personal"].Browser);
+        Assert.Equal("Profile 2", targets["work"].BrowserProfile?.Directory);
+        Assert.True(targets["work"].Private);
+        Assert.Equal(["--new-window"], targets["work"].ExtraArgs);
+        Assert.Equal("/usr/local/bin/tool", targets["tool"].Command?.Path);
+        Assert.Equal(["--open", "{url}"], targets["tool"].Command?.Args);
+    }
+
+    [Fact]
+    public void Profile_targets_and_previous_ids_round_trip_with_unknown_properties()
+    {
+        var local = ConfigSerializer.DeserializeLocal(Fixtures.LocalSample);
+        var config = ConfigSerializer.Deserialize("""{ "profiles": [ { "id": "work", "name": "Work", "previousIds": ["microsoft-edge", "edge"], "browser": "edge" } ] }""");
+
+        var localAgain = ConfigSerializer.DeserializeLocal(ConfigSerializer.SerializeLocal(local));
+        var configAgain = ConfigSerializer.Deserialize(ConfigSerializer.Serialize(config));
+
+        Assert.True(localAgain.ProfileTargets?["tool"].ExtensionData?.ContainsKey("label"));
+        Assert.Equal(["microsoft-edge", "edge"], configAgain.Profiles.Single().PreviousIds);
+        Assert.DoesNotContain("previousIds", ConfigSerializer.Serialize(ConfigSerializer.Deserialize("""{ "profiles": [ { "id": "work", "name": "Work" } ] }""")), StringComparison.Ordinal);
     }
 
     [Fact]

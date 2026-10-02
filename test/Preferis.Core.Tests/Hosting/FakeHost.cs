@@ -11,6 +11,7 @@ namespace Preferis.Core.Tests.Hosting;
 internal sealed class FakeHost
 {
     public PreferisConfig Config { get; set; } = PreferisConfig.CreateDefault();
+    public LocalConfig Local { get; set; } = new();
     public string? ConfigError { get; set; }
     public bool ConfigExists { get; set; } = true;
     public PreferisConfig? SavedConfig { get; private set; }
@@ -55,7 +56,7 @@ internal sealed class FakeHost
 
     private sealed class Store(FakeHost host) : IConfigStore
     {
-        public ConfigLoadResult Load() => new(host.Config, new LocalConfig(), "/Users/me/config.json", host.ConfigExists, host.ConfigError);
+        public ConfigLoadResult Load() => new(host.Config, host.Local, "/Users/me/config.json", host.ConfigExists, host.ConfigError);
 
         public void Save(PreferisConfig config, string configPath) => host.SavedConfig = config;
     }

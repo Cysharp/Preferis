@@ -3,5 +3,10 @@
   "browserOverrides": {
     "chrome": { "path": "/Applications/Google Chrome Beta.app" }
   },
+  "profileTargets": {
+    "personal": { "browser": "safari" },
+    "work": { "browser": "edge", "browserProfile": { "directory": "Profile 2", "name": "Contoso" }, "private": true, "extraArgs": ["--new-window"] },
+    "tool": { "command": { "path": "/usr/local/bin/tool", "args": ["--open", "{url}"] }, "label": "from the future" }
+  },
   "logging": { "level": "error", "history": false, "historySize": 50 }
 }

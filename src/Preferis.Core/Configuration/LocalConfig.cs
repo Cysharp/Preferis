@@ -12,6 +12,9 @@ public sealed class LocalConfig
     /// <summary>Browser id to override, taking precedence over detection.</summary>
     public Dictionary<string, BrowserOverride>? BrowserOverrides { get; set; }
 
+    /// <summary>Profile id to the target this machine opens instead of the shared one (docs/Configuration.md §3.1).</summary>
+    public Dictionary<string, ProfileTarget>? ProfileTargets { get; set; }
+
     public LoggingSettings? Logging { get; set; }
 
     [JsonExtensionData]
@@ -24,6 +27,28 @@ public sealed class BrowserOverride
     public string? Path { get; set; }
 
     public string? UserDataDir { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
+}
+
+/// <summary>
+/// What a profile opens on this machine, replacing the whole shared target of <c>config.json</c>: one machine has one
+/// OS, so there is nothing per OS here.
+/// </summary>
+public sealed class ProfileTarget
+{
+    /// <summary>Catalog browser id. Exclusive with <see cref="Command"/>.</summary>
+    public string? Browser { get; set; }
+
+    public BrowserProfileRef? BrowserProfile { get; set; }
+
+    public bool Private { get; set; }
+
+    public List<string>? ExtraArgs { get; set; }
+
+    /// <summary>Program to run on this machine. Exclusive with <see cref="Browser"/>.</summary>
+    public CommandSpec? Command { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }

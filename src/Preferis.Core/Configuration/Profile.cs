@@ -8,6 +8,12 @@ public sealed class Profile
 {
     public string Id { get; set; } = "";
 
+    /// <summary>
+    /// Ids the profile had before it was renamed, most recent first (docs/Configuration.md §2.11). Other machines keep
+    /// their <see cref="LocalConfig.ProfileTargets"/> under the id they knew.
+    /// </summary>
+    public List<string>? PreviousIds { get; set; }
+
     public string Name { get; set; } = "";
 
     /// <summary>Catalog browser id, either one id for every OS or one per OS. Exclusive with <see cref="Command"/>.</summary>

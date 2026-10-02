@@ -30,7 +30,9 @@ internal static class DryRunCommand
         output.WriteLine($"Host:     {url.Host}{(url.IdnHost != url.Host ? $" ({url.IdnHost})" : "")}");
         output.WriteLine();
 
-        var result = new RoutingEngine(loaded.Config).Route(url);
+        // This machine's targets in place of the shared ones, as the Router routes (docs/Design.md §7.4).
+        var config = LocalProfileTargets.Apply(loaded.Config, loaded.Local);
+        var result = new RoutingEngine(config).Route(url);
 
         output.WriteLine("Trace:");
         foreach (var entry in result.Trace)
@@ -40,7 +42,7 @@ internal static class DryRunCommand
         }
         output.WriteLine();
 
-        var profiles = loaded.Config.Profiles.ToDictionary(p => p.Id, StringComparer.Ordinal);
+        var profiles = config.Profiles.ToDictionary(p => p.Id, StringComparer.Ordinal);
         switch (result.Decision)
         {
             case RoutingDecision.Open open:
@@ -57,7 +59,7 @@ internal static class DryRunCommand
                     var profile = profiles.GetValueOrDefault(id);
                     var target = profile?.Browser?.For(PlatformInfo.Current) is { } browser ? $"browser {browser}" : profile?.Command is not null ? "command" : "?";
                     var browserProfile = profile?.BrowserProfile is { } bp ? $", browser profile {bp.Name ?? bp.Email ?? bp.Directory}" : "";
-                    output.WriteLine($"          - {id}: {profile?.Name ?? "(missing)"} ({target}{browserProfile}{(profile?.Private == true ? ", private" : "")})");
+                    output.WriteLine($"          - {id}: {profile?.Name ?? "(missing)"} ({target}{browserProfile}{(profile?.Private == true ? ", private" : "")}{(profile is not null && LocalProfileTargets.Find(loaded.Local, profile, loaded.Config) is not null ? ", this computer's target" : "")})");
                 }
                 return 0;
             case RoutingDecision.System system:

@@ -305,4 +305,48 @@ public class RoutingServiceTests
         Assert.Empty(host.Launched);
         Assert.Empty(host.OpenedWithSystem);
     }
+
+    [Fact]
+    public void This_machines_target_replaces_the_shared_one()
+    {
+        var host = FullHost();
+        host.Local = new LocalConfig { ProfileTargets = new() { ["chrome-work"] = new ProfileTarget { Browser = "edge" } } };
+
+        var result = Handle(host, "https://admin.google.com/ac/users");
+
+        Assert.Equal("chrome-work", result.ProfileId);
+        var plan = Assert.Single(host.Launched);
+        Assert.Equal(Edge, plan.Path);
+        Assert.Equal(["https://admin.google.com/ac/users"], plan.Arguments);
+    }
+
+    [Fact]
+    public void The_picker_shows_what_this_machine_opens()
+    {
+        var host = FullHost();
+        host.Local = new LocalConfig { ProfileTargets = new() { ["chrome-default"] = new ProfileTarget { Browser = "safari" } } };
+        host.PickerAnswer = _ => Select("edge");
+
+        Handle(host, "https://login.microsoftonline.com/common");
+
+        var candidate = Assert.Single(host.PickerRequests).Candidates.Single(c => c.ProfileId == "chrome-default");
+        Assert.Equal("safari", candidate.Browser);
+        Assert.Null(candidate.BrowserProfile);
+    }
+
+    [Fact]
+    public void Remembering_keeps_this_machines_targets_out_of_the_shared_configuration()
+    {
+        var host = FullHost();
+        host.Local = new LocalConfig { ProfileTargets = new() { ["chrome-default"] = new ProfileTarget { Browser = "safari" } } };
+        host.PickerAnswer = _ => Select("chrome-default", remember: true);
+
+        var result = Handle(host, "https://login.microsoftonline.com/common");
+
+        Assert.Equal(HandleOutcome.Launched, result.Outcome);
+        Assert.Equal("/Applications/Safari.app", Assert.Single(host.Launched).Path);
+        var saved = host.SavedConfig!.Profiles.Single(p => p.Id == "chrome-default");
+        Assert.Equal("chrome", saved.Browser?.Default);
+        Assert.Equal("Default", saved.BrowserProfile?.Directory);
+    }
 }

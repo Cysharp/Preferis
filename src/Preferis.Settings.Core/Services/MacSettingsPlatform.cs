@@ -77,30 +77,11 @@ public sealed class MacSettingsPlatform : ISettingsPlatform
 
     public void OpenDefaultBrowserSettings() => _registrar.OpenSystemSettings();
 
-    public async Task<RouterRunResult> OpenUrlAsync(string url)
-    {
-        if (RouterPath is not { } router)
-        {
-            return new RouterRunResult(2, ["Preferis.app was not found next to Preferis Settings."]);
-        }
-
-        var info = new ProcessStartInfo(router) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
-        info.ArgumentList.Add(url);
-        try
-        {
-            using var process = Process.Start(info) ?? throw new InvalidOperationException("The Router could not be started.");
-            var output = process.StandardOutput.ReadToEndAsync();
-            var errors = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
-            await process.WaitForExitAsync().ConfigureAwait(false);
-            var lines = (await output.ConfigureAwait(false) + "\n" + errors)
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            return new RouterRunResult(process.ExitCode, lines);
-        }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
-        {
-            return new RouterRunResult(2, [$"Could not run Preferis: {ex.Message}"]);
-        }
-    }
+    // A Chromium browser started directly (profile selected) inherits the Router's output; RouterProcess does not wait for it.
+    public Task<RouterRunResult> OpenUrlAsync(string url)
+        => RouterPath is { } router
+            ? RouterProcess.RunAsync(router, url)
+            : Task.FromResult(new RouterRunResult(2, ["Preferis.app was not found next to Preferis Settings."]));
 
     public void Reveal(string path)
     {

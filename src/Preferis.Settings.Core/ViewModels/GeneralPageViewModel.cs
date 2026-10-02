@@ -1,6 +1,7 @@
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Preferis.Core;
 using Preferis.Core.Configuration;
 
 namespace Preferis.Settings.ViewModels;
@@ -193,17 +194,22 @@ public sealed partial class GeneralPageViewModel : PageViewModel
         if (!platform.CanRegister)
         {
             IsDefaultBrowser = false;
-            RegistrationText = "Registering needs Preferis Settings to run from inside Preferis.app (build it with build/Preferis.Build.proj).";
+            RegistrationText = platform.Platform == HostPlatform.Windows
+                ? "Registering needs Preferis Settings to run next to Preferis.exe (build it with build/Preferis.Build.proj)."
+                : "Registering needs Preferis Settings to run from inside Preferis.app (build it with build/Preferis.Build.proj).";
             return;
         }
 
         var status = platform.GetRegistrationStatus();
         IsDefaultBrowser = status.IsDefault;
         var text = status.IsDefault ? "Preferis is the default browser."
-            : status.CurrentDefault is { } current ? $"The default browser is {Path.GetFileNameWithoutExtension(current)}."
+            : status.CurrentDefault is { } current ? $"The default browser is {DisplayName(current)}."
             : "The default browser could not be determined.";
         RegistrationText = status.IsRegistered || status.IsDefault ? text : text + " Preferis is not registered with the system yet.";
     }
+
+    // macOS reports the handler's path (/Applications/Safari.app), Windows its name ("Firefox 128.0").
+    private static string DisplayName(string handler) => Path.IsPathRooted(handler) ? Path.GetFileNameWithoutExtension(handler) : handler;
 
     // ---- picker and language (config.json) ----------------------------------------------------
 

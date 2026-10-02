@@ -29,7 +29,7 @@ internal sealed class FakeSettingsPlatform : ISettingsPlatform
 
     public List<string> Revealed { get; } = [];
 
-    public HostPlatform Platform => HostPlatform.MacOS;
+    public HostPlatform Platform { get; set; } = HostPlatform.MacOS;
 
     public IBrowserLocator BrowserLocator => new Locator(this);
 
@@ -74,6 +74,25 @@ internal sealed class FakeSettingsPlatform : ISettingsPlatform
             profiles,
             IconPng: null));
         return this;
+    }
+
+    /// <summary>This machine runs Windows, with Edge (one profile) and Firefox; Safari does not exist there.</summary>
+    public FakeSettingsPlatform OnWindows()
+    {
+        Platform = HostPlatform.Windows;
+        Browsers.Clear();
+        AddWindowsBrowser("edge", @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", [new("Default", "Personal", "me@example.com")]);
+        AddWindowsBrowser("firefox", @"C:\Program Files\Mozilla Firefox\firefox.exe", [new("Profiles/abc.default-release", "default-release", null)]);
+        return this;
+    }
+
+    private void AddWindowsBrowser(string id, string executable, IReadOnlyList<BrowserProfileInfo>? profiles)
+    {
+        var entry = BrowserCatalog.Find(id)!;
+        Browsers.Add(new DetectedBrowserInfo(
+            new DetectedBrowser(id, entry.DisplayName, entry.Family, executable, null, $@"C:\Users\me\AppData\Local\{entry.WindowsUserDataDir}", entry),
+            profiles,
+            IconPng: null));
     }
 
     /// <summary>Chrome (two profiles), Edge (one), Safari (none) and Firefox (two named profiles).</summary>

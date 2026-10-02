@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Preferis.Core;
 using Preferis.Core.Browsers;
 using Preferis.Core.Configuration;
 using Preferis.Core.Profiles;
@@ -16,7 +17,7 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
         : base(settings)
     {
         Profiles = new ObservableCollection<ProfileViewModel>(settings.Config.Profiles.Select(p => new ProfileViewModel(settings, p)));
-        DetectedBrowsers = new ObservableCollection<DetectedBrowserViewModel>(settings.Browsers.Select(b => new DetectedBrowserViewModel(b)));
+        DetectedBrowsers = new ObservableCollection<DetectedBrowserViewModel>(settings.Browsers.Select(b => new DetectedBrowserViewModel(b, settings.Platform.Platform)));
         SelectedProfile = Profiles.FirstOrDefault();
     }
 
@@ -59,11 +60,12 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
     private void AddCommandProfile()
     {
         var name = "Command";
+        var spec = new CommandSpec { Path = "", Args = ["{url}"] };
         AddProfile(new Profile
         {
             Id = IdGenerator.ForName(name, "command", Settings.Config.Profiles.Select(p => p.Id)),
             Name = name,
-            Command = new CommandTarget { MacOS = new CommandSpec { Path = "", Args = ["{url}"] } },
+            Command = Settings.Platform.Platform == HostPlatform.Windows ? new CommandTarget { Windows = spec } : new CommandTarget { MacOS = spec },
         });
     }
 
@@ -233,9 +235,12 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
 /// <summary>A browser detected on this machine, with the entries a profile can be created from.</summary>
 public sealed class DetectedBrowserViewModel
 {
-    public DetectedBrowserViewModel(DetectedBrowserInfo info)
+    private readonly HostPlatform _platform;
+
+    public DetectedBrowserViewModel(DetectedBrowserInfo info, HostPlatform platform = HostPlatform.MacOS)
     {
         Info = info;
+        _platform = platform;
         var items = new List<DetectedItemViewModel> { new(this, null, info.Browser.DisplayName, info.Profiles is { Count: > 0 } ? "Without a specific browser profile" : null) };
         items.AddRange((info.Profiles ?? []).Select(p => new DetectedItemViewModel(
             this,
@@ -255,7 +260,10 @@ public sealed class DetectedBrowserViewModel
 
     /// <summary>Why no browser profiles are listed, when that is not obvious.</summary>
     public string? Note => Info.Profiles is null && Info.Browser.Family != BrowserFamily.Other
-        ? "Its browser profiles could not be read. On macOS 27 and later, give Preferis Settings Full Disk Access to list them."
+        ? _platform == HostPlatform.MacOS
+            ? "Its browser profiles could not be read. On macOS 27 and later, give Preferis Settings Full Disk Access to list them."
+            // On Windows nothing denies access; the profile list does not exist until the browser has run once.
+            : "Its browser profiles could not be read. Start the browser once so that it creates them."
         : null;
 
     public IReadOnlyList<DetectedItemViewModel> Items { get; }

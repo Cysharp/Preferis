@@ -41,7 +41,9 @@ public sealed partial class ProfileViewModel : ObservableObject
         _settings = settings;
         Model = model;
         BrowserChoices = BuildBrowserChoices(model);
-        WindowsBrowserChoices = BuildWindowsBrowserChoices(model);
+        // This machine's OS chooses from what is installed here; the other OS from the catalog.
+        MacOSBrowserChoices = Platform == HostPlatform.MacOS ? BrowserChoices : BuildCatalogChoices(model, HostPlatform.MacOS);
+        WindowsBrowserChoices = Platform == HostPlatform.Windows ? BrowserChoices : BuildCatalogChoices(model, HostPlatform.Windows);
         Reload();
     }
 
@@ -67,7 +69,10 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// <summary>Browsers for this machine's OS: detected ones first, then the rest of the catalog.</summary>
     public IReadOnlyList<BrowserChoice> BrowserChoices { get; }
 
-    /// <summary>Browsers for Windows when the profile is shared with a Windows machine: the catalog.</summary>
+    /// <summary>Browsers for macOS with <see cref="PerOs"/>: <see cref="BrowserChoices"/> on a Mac, the catalog elsewhere.</summary>
+    public IReadOnlyList<BrowserChoice> MacOSBrowserChoices { get; }
+
+    /// <summary>Browsers for Windows with <see cref="PerOs"/>: <see cref="BrowserChoices"/> on Windows, the catalog elsewhere.</summary>
     public IReadOnlyList<BrowserChoice> WindowsBrowserChoices { get; }
 
     /// <summary>The browser on every OS (when <see cref="PerOs"/> is off).</summary>
@@ -159,7 +164,7 @@ public sealed partial class ProfileViewModel : ObservableObject
             var reference = model.Browser;
             PerOs = reference is not null && !reference.IsPlain;
             Browser = Find(BrowserChoices, reference?.Default ?? reference?.For(Platform));
-            MacOSBrowser = Find(BrowserChoices, reference?.For(HostPlatform.MacOS));
+            MacOSBrowser = Find(MacOSBrowserChoices, reference?.For(HostPlatform.MacOS));
             WindowsBrowser = Find(WindowsBrowserChoices, reference?.For(HostPlatform.Windows));
             Private = model.Private;
             ExtraArgs = string.Join("\n", model.ExtraArgs ?? []);
@@ -241,14 +246,15 @@ public sealed partial class ProfileViewModel : ObservableObject
         _syncing = true;
         try
         {
+            // Both OS start from this machine's browser; turning it off keeps this machine's.
             if (value)
             {
-                MacOSBrowser = Browser;
+                MacOSBrowser = Find(MacOSBrowserChoices, Browser?.Id);
                 WindowsBrowser = Find(WindowsBrowserChoices, Browser?.Id);
             }
             else
             {
-                Browser = Platform == HostPlatform.MacOS ? MacOSBrowser : Find(BrowserChoices, WindowsBrowser?.Id);
+                Browser = Find(BrowserChoices, (Platform == HostPlatform.MacOS ? MacOSBrowser : WindowsBrowser)?.Id);
             }
         }
         finally
@@ -258,21 +264,24 @@ public sealed partial class ProfileViewModel : ObservableObject
         WriteTarget();
     }
 
-    partial void OnMacOSBrowserChanged(BrowserChoice? value)
+    partial void OnMacOSBrowserChanged(BrowserChoice? value) => OnPerOsBrowserChanged(HostPlatform.MacOS);
+
+    partial void OnWindowsBrowserChanged(BrowserChoice? value) => OnPerOsBrowserChanged(HostPlatform.Windows);
+
+    private void OnPerOsBrowserChanged(HostPlatform os)
     {
         if (_syncing)
         {
             return;
         }
-        if (Platform == HostPlatform.MacOS)
+        if (Platform == os)
         {
+            // This machine's browser changed: its browser profiles are the ones to choose from.
             BrowserProfile = null;
             BuildBrowserProfileChoices();
         }
         WriteTarget();
     }
-
-    partial void OnWindowsBrowserChanged(BrowserChoice? value) => WriteTarget();
 
     partial void OnBrowserProfileChanged(BrowserProfileChoice? value) => WriteTarget();
 
@@ -324,6 +333,15 @@ public sealed partial class ProfileViewModel : ObservableObject
             _syncing = false;
         }
         WriteTarget();
+    }
+
+    [RelayCommand]
+    private async Task BrowseWindowsCommand()
+    {
+        if (await _settings.Dialogs.PickFileAsync("Choose a program") is { } path)
+        {
+            WindowsCommandPath = path;
+        }
     }
 
     private void WriteTarget()
@@ -425,21 +443,26 @@ public sealed partial class ProfileViewModel : ObservableObject
     {
         var choices = _settings.Browsers.Select(b => new BrowserChoice(b.Browser.Id, b.Browser.DisplayName, true, b.IconPng)).ToList();
         choices.AddRange(BrowserCatalog.Entries
-            .Where(e => choices.All(c => c.Id != e.Id) && (Platform != HostPlatform.MacOS || e.MacBundleId is not null))
+            .Where(e => choices.All(c => c.Id != e.Id) && ExistsOn(e, Platform))
             .Select(e => new BrowserChoice(e.Id, $"{e.DisplayName} (not installed)", false, null)));
         AddStoredIds(choices, model.Browser?.Default, model.Browser?.For(Platform));
         return choices;
     }
 
-    private static IReadOnlyList<BrowserChoice> BuildWindowsBrowserChoices(Profile model)
+    /// <summary>The other OS of a profile shared between machines: nothing is installed here to choose from, the catalog is.</summary>
+    private static IReadOnlyList<BrowserChoice> BuildCatalogChoices(Profile model, HostPlatform os)
     {
         var choices = BrowserCatalog.Entries
-            .Where(e => e.WindowsStartMenuKey is not null || e.WindowsStartMenuKeyPrefix is not null || e.WindowsKnownPaths.Count > 0)
+            .Where(e => ExistsOn(e, os))
             .Select(e => new BrowserChoice(e.Id, e.DisplayName, false, null))
             .ToList();
-        AddStoredIds(choices, model.Browser?.Windows, model.Browser?.Default);
+        AddStoredIds(choices, model.Browser?.For(os), model.Browser?.Default);
         return choices;
     }
+
+    private static bool ExistsOn(BrowserCatalogEntry entry, HostPlatform os) => os == HostPlatform.MacOS
+        ? entry.MacBundleId is not null
+        : entry.WindowsStartMenuKey is not null || entry.WindowsStartMenuKeyPrefix is not null || entry.WindowsKnownPaths.Count > 0;
 
     // Ids the configuration uses that are neither detected nor in the catalog (mac:/win: ids from another machine).
     private static void AddStoredIds(List<BrowserChoice> choices, params string?[] ids)

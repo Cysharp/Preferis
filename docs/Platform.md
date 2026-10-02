@@ -35,9 +35,18 @@ Preferis.Core.Hosting.IRoutingLog             Write(level, message)
 | `MacOS.MacUrlActivationSource` | macOS | NSApplication + `application:openURLs:` デリゲート (スパイク 1 の製品版) |
 | `MacOS.MacUserNotifier` | macOS | 暫定で `osascript` の `display dialog` (「Copy URL」ボタンつき)。後で NSAlert に置換可 |
 | `MacOS.ObjC` | macOS | objc ランタイム / Foundation / AppKit / Launch Services への最小限の P/Invoke。グローバルブロック生成を含む |
+| `Windows.WindowsBrowserDetector` | Windows | `StartMenuInternet` (HKCU → HKLM → WOW6432Node) とカタログの既知パス。Preferis 自身と Internet Explorer は除外 (§2.3) |
+| `Windows.WindowsSystemOpener` | Windows | 既定ハンドラーの ProgId (`AssocQueryString`) が `PreferisURL` かを見る。委譲は `ShellExecute` |
+| `Windows.WindowsDefaultBrowserRegistrar` | Windows | HKCU への登録と解除、`ms-settings:defaultapps` を開く (§2.2) |
+| `Windows.WindowsUserNotifier` | Windows | `MessageBoxW`。「はい」で URL をクリップボードにコピー |
+| `Windows.WindowsApplicationIcons` | Windows | `SHDefExtractIcon` → `GetDIBits` → PNG (自前の `PngEncoder`)。System.Drawing を使わない |
+| `Windows.WindowsProcess` | Windows | Router のコンソール接続、標準ハンドルの継承止め、`AllowSetForegroundWindow` |
+| `Windows.CommandLine` | Windows | `--single-argument` の後ろを生のコマンドラインから取り出す (§2.2) |
+| `Windows.IRegistry` / `IUrlAssociations` | Windows | レジストリと関連付けの薄い抽象。テストはフェイクで検出と登録を検証する |
 
 Router 実行ファイル (`Preferis.Router`) は `RouterHost` でこれらを配線し、`FileLog` でログを書きます。
-設定 UI は `Preferis.Settings.Services.ISettingsPlatform` を通して同じ実装を使います (macOS は `MacSettingsPlatform`、§3.8)。
+設定 UI は `Preferis.Settings.Services.ISettingsPlatform` を通して同じ実装を使います (macOS は `MacSettingsPlatform`、§3.8、
+Windows は `WindowsSettingsPlatform`、§2.8)。
 
 ## 2. Windows
 
@@ -45,18 +54,30 @@ Router 実行ファイル (`Preferis.Router`) は `RouterHost` でこれらを�
 
 ```
 <install dir>/
-  Preferis.exe              Router。NativeAOT 単一 exe。依存 DLL なし
-  Preferis.Picker.exe       WinUI 3。NativeAOT。Windows App SDK 自己完結モードの DLL 群を同じフォルダーに同梱
-  Preferis.Settings.exe     WinUI 3 (M4)。NativeAOT
-  Microsoft.ui.xaml.dll ほか Windows App SDK ランタイム (Preferis.Picker.exe と Preferis.Settings.exe が使用)
+  Preferis.exe              Router。NativeAOT 単一 exe (4.9 MB)。依存 DLL なし
+  Preferis.Picker.exe       WinUI 3。NativeAOT (7.6 MB)。リソースは Preferis.Picker.pri
+  Preferis.Settings.exe     WinUI 3。NativeAOT (10 MB)。リソースは Preferis.Settings.pri
+  Microsoft.ui.xaml.dll ほか Windows App SDK ランタイム (自己完結モード。2 つの WinUI プログラムが共有)
+  <言語>/                   WinUI 自身の文字列 (*.mui)。90 言語ほど
 ```
 
-Router は同じフォルダーの DLL を一切インポートしないため、Windows App SDK の DLL が隣にあっても
-起動コストに影響しません。
+全体で 82 MB、239 ファイル (M4)。Router は同じフォルダーの DLL を一切インポートしないため、Windows App SDK の DLL が
+隣にあっても起動コストに影響しません。WinUI の 2 つはそれぞれ自己完結で publish し、同じ版の Windows App SDK の
+ファイルが同じ名前で重なるので 1 フォルダーにまとめられます。シンボル (.pdb) は `artifacts/win-x64/publish/` に残します。
 
 このフォルダー一式は `build/Preferis.Build.proj` の `PublishWindows` ターゲットで `artifacts/win-x64/Preferis/`
 に生成します (Design.md §4.4)。ローカルテストではそのフォルダーの `Preferis.exe --register` を実行し、
 再ビルド後も同じパスに出力されることで登録を維持します。
+
+ビルドの注意:
+
+- NativeAOT のリンクに Visual Studio の C++ ツール (「C++ によるデスクトップ開発」) が要る。ILCompiler は
+  `%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe` でそれを探すが、Git Bash から `dotnet` を起動すると
+  括弧を含む環境変数 `ProgramFiles(x86)` が子に渡らず、「'vswhere.exe' is not recognized」でリンクが失敗する。PowerShell か
+  コマンドプロンプトから実行する。
+- WinUI のプロジェクトには `EnableMsixTooling=true` が要る (非パッケージでも)。無いと publish に `<名前>.pri` が入らず、
+  コントロールが Fluent のスタイルを失う (microsoft/WindowsAppSDK#3451)。
+- `Microsoft.WindowsAppSDK.WinUI` 2.3.9 は存在しない `InteractiveExperiences` 2.1.8 を指すため、2.1.9 を直接参照して NU1603 を避ける。
 
 ### 2.2 既定ブラウザーとして登録する
 
@@ -80,20 +101,26 @@ HKCU\Software\Classes\PreferisURL
   (Default)                              = "Preferis URL"
   URL Protocol                           = ""
   DefaultIcon\(Default)                  = "<Preferis.exe>,0"
-  shell\open\command\(Default)           = "\"<Preferis.exe>\" \"%1\""
+  shell\open\command\(Default)           = "\"<Preferis.exe>\" --single-argument %1"
 
 HKCU\Software\RegisteredApplications
   Preferis                               = "Software\Clients\StartMenuInternet\Preferis\Capabilities"
 ```
 
+- URL の受け渡しは `--single-argument %1` (Design.md §5.4)。手元の Edge も `"msedge.exe" --single-argument %1` で登録している。
+  Router はこの形で起動されると、生のコマンドラインのマーカーより後ろ全体を 1 つの URL にする (`CommandLine.SingleArgument`)。
 - 既定ブラウザーの切り替えは Windows 10 以降プログラムから行えない (UserChoice ハッシュ) ため、
-  登録後に `ms-settings:defaultapps` を開いてユーザーに選んでもらう。Windows 11 では
-  `ms-settings:defaultapps?registeredAppUser=Preferis` でアプリのページを直接開ける。
-- 自分が既定かどうかは `HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice\ProgId`
-  が `PreferisURL` かで判定する (`system` アクションのループ検出にも使う)。
-- 実行ファイルの移動を検出するため、設定 UI 起動時に `shell\open\command` のパスと現在のパスを比較し、
-  異なれば再登録を促す。登録処理自体は `Preferis.exe --register` が行う。
-- 解除は上記キーを削除する。
+  登録後に `ms-settings:defaultapps?registeredAppUser=Preferis` を開いてユーザーに選んでもらう (Windows 11 では
+  アプリのページが直接開く)。既に Preferis が既定なら開かない。登録後は `SHChangeNotify(SHCNE_ASSOCCHANGED)` で
+  エクスプローラーと設定アプリに読み直させる。
+- 自分が既定かどうかは、http と https の ProgId が `PreferisURL` かで判定する (`system` アクションのループ検出にも使う)。
+  ProgId はレジストリの `UserChoice` を直接読まず、シェルの `AssocQueryString(ASSOCF_IS_PROTOCOL, ASSOCSTR_PROGID)` に
+  尋ねる: 新しい Windows では選択の保存場所が変わっている (`UserChoiceLatest`) ことがあり、シェルは有効な選択を知っている。
+  手元では `MSEdgeHTM` が返った。現在の既定の表示名は `ASSOCSTR_FRIENDLYAPPNAME` (「Microsoft Edge」)。
+- 実行ファイルの移動を検出するため、`PreferisURL` の `shell\open\command` のパスが今の `Preferis.exe` と違えば
+  「登録されていない」とみなす (既定であっても)。設定 UI はその場合「既定にする」を出し、押すと今のパスで登録し直す。
+  登録処理自体は `Preferis.exe --register` が行う (設定 UI もそれを実行する)。
+- 解除 (`--unregister`) は上記のキー 2 つと `RegisteredApplications` の値を削除する。
 
 ### 2.3 ブラウザー検出
 
@@ -109,16 +136,26 @@ HKCU\Software\Clients\StartMenuInternet\...
 
 - まずカタログ (Configuration.md §2.4) のキー名で既知ブラウザーに対応づける。Edge / Chrome の各チャネルは
   実行ファイル名が同じ (`msedge.exe`, `chrome.exe`) なので、キー名 (`Microsoft Edge Dev` 等) で区別する。
-- キー名で判定できない場合は実行ファイル名とパス (`brave.exe`, `vivaldi.exe`, `opera.exe`, `launcher.exe`,
-  `...\Google\Chrome Beta\Application\chrome.exe` 等) で判定する。Firefox のキーは `FIREFOX.EXE` や
-  インストールごとのハッシュ付き (`Firefox-<hash>`, `Firefox Developer Edition-<hash>`) になるため、
-  キー名の前方一致と実行ファイル名で判定する。
+  マシン全体のインストールと並べて個人用にインストールした Chrome は `Google Chrome.<接尾辞>` という名前で登録するため、
+  キー名の後ろの `.<何か>` は無視する。
+- キー名で判定できない場合は実行ファイル名とインストール先のフォルダーで判定する。同名の実行ファイルのうち、
+  カタログのユーザーデータの場所から求めたベンダーのフォルダー (`Microsoft\Edge Beta`、`Google\Chrome SxS` など) が
+  パスに含まれるものを選び、どれも含まれなければ最初のもの (Stable) にする。`launcher.exe` (Opera) は他のプログラムと
+  名前が重なるため、名前だけでは対応づけない。Firefox のキーは `FIREFOX.EXE` やインストールごとのハッシュ付き
+  (`Firefox-<hash>`, `Firefox Developer Edition-<hash>`) になるため、キー名の前方一致で判定する。
+- `shell\open\command` の値は引用符で囲まれていない場合もある (`C:\Program Files\Internet Explorer\iexplore.exe`)。
+  引用符があればその中、無ければ `.exe` までを実行ファイルとし、環境変数を展開する。実行ファイルが存在しないキーは無視する。
 - Chrome Canary は既定ブラウザーに設定できず `StartMenuInternet` に登録されないため、カタログの既知パス
   (`%LOCALAPPDATA%\Google\Chrome SxS\Application\chrome.exe`) の存在で検出する。
-- `Preferis` 自身は除外する。
-- カタログ外は `win:<Key>` として扱い、プロファイル列挙は行わない。
-- 高速経路の `TryResolve(browserId)` はカタログからキー名候補を引いて該当キーだけを読む (1〜2 回のレジストリ
-  アクセスで済む)。
+- Preferis 自身 (キー `Preferis`、または実行ファイル名 `Preferis.exe`) は除外する。Windows 11 にも残っている
+  `IEXPLORE.EXE` も除外する (起動すると Edge が開くだけ)。
+- カタログ外は `win:<Key>` として扱い、プロファイル列挙は行わない。表示名は `Capabilities\ApplicationName`。
+  それが `@<file>,-<id>` のリソース参照ならキーの既定値かキー名を使う。
+- `local.json` の `browserOverrides` (実行ファイルのパス) は検出より優先する。キーが無いポータブル版も検出結果に加わる。
+- 高速経路の `TryResolve(browserId)` は `StartMenuInternet` のキー名の一覧からカタログのキー名に合うものだけを読む
+  (手元で 0.1 ms)。見つからなければ既知パス、それでも無ければ (キー名の違うカスタムインストールのため) 全キーを読む。
+- 手元 (Windows 11, 2026-10-02) の HKLM には `Microsoft Edge`、`Microsoft Edge Dev`、`IEXPLORE.EXE` があり、
+  `edge` と `edge-dev` が検出された (全体の検出 25 ms、うち初回の JIT を含む)。
 
 ### 2.4 ブラウザープロファイル列挙
 
@@ -148,7 +185,8 @@ Chromium の `Local State` は数百 KB になることがある (手元の Chro
 | `avatar_icon`, `gaia_picture_file_name`, `profile_color_seed` | ピッカーのアバター表示 (設定 UI / ピッカーのみ) |
 | `profile.profiles_order` (親) | 並び順 |
 
-Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` は共通なのでそれだけを使う。
+Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` は共通なのでそれだけを使う。手元の Edge では
+`gaia_picture_file_name` が `Edge Profile Picture.png` で、ピッカーと設定 UI のアバターに使えた。
 
 ### 2.5 起動
 
@@ -165,28 +203,94 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
 引数は常に `ArgumentList` に要素単位で渡し、文字列結合によるクォート問題を避けます。
 起動後は待たずに終了します。
 
+`Process.Start` (`UseShellExecute=false`) は継承可能なハンドルをすべて子に渡す。設定 UI が出力を読むために Router の
+標準出力をパイプにしていると、Router が起動したブラウザーがそのパイプを持ち続け、設定 UI は読み終わりを待ってブラウザーの
+終了まで止まった (実測 8 秒、起動したプログラムが終わるまで)。Router は起動時に自分の標準ハンドルの継承フラグを外す
+(`WindowsProcess.KeepStandardHandlesFromChildren`)。ピッカーの標準入出力は .NET が別のパイプで渡すので影響しない。
+
 ### 2.6 ピッカー (`Preferis.Picker.exe`, WinUI 3)
 
-- TFM は `net10.0-windows10.0.19041.0` 以上。`Microsoft.WindowsAppSDK` 1.6 以降 (MIT) と
-  `Microsoft.Windows.CsWinRT` 2.1.1 以降。`PublishAot=true`。
+- プロジェクトは `src/Preferis.Picker.Windows` (実行ファイル名 `Preferis.Picker`)。TFM は `net10.0-windows10.0.19041.0`
+  (最低 10.0.17763)。Windows App SDK はメタパッケージではなく WinUI コンポーネント `Microsoft.WindowsAppSDK.WinUI` 2.3.9 を
+  参照する (メタパッケージは AI / ML / Search のランタイムまで出力に入れる)。CsWinRT は .NET SDK の Windows SDK
+  プロジェクションに含まれるものを使う。`PublishAot=true`、`OutputType=WinExe`。
 - 非パッケージ (`WindowsPackageType=None`) かつ自己完結 (`WindowsAppSDKSelfContained=true`) とし、
   ユーザーに Windows App SDK ランタイムのインストールを求めない。`PublishSingleFile` は初回起動時に
   一時フォルダーへ展開するため使わない。
-- AOT 対応のため x:Bind 対象の ViewModel は `partial` にし、CsWinRT のソースジェネレーターに任せる。
+- UI はコードで組み、XAML は `App.xaml` (`XamlControlsResources`) だけ。`{Binding}` も x:Bind も使わない。`Main` は自前
+  (`DISABLE_XAML_GENERATED_MAIN`) で、WinUI を起動する前にリクエストを読む。
+- **NativeAOT の落とし穴**: CsWinRT は WinUI から返るオブジェクトを、トリミング後もメタデータが残っている最も具体的な
+  投影クラスで包む。コードで生成しないクラスは残らないため、リソース辞書から取った `AccentButtonStyle` が
+  `DependencyObject` として返り、`Style` へのキャストが InvalidCastException になった (`AppWindow.Presenter` の
+  `OverlappedPresenter` も同じ)。`[DynamicDependency(All, typeof(Style))]` で `Style` を残し、プレゼンターは自分で
+  生成する。`CsWinRTRcwFactoryFallbackGeneratorForceOptIn` では直らなかった。デバッグビルド (JIT) では起きないので、
+  WinUI のプログラムは AOT で publish したもので確認する。
+- 見た目: タイトルバーのない角丸のウィンドウ (`OverlappedPresenter.CreateForDialog` + `SetBorderAndTitleBar(true, false)`、
+  角は `DWMWA_WINDOW_CORNER_PREFERENCE`)、最前面。中身は ContentDialog と同じ構成と色: 内容は `ContentDialogTopOverlay` の
+  上に余白 24 px で置き、`ContentDialogSeparatorBorderBrush` の線で区切って、フッター (`ContentDialogBackground`) にボタンを
+  等幅で並べる。ボタンは Windows の慣習どおり主アクションが左で、Open (アクセント)、Cancel の順。内容はヘッダー (リンクの
+  アイコン、ホスト 20 px、URL 全体、コピーボタン。ドラッグすると移動、`WM_NCLBUTTONDOWN`)、警告 (`message`) の `InfoBar`、
+  候補の `ListView` (アイコン、名前、2 行目、キーキャップ風の番号)、「記憶する」。ダイアログの配色は不透明なので、
+  背景のマテリアル (以前はアクリル) は敷かない。
+- 内容に合わせてウィンドウの大きさを決めるには内容の読み込みが要るため、画面外に表示してから `Loaded` で測り、ポインター
+  の近く (横はポインターの中央、上端はポインターの少し上) か画面中央の作業領域内に移す。倍率はその位置のモニターの DPI。
+  タイトルバーを消したウィンドウでも `AppWindow.ResizeClient` はタイトルバーがある前提で枠を足すため、ウィンドウがその分
+  (150 % で 45 px) 高くなり、フッターのボタンの下だけ余白が広がった。設定後の `ClientSize` との差を引いてもう一度設定する。
+- キー: ↑↓ (一覧にフォーカスが無い時はこちらで動かす)、Enter (Cancel / コピーにフォーカスがある時はそのボタン)、Esc、
+  1〜9 (テンキーも)、一覧で Ctrl+C は URL をコピー。Alt+F4 などでの close はキャンセル。マウス移動・ホイール・キーは
+  自動選択のカウントをやり直す。
+- アイコンは `WindowsBrowserDetector.TryResolve` で実行ファイルを引いて `WindowsApplicationIcons` (64 px)、コマンドは
+  `CommandPrompt`、見つからないブラウザーは `Globe` のグリフ。アバターは `Local State` の `gaia_picture_file_name` を
+  右下に丸く重ねる。これらの読み取りは約 60 ms かかるため、`Main` でリクエストを読んだ直後からバックグラウンドで始め、
+  WinUI の起動と並行させる (`CandidateImages`)。
+- 応答を書いたら `CloseHandle` で標準出力を閉じ、ウィンドウを閉じて終了する。クリップボードは Win32 (`SetClipboardData`)
+  を使う: WinRT の `Clipboard` は `Flush` しないとプロセスの終了で中身が消え、ピッカーはコピーの直後に終わることがある。
 - Router は `Process.Start` でピッカーを起動し、標準入出力をリダイレクトしてリクエストと応答を
   やり取りする (Design.md §9.3)。
 - **フォアグラウンド権限の移譲**: シェルから起動された Router はフォアグラウンド権限を持つが、
-  子プロセスのウィンドウは既定では前面に出ない (タスクバーで点滅する) ことがある。Router が
-  ピッカーのプロセス ID に対して `AllowSetForegroundWindow` を呼び、ピッカーは表示時に
-  `SetForegroundWindow` を呼ぶ。効果はスパイクで確認する。
-- 表示時間が目標 (300 ms) を超える場合は、`TaskDialogIndirect` (コマンドリンクボタン + 検証チェックボックス)
-  による Win32 実装に切り替える。この場合候補ごとのアイコンは出せないが依存と初期化コストがゼロになる。
+  子プロセスのウィンドウは既定では前面に出ない (タスクバーで点滅する) ことがある。Router は
+  ピッカーを起動した直後 (`ProcessPickerLauncher` の `started`) にそのプロセス ID で `AllowSetForegroundWindow` を呼び、
+  ピッカーは表示時に `SetForegroundWindow` を呼ぶ。前面に出たかどうかを trace に書く (`shown` / `shown (not in front)`)。
+  Router 自身が権利を持たない起動 (バックグラウンドのターミナル) では前面に出ない (Design.md §12 スパイク 6)。
+- 表示時間は目標内 (約 250 ms、§5) のため、`TaskDialogIndirect` による Win32 実装には切り替えない。
+- `PREFERIS_TRACE=1` で起動からの経過時間 (main, winui, built, loaded, shown) を標準エラーに書く。
+  `PREFERIS_PICKER_SNAPSHOT=<png>` で表示 0.5 秒後の内容を PNG に書き出す (`RenderTargetBitmap`)。
 
 ### 2.7 その他
 
-- `app.manifest` で PerMonitorV2 DPI 対応と `longPathAware` を宣言する。
-- アイコンは `ApplicationIcon` で `Preferis.exe` に埋め込み、レジストリの `DefaultIcon` から参照する。
-- 最終フォールバックのメッセージボックスは `MessageBoxW` を P/Invoke する。
+- `Preferis.exe` は GUI サブシステム (`WinExe`) にする (Design.md §5.4)。コマンドは `AttachConsole(ATTACH_PARENT_PROCESS)` で
+  ターミナルのコンソールに出力する。標準出力が既にパイプやファイルなら (設定 UI が実行した場合など) 接続しない。
+- `app.manifest` で PerMonitorV2 DPI 対応と `longPathAware` を宣言する。Router は最終フォールバックのメッセージボックスの
+  ためにコモンコントロール v6 も宣言する。
+- アイコンは未作成 (macOS と同じく M5 まで)。レジストリの `DefaultIcon` は `Preferis.exe,0` を指しており、アイコンを
+  `ApplicationIcon` で埋め込めばそのまま使われる。
+- 最終フォールバックのメッセージボックスは `MessageBoxW`。URL がある時は「はい / いいえ」で URL のコピーを尋ねる。
+
+### 2.8 設定 UI (`Preferis.Settings.exe`, WinUI 3)
+
+- `src/Preferis.Settings.Windows` (実行ファイル名 `Preferis.Settings`) は WinUI 3 のプログラムで、構成 (パッケージ、自己完結、
+  NativeAOT、コードで組む UI) はピッカーと同じ (§2.6)。画面は `Preferis.Settings.Core` の ViewModel の上に組み、
+  `Controls/Bindings` が変更通知とコントロールのイベントで双方向に結ぶ (AppKit 版の `Bindings` と同じ形)。
+- 見た目は Windows 11 の設定アプリに倣う: タイトルバーまで広げた Mica、左の `NavigationView` (プロファイル / ルール /
+  テスト / 一般)、28 px のページ見出しとその下に問題の件数、4 px 間隔のカード (左に名前と説明、右にコントロール)。
+  Community Toolkit の `SettingsCard` は使わない (カードは Border と Grid で足り、外部の XAML コントロールを NativeAOT で検証する手間を避ける)。
+  プロファイルとルールは左に一覧 (`ListPane`。ドラッグで並べ替え、下に + − ⋯)、右に選択中の項目の編集画面。
+- 「+」のメニューは検出したブラウザーごとのサブメニュー (ブラウザー自体と各ブラウザープロファイル)。条件は
+  `ConditionEditor` (Design.md §9.1)。幅が狭いときはパターンの入力欄を次の行に回す。
+- 自分と同じフォルダーに `Preferis.exe` があれば、それを登録先として状態を表示し、「既定にする」では
+  `Preferis.exe --register` を実行する。無ければ (デバッグ実行) 登録できない旨を表示する。テストページの「Open」も
+  `Preferis.exe <url>` を実行し、Router の終了までの出力を表示する (`RouterProcess`)。
+- フォルダー・ファイルの選択は Windows App SDK の `Microsoft.Windows.Storage.Pickers` (ウィンドウ ID を渡すだけで
+  非パッケージでも動く)、確認は `ContentDialog` (ボタン 3 つまで。最後のボタンが閉じるボタンで Esc に当たる)。
+- 自動保存は `DispatcherQueueTimer` (0.6 秒)。ウィンドウを閉じる時は `AppWindow.Closing` で待っている編集を書き込み、
+  書けない時だけ尋ねる。アクティブになったら外部の変更を確かめる。
+- 単一インスタンス: 名前付きミューテックス `Local\Preferis.Settings` で 2 つ目の起動を検出し、起動中のウィンドウ
+  (クラス `WinUIDesktopWin32WindowClass`、タイトル `Preferis Settings`) を前面に出して終了する。Router の `--settings` と
+  引数なしの起動は、新しいプロセスが前に出られるよう `AllowSetForegroundWindow(ASFW_ANY)` を呼んでから起動する。
+- `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で各ページ (とルール・プロファイル画面のいくつかの状態) を PNG に書き出して
+  終了する。ウィンドウはアクティブにせず画面外に出し、`RenderTargetBitmap` で描く (Mica の代わりにテーマの背景色)。
+  `PREFERIS_SETTINGS_SNAPSHOT_URL`、`PREFERIS_SETTINGS_SNAPSHOT_APPEARANCE=dark` は macOS と同じ。チェックボックスの
+  チェックは `RenderTargetBitmap` では「−」に写る (実際の状態は UI Automation で確認した)。
 
 ## 3. macOS
 
@@ -472,6 +576,28 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 計測結果は本書末尾に記録し、Design.md §5.2 の目標値と比較します。
 
 ## 5. 計測記録
+
+### 2026-10-02 M4: Windows 一式 (`artifacts/win-x64/Preferis/` 82 MB)
+
+環境: Windows 11 Pro (10.0.26200), x64, .NET 10.0.401, Windows App SDK WinUI 2.3.9, NativeAOT。時間は `PREFERIS_TRACE=1` の
+各プロセスの記録 (プロセス起動時刻からの経過) と Router のログの時刻。ウォーム 4〜6 回の範囲、初回は別記。
+
+| 項目 | 結果 |
+| --- | --- |
+| サイズ | Router 4.9 MB、ピッカー 7.6 MB、設定 10 MB、Windows App SDK ほか 60 MB (*.mui の言語フォルダーを含む)。.pdb は含めない |
+| Router `--version` (PowerShell から) | 30 ms |
+| 空の WinUI ウィンドウ (スパイク 7 の最初の計測) | プロセス起動 → main 15〜18 ms、→ WinUI 起動 50 ms、→ `Activate` 90 ms。初回 285 ms |
+| ピッカー単体 (`--request`、4 候補) | main 15〜18 ms、winui 48〜55 ms、built 177〜211 ms、loaded 227〜248 ms、shown 236〜258 ms。初回 281〜330 ms |
+| ピッカー単体、ContentDialog 形式に変えた後 (同じリクエスト、10 回) | shown 282〜302 ms、中央値 298 ms。初回 2.7 秒。設定 UI が起動したままなど負荷の違う時に測ったため、上の行との差 (約 40 ms) が変更によるものかは切り分けていない |
+| ピッカーの内訳 | ウィンドウ作成 25〜30 ms、タイトルバーを消すフレーム変更 (`SetBorderAndTitleBar` でも `ExtendsContentIntoTitleBar` でも) 65〜70 ms、コントロールの初回生成 55〜60 ms、配置まで 35〜40 ms。アイコンと Local State の読み取り約 60 ms はバックグラウンドで並行 |
+| Router → ピッカー (シェルから `Preferis.exe <url>`、3 候補、自動選択 1 秒) | Router 起動 → ピッカー表示 269〜273 ms。ピッカーは "not in front" (Router がバックグラウンドのターミナルから起動されたため) |
+| 設定 UI のテストページ「Open」(UI Automation で操作) | Router → ピッカー → 自動選択 → 起動まで 1.65 秒 (うち 1 秒が自動選択の待ち) |
+| Router が起動したプログラムが標準出力を継承した時の読み終わり | 修正前 8.15 秒 (起動したプログラムの終了まで)、修正後 0.14 秒 |
+| ブラウザー検出 | 全体 25 ms (初回)、`TryResolve` 0.1〜1 ms |
+| `--single-argument` | `https://evil.example/" --config "D:\elsewhere.json` が 1 つの URL のまま扱われ、オプションにならない |
+
+既定ブラウザーとしての登録 (`--register`) と、それを使った実際のリンククリックは利用者の環境を変えるため行っていない
+(Design.md §12 スパイク 6, 8)。
 
 ### 2026-10-01 M3: ピッカーと設定 UI (`artifacts/osx-arm64/Preferis.app` 37 MB, ad-hoc 署名)
 

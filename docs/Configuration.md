@@ -266,7 +266,7 @@ Firefox のプロファイルは `-P <name>` で選ぶため `name` だけを保
 | プロパティ | 説明 |
 | --- | --- |
 | `configPath` | `config.json` の場所。環境変数と `~` を展開。未設定なら既定の場所 |
-| `browserOverrides` | ブラウザー ID → `{ path, userDataDir? }`。検出より優先する。ポータブル版や特殊なインストール先向け |
+| `browserOverrides` | ブラウザー ID → `{ path, userDataDir? }`。検出より優先する。ポータブル版や特殊なインストール先向け。`path` は macOS では `.app`、Windows では実行ファイル (`"D:\\Portable\\Chrome\\chrome.exe"`)。Windows ではキーの無いポータブル版も検出結果に加わる |
 | `logging.level` | `off` / `error` / `info` / `trace` |
 | `logging.history` | ルーティング履歴 (URL を含む) をローカルに保存するか。オプトイン。保存先はログディレクトリの `history.jsonl` (macOS: `~/Library/Logs/Preferis/`、Windows: `%LOCALAPPDATA%\Preferis\Logs\`) |
 | `logging.historySize` | 履歴に残す件数 (既定 50)。古いものから消す |

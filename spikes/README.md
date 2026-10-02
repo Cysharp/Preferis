@@ -14,6 +14,9 @@
 | `UrlActivation/ls-query.swift` | macOS 4 | LS が https / public.html ハンドラーとして認識しているアプリの一覧を表示 (`swift ls-query.swift`) |
 | `PickerHelper/` | macOS 2, 5 | Microsoft.macOS + NativeAOT の AppKit ピッカー。stdin の JSON を読み stdout に応答。`UrlActivation` の mode `pick` / `pick-assist` から子プロセスとして起動される |
 
+Windows のスパイク (Design.md §12 の 6〜9) は使い捨てのコードを作らず、M4 の製品コード (`artifacts/win-x64/Preferis/`) で
+行いました。
+
 `UrlActivation` のモードは `~/Library/Logs/PreferisSpike/mode` ファイルで切り替えます (`nsapp` 既定, `ae`, `pick`, `pick-assist`)。
 
 結果は `docs/Platform.md` §5 を参照。

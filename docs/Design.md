@@ -45,16 +45,18 @@ Preferis は OS の既定ブラウザーとして登録され、受け取った 
 | --- | --- | --- |
 | ランタイム | .NET 10 (LTS), NativeAOT | 起動速度要件。全プロジェクト `IsAotCompatible=true` |
 | Router | UI フレームワークなし。macOS の Apple Event 受信は objc ランタイム直接呼び出し | 高速経路に余計な初期化を一切載せない |
-| ピッカー (Windows) | WinUI 3 (Windows App SDK 1.6+, MIT) | Windows 11 ネイティブの外観。NativeAOT 対応。表示時間が目標を超える場合は Win32 TaskDialog に切り替える |
+| ピッカー (Windows) | WinUI 3 (Windows App SDK 2.x の WinUI コンポーネント `Microsoft.WindowsAppSDK.WinUI`) | Windows 11 ネイティブの外観。NativeAOT 対応。M4 で計測した表示時間 (約 250 ms) が目標内のため TaskDialog への切り替えは不要 (§12 スパイク 7) |
 | ピッカー (macOS) | AppKit (Microsoft.macOS, `net10.0-macos`) | OS 標準の外観。NativeAOT は .NET 9 以降正式サポート |
 | 設定 UI | macOS: AppKit (Microsoft.macOS)、Windows: WinUI 3。ViewModel は共通 (`Preferis.Settings.Core`) | OS 標準の外観にするため画面は OS ごとに作り、ロジックとテストは 1 つにする。M3 では Avalonia 12 で 1 つの実装にしていたが、macOS のアプリとして見た目が不自然なため置き換えた (§13) |
-| MVVM | CommunityToolkit.Mvvm 8.x (MIT) | ソースジェネレーターベースで AOT 安全。WinUI 3 は x:Bind で ViewModel に直接つなぎ、AppKit (データバインディングがない) は変更通知を受けて手で反映する |
+| MVVM | CommunityToolkit.Mvvm 8.x (MIT) | ソースジェネレーターベースで AOT 安全。画面は AppKit も WinUI 3 もコードで組み、変更通知を受けて手で反映する (`Bindings`)。WinUI 3 で {Binding} (リフレクション) や x:Bind を使わないのは、NativeAOT で型情報が削られて実行時に失敗するのを避け、AppKit 版と同じ構造に保つため (§13) |
 | 設定・IPC | System.Text.Json (ソース生成, `JsonPolymorphic`) | リフレクション不要、AOT 安全。Router とピッカー間の IPC にも同じコンテキストを使う |
 | 正規表現 | `System.Text.RegularExpressions` (`NonBacktracking` 優先) | ユーザー入力パターンによる破滅的バックトラックを防ぐ。AOT で動作 |
 | テスト | xunit (Apache 2.0) | FluentAssertions v8 は商用ライセンスのため使わない。必要なら Shouldly (BSD) |
 
 依存ライブラリは Guidelines のライセンス条件 (MIT/Apache 2.0/BSD/ISC/MPL/PD) を満たすものに限ります。
 Windows App SDK と Microsoft.macOS は Microsoft 製の SDK であり、Guidelines の Windows SDK と同じ扱いです。
+Windows App SDK はソースが MIT ですが、NuGet パッケージ (自己完結モードで同梱するランタイムを含む) のライセンスは
+Microsoft Software License Terms です。WinUI コンポーネントが依存する Microsoft.Web.WebView2 も同様に Microsoft 製の SDK です。
 
 ## 4. アーキテクチャ概要
 
@@ -116,9 +118,9 @@ src/
   Preferis.Picker.Windows/    WinUI 3。net10.0-windows10.0.xxxxx。Windows でのみビルド。
   Preferis.Picker.MacOS/      AppKit (Microsoft.macOS)。net10.0-macos。macOS でのみビルド。
   Preferis.Settings.Core/     設定 UI の ViewModel (CommunityToolkit.Mvvm) とサービスの抽象 (ISettingsPlatform,
-                              IDialogService)、macOS 実装の MacSettingsPlatform。net10.0。UI フレームワーク非依存。
+                              IDialogService)、OS 実装の MacSettingsPlatform / WindowsSettingsPlatform。net10.0。UI フレームワーク非依存。
   Preferis.Settings.MacOS/    設定 UI の AppKit 実装 (Microsoft.macOS)。net10.0-macos。macOS でのみビルド。
-  Preferis.Settings.Windows/  設定 UI の WinUI 3 実装 (M4)。Windows でのみビルド。
+  Preferis.Settings.Windows/  設定 UI の WinUI 3 実装。net10.0-windows10.0.19041.0。Windows でのみビルド。
 test/
   Preferis.Core.Tests/
   Preferis.Platform.Tests/    フィクスチャ (Local State, profiles.ini) を使った解析テスト、macOS 実機 API の小さな結合テスト
@@ -130,7 +132,7 @@ docs/
 
 `Preferis.slnx` はすべてのプロジェクトを含み、OS ごとにソリューションフィルター (`Preferis.MacOS.slnf`,
 `Preferis.Windows.slnf`) でビルド可能なものだけを対象にします (`dotnet test Preferis.MacOS.slnf`)。
-`Preferis.Windows.slnf` は `Preferis.Picker.MacOS` を除いた構成で、M4 で WinUI 3 ピッカーを加えます。
+`Preferis.Windows.slnf` は AppKit の 2 つを除き、WinUI 3 のピッカーと設定 UI を含みます (`dotnet test Preferis.Windows.slnf`)。
 これにより Guidelines の「常にビルドできる状態を保つ」を OS ごとに満たします。
 
 Platform 層は単一プロジェクトとし、`OperatingSystem.IsWindows()` 等による実行時分岐と
@@ -140,10 +142,11 @@ Platform 層は単一プロジェクトとし、`OperatingSystem.IsWindows()` �
 
 | 起動 | 動作 |
 | --- | --- |
-| `Preferis <url> [<url> ...]` | Router。Windows では OS シェルからの起動 (最速経路)。macOS でもシェルから直接渡せる |
+| `Preferis <url> [<url> ...]` | Router。シェルから直接 URL を渡せる |
+| `Preferis --single-argument <url>` | Windows で既定ブラウザーとして登録するコマンド (最速経路)。生のコマンドラインの残り全体を 1 つの URL として扱い、URL 中の引用符や空白でオプションを注入されないようにする (Edge / Chrome と同じ方式、§5.4) |
 | `Preferis` (引数なし、Launch Services から起動) | macOS。NSApplication を起動し、Apple Event で届く URL を処理して終了する。URL が届かなければ (Finder や Spotlight から `Preferis.app` 自体を開いた場合) 設定 UI を開いて終了する |
-| `Preferis` (引数なし、シェルから) | 使い方を表示 |
-| `Preferis --settings` | 設定 UI (`Preferis Settings.app`) を開く |
+| `Preferis` (引数なし、シェルから) | macOS は使い方を表示。Windows は設定 UI を開く (エクスプローラーやスタートメニューのブラウザー項目から開かれるのはこの形で、GUI プログラムなので使い方を表示しても見えない) |
+| `Preferis --settings` | 設定 UI (`Preferis Settings.app` / `Preferis.Settings.exe`) を開く。起動中なら前面に出す |
 | `Preferis --status` | OS への登録状態、既定ブラウザー、設定ファイルの場所を表示 |
 | `Preferis --dry-run <url> [--config <path>]` | 設定を読み、ルーティングの過程 (トレース) と決定、候補プロファイルを標準出力に表示して終了 (起動しない)。デバッグ・テスト用。終了コードは決定できれば 0、失敗なら 2 |
 | `Preferis --register` / `--unregister` | OS への登録/解除 |
@@ -168,8 +171,9 @@ artifacts/                 出力先 (.gitignore 対象)
 
 | コマンド | 内容 |
 | --- | --- |
+| `dotnet build build/Preferis.Build.proj` | 実行している OS の成果物 (下の 2 つのどちらか)。RID はそのマシンのもの (NativeAOT は OS をまたいでビルドできない) |
 | `dotnet build build/Preferis.Build.proj -t:PublishMacOS -p:RuntimeIdentifier=osx-arm64` | Router / Picker.MacOS / Settings.MacOS を NativeAOT で publish し、`Preferis.app` (ヘルパーバンドル込み) を組み立て、ad-hoc 署名する |
-| `dotnet build build/Preferis.Build.proj -t:PublishWindows -p:RuntimeIdentifier=win-x64` | 3 つの実行ファイルと Windows App SDK の自己完結 DLL を 1 フォルダーにまとめる |
+| `dotnet build build/Preferis.Build.proj -t:PublishWindows -p:RuntimeIdentifier=win-x64` | Router / Picker.Windows / Settings.Windows を NativeAOT で publish し、3 つの実行ファイルと Windows App SDK の自己完結 DLL を `artifacts/win-x64/Preferis/` にまとめる (M4 で 82 MB、約 50 秒) |
 | `dotnet build build/Preferis.Build.proj -t:PublishMacOS -p:SigningIdentity="Developer ID Application: ..." -p:Notarize=true` | M5 で追加するリリース用。ad-hoc 署名を Developer ID に置き換え、公証まで行う |
 
 - オーケストレーションを MSBuild にするのは、Guidelines の「.NET CLI ツールをグローバルにインストールしない」
@@ -224,7 +228,7 @@ argv / Apple Event
 | --- | --- | --- |
 | プロセス起動 → URL 受信 | argv なので実質 0 | 200 ms 以下 (ウォーム)。スパイク 1 で計測済み。内訳は LS 起動の床 35〜65 ms、NativeAOT 初期化、AppKit ロード 15 ms、`NSApplication` 初期化 50〜60 ms、イベント配送 20 ms (Platform.md §5)。Preferis 側で削れるのは AppKit 以降の約 85 ms のみで、NSApplication なしでは受信できない |
 | URL 受信 → ブラウザー起動 API 呼び出し (Preferis 自身の処理) | 20 ms 以下 | 10 ms 以下 |
-| プロセス起動 → ピッカー表示 | 300 ms 以下 (WinUI 3 がこれを超えるなら TaskDialog) | 350 ms 以下 (URL 受信 200 ms + ヘルパー起動)。M3 で計測: Router が起動したヘルパーのプロセス起動 → ウィンドウ表示が 120 ms (ウォーム、Platform.md §5) |
+| プロセス起動 → ピッカー表示 | 300 ms 以下 (WinUI 3 がこれを超えるなら TaskDialog)。M4 で計測: Router のプロセス起動 → ピッカー表示 約 270 ms、うちピッカーのプロセス起動 → 表示 約 250 ms (ウォーム、Platform.md §5) | 350 ms 以下 (URL 受信 200 ms + ヘルパー起動)。M3 で計測: Router が起動したヘルパーのプロセス起動 → ウィンドウ表示が 120 ms (ウォーム、Platform.md §5) |
 
 ### 5.3 macOS における URL 受信
 
@@ -248,8 +252,17 @@ macOS では既定ブラウザーに渡される URL は argv ではなく **App
 
 ### 5.4 Windows における URL 受信
 
-レジストリの `shell\open\command` に `"Preferis.exe" "%1"` を登録するため、URL は argv で届き、
+レジストリの `shell\open\command` に `"Preferis.exe" --single-argument %1` を登録するため、URL はコマンドラインで届き、
 URL ごとに新しいプロセスが起動します。単一インスタンス化は不要です。
+
+- `"%1"` と引用符で囲む一般的な登録では、`"` を含む細工した URL が引用符を閉じて `--config` などのオプションを
+  足せてしまう。Edge / Chrome と同じく、`--single-argument` の後ろは生のコマンドライン (`GetCommandLineW`) の残り全体を
+  1 つの URL として扱い、C ランタイムの引数分割を通さない (`Platform.Windows.CommandLine`)。
+- `Preferis.exe` は GUI サブシステム (`WinExe`) のプログラムにする。コンソールプログラムだとリンクをクリックするたびに
+  コンソールウィンドウが一瞬開く。コマンド (`--status` など) はターミナルから起動された場合だけ親のコンソールに接続して
+  出力する (`AttachConsole`)。GUI プログラムなので cmd / PowerShell は終了を待たず、出力はプロンプトの後に出る。待たせたい
+  場合は `Preferis.exe --status | Out-Host` のようにパイプする。
+
 `.html` 等のファイル関連付けも登録した場合は argv にファイルパスが来るので `file://` URI に変換します。
 
 ## 6. ルーティングエンジン
@@ -465,11 +478,27 @@ M3 での実装の要点:
   選んだ場合はその場で読み直す。
 - **言語**: M3 の UI は英語のみ。`settings.language` は保存するが表示には未反映 (多言語化は §12 のユーザー判断事項)。
 
+M4 (Windows) での実装の要点 (詳細は Platform.md §2.8):
+
+- ViewModel とその振る舞い (自動保存、外部変更の保留、検証、テストページ) は macOS と共通。画面だけを WinUI 3 で
+  Windows 11 の設定アプリに倣って組む: タイトルバーまで広げた Mica、左のナビゲーション、ページ見出し、4 px 間隔のカード。
+- ViewModel のうち OS で変わる部分は「このマシンの OS」を基準にした: ブラウザーの選択肢はこのマシンの OS のカタログ
+  (Windows では Safari を出さない)、OS ごとの指定ではこのマシンの OS 側を検出結果から、もう一方をカタログから選ぶ
+  (`MacOSBrowserChoices` / `WindowsBrowserChoices`)、新しいコマンドプロファイルはこのマシンの OS のコマンドから始まる。
+- 条件エディターは NSPredicateEditor に相当するものがないため、同じ `ConditionPredicates` の木を Outlook / Mail の
+  ルールと同じ形の行 (All / Any / None の行の下に「対象・比較・パターン」の行、入れ子可) で編集する。パターンの誤りは
+  行の下に表示する。
+- 設定 UI がテストページの「Open」で Router を実行するとき、出力の終端ではなく Router の終了で区切る。Router が起動した
+  ブラウザーが出力を引き継ぐと、ブラウザーが終了するまで終端が来ないため (macOS も同じ。Windows の Router は自分の
+  標準ハンドルを子に継承させない)。
+
 ### 9.2 ピッカー UI (`Preferis.Picker`)
 
 Windows の「アプリを選択」ダイアログに近い小さなダイアログ。Windows は WinUI 3、macOS は AppKit で
 実装し、OS 標準の外観に合わせます。macOS では Spotlight のようなタイトルバーのない Liquid Glass のパネル
-(macOS 26。それより前は半透明のマテリアル) にしています (Platform.md §3.7)。
+(macOS 26。それより前は半透明のマテリアル) にしています (Platform.md §3.7)。Windows ではタイトルバーのない
+角丸のウィンドウを Windows 11 のダイアログ (ContentDialog) と同じ形にしています: 上が内容、下のフッターにボタン。
+ボタンは Windows の慣習どおり主アクションが左 (Open、Cancel の順) で、等幅に並べます (Platform.md §2.6)。
 
 - 表示内容: 開こうとしている URL (ホストを強調、長い場合は省略)、候補プロファイルの一覧
   (ブラウザーアイコン + プロファイルアバター + 名前 + ブラウザープロファイル名)。アイコンと
@@ -562,11 +591,12 @@ Guidelines に従い TDD (Red → Green) で進めます。
   薄いインターフェースで包み、フェイクで検出ロジックを検証。`LaunchPlan` 生成 (引数の組み立て) を
   OS ごとに検証。`IPickerLauncher` はフェイクで差し替え、Router のフォールバック順序を検証。
 - **Settings**: ViewModel テスト。一時ディレクトリの実ファイルに対する `ConfigLoader` と、OS・ダイアログのフェイクで、
-  保存・外部変更・各ページの編集がモデルにどう書かれるかを検証する。
+  保存・外部変更・各ページの編集がモデルにどう書かれるかを検証する。フェイクの OS を Windows にして、このマシンの OS を
+  基準にする振る舞い (ブラウザーの選択肢、OS ごとの指定、新しいコマンド) も検証する。
 - **Picker**: `--request <path>` で起動する手動確認を基本とし、ロジック (キー操作による選択、
   自動選択タイマー) は UI から切り離した状態機械 (`PickerSession`) としてテストする。
 - **画面の確認**: 画面収録の権限やディスプレイがなくても見た目を確認できるよう、ピッカーは `PREFERIS_PICKER_SNAPSHOT=<png>`、
-  設定 UI は `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で描画結果を PNG に書き出す (開発用。Platform.md §3.7, §3.8)。
+  設定 UI は `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で描画結果を PNG に書き出す (開発用。両 OS とも同じ環境変数。Platform.md §2.6, §2.8, §3.7, §3.8)。
 - **E2E / 手動**: OS ごとのチェックリスト (既定ブラウザー登録、URL 受信、プロファイル指定起動、
   既に起動中のブラウザーへの受け渡し、ピッカーのフォーカス) と `tools/bench` による起動時間計測。
 
@@ -614,11 +644,27 @@ macOS:
 
 Windows:
 
+Windows のスパイクは使い捨てのコードではなく、M4 の製品コード (`artifacts/win-x64/Preferis/`) で行った。
+
 6. **子プロセスのピッカーへのフォーカス移譲** — `AllowSetForegroundWindow` によりピッカーが前面に来るか。
+   **結果 (2026-10-02, 一部)**: Router はピッカーの起動直後にそのプロセス ID で `AllowSetForegroundWindow` を呼び、ピッカーは
+   表示時に `SetForegroundWindow` を呼ぶ。ピッカーは前面に出たかどうかを trace に書く (`shown` / `shown (not in front)`)。
+   バックグラウンドのターミナルから Router を起動した計測では、Router 自身が前面化の権利を持たないため "not in front" だった
+   (想定どおり。ピッカーは最前面ウィンドウなので見えてはいる)。前面のアプリでリンクをクリックした場合 (Router がシェルから
+   権利を受け取る場合) の確認は、Preferis を既定のブラウザーにする必要があるため開発者の目視確認が必要。
 7. **WinUI 3 ピッカーの表示時間** — NativeAOT + 自己完結モードでプロセス起動から表示までを計測し、
    目標 300 ms を超えるなら Win32 TaskDialog (コマンドリンク + 検証チェックボックス) に切り替える。
+   **結果 (2026-10-02)**: 目標内のため WinUI 3 のまま。空のウィンドウなら 90 ms、製品のピッカーで約 250 ms (ウォーム。
+   初回 330 ms)、Router のプロセス起動からでも約 270 ms。内訳は WinUI の起動 35 ms、ウィンドウ作成 25 ms、タイトルバーを
+   消すフレーム変更 65 ms、コントロール (ListView など) の初回生成 60 ms、読み込みと配置 40 ms。アイコンとプロファイル
+   画像の読み取り (60 ms) は WinUI の起動と並行してバックグラウンドで行う (Platform.md §2.6)。
 8. **HKCU 登録** — 管理者権限なしで「既定のアプリ」一覧に表示されること。
+   **結果 (2026-10-02, 未確認)**: 書き込む内容 (Platform.md §2.2) はユニットテストで確認した。実際の登録は利用者の既定の
+   アプリ一覧を変えるため、開発者が `artifacts\win-x64\Preferis\Preferis.exe --register` で確認する (解除は `--unregister`)。
 9. **起動中ブラウザーへのプロファイル指定受け渡し (Windows)** — 3 と同じ確認を Windows で行う。
+   **結果 (2026-10-02, 未確認)**: 利用中のブラウザーにウィンドウを開くため実施していない。手元には Edge と Edge Dev がある。
+   Chromium のプロセスシングルトンは Windows でも同じ方式 (引数を起動中のプロセスに渡して終了) なので、macOS と同じ結果を
+   見込んでいる。
 
 ユーザー判断が必要な事項:
 
@@ -649,6 +695,13 @@ Windows:
 | 2026-10-01 | ルーティング履歴は JSON Lines でローカルのログディレクトリに置く | URL を含むため同期対象に置かない。追記と切り詰めが単純 |
 | 2026-10-02 | 設定 UI は変更をその場で保存する (編集が 0.6 秒途切れたら書き込む)。Save / Revert をなくす。外部の変更と衝突した編集、読めない `config.json` への編集は保留して尋ねる | macOS の設定画面は即時反映が慣習で、保存ボタンは不自然 (利用者の判断)。Router は検証エラーのある設定でも動くため、入力途中の状態を読んでもマッチしないルールになるだけ。上書きの安全性は保留で保つ |
 | 2026-10-01 | 設定 UI は OS ごとにネイティブで作る (macOS: AppKit、Windows: WinUI 3)。ViewModel とサービスは `Preferis.Settings.Core` に分けて共通にし、Avalonia はやめる | Avalonia 版は機能は揃ったが、macOS のアプリとしては見た目が不自然だった。ViewModel は当初から UI 非依存で、画面だけを差し替えられる。AppKit 版はバンドルも小さくなる (Avalonia 版 26 MB) |
+| 2026-10-02 | Windows のピッカーは WinUI 3 のまま (TaskDialog にしない)。タイトルバーのない角丸ウィンドウ | 表示まで約 250〜300 ms で目標 300 ms 内 (§12 スパイク 7)。タイトルバーを消すと 65 ms 余計にかかるが、Windows 11 の「アプリを選択」と同じ外観を優先した |
+| 2026-10-02 | Windows のピッカーは ContentDialog の形と色にし、フッターのボタンは Open、Cancel の順で等幅にする。アクリルはやめる | Windows のダイアログらしく見せる (利用者の判断)。Windows ではボタンの主アクションが左。ダイアログの配色は不透明なので背景のマテリアルは見えなくなる |
+| 2026-10-02 | Windows App SDK はメタパッケージではなく WinUI コンポーネント (`Microsoft.WindowsAppSDK.WinUI`) を参照する | メタパッケージは AI / ML / Search のランタイムまで自己完結の出力に入れる。必要なのは WinUI とその依存だけ |
+| 2026-10-02 | WinUI 3 の画面もコードで組み、`{Binding}` / x:Bind を使わない。XAML は `App.xaml` (コントロールのスタイル) だけ | NativeAOT ではリフレクションのバインディングが動かず、コードで組めば AppKit 版と同じ構造で読める。WinRT から返るオブジェクトの型がトリミングで失われる問題 (Platform.md §2.6) を、扱う型を自分で生成するものに限ることで避ける |
+| 2026-10-02 | Windows の登録コマンドは `"Preferis.exe" --single-argument %1` | `"%1"` では `"` を含む URL がオプションを注入できる。Edge / Chrome と同じ対策 (§5.4) |
+| 2026-10-02 | Windows の Router は GUI サブシステムにし、コマンドはターミナルのコンソールに接続して出力する | リンクを開くたびにコンソールウィンドウが一瞬出るのを避ける。開発用コマンドの出力がプロンプトの後に出るのは許容する |
+| 2026-10-02 | 設定 UI は Router の出力を終了で区切り、Windows の Router は自分の標準ハンドルを子に継承させない | 起動したブラウザーが出力のパイプを持ち続け、テストページの「Open」がブラウザーの終了まで終わらなかった (実測 8 秒 → 0.1 秒)。macOS も同じ読み方をしていたため共通の `RouterProcess` に直した |
 
 ## 14. マイルストーンと現在の状態
 
@@ -663,7 +716,7 @@ Windows 対応で追加するのは Platform の Windows 実装、Router の Win
 | M1 | Core: 設定モデル、JSON、条件、ルーティング、プロファイル解決、IPC メッセージ、`--dry-run` | ユニットテストで §6〜§7 の仕様を網羅。`--dry-run` で設定ファイルの評価結果を確認できる | 完了 (2026-10-01)。`Preferis.Core` + 111 テスト、`Preferis.Router` は `--dry-run` のみ。NativeAOT publish 確認済み |
 | M2 | macOS Platform + Router 高速経路: Launch Services 検出、プロファイル列挙、LaunchPlan 実行、既定ブラウザー登録、Apple Event 受信。**`PublishMacOS` ターゲットで ad-hoc 署名済みの `Preferis.app` 一式を生成** | `artifacts/` の `Preferis.app` を既定ブラウザーにし、単一候補のルールで日常利用できる | 完了 (2026-10-01)。`open -a` 経由と argv 経由で Chrome / Edge Dev への振り分けを確認。既定ブラウザー化は `--register` をユーザーが実行して確認する。ピッカー不在時は既定プロファイルへフォールバック。Platform.md §5 に計測値 |
 | M3 | macOS ピッカー (AppKit, ヘルパーバンドル) + 設定 UI (AppKit)。両者を `Preferis.app` に同梱 | macOS で全機能が揃い、設定ファイルを手で編集せずに運用できる | 実装完了、目視確認待ち (2026-10-02)。`Preferis Picker.app` (6.8 MB) と `Preferis Settings.app` (8.7 MB。Avalonia 版 26 MB から AppKit に置き換え) はどちらも AppKit + NativeAOT で、`Contents/Helpers/` に同梱し内側から署名 (`Preferis.app` 全体で 20 MB)。Router 経由でピッカー表示まで 120 ms、「記憶する」、オプトイン履歴、`Preferis.app` を直接開くと設定 UI。テスト 367 件 (Core 221, Platform 35, Settings.Core 111)。描画はウィンドウのキャプチャで確認済みだが、実際のリンククリックからのピッカーの前面表示と設定 UI の手操作は開発者の目視確認が必要。未実装: UI の日本語化、アプリアイコン |
-| M4 | Windows: スパイク (§12 の 6〜9)、Platform の Windows 実装、Router の Windows 経路、WinUI 3 ピッカー、WinUI 3 の設定 UI (`Preferis.Settings.Core` の ViewModel を使う)。**`PublishWindows` ターゲットで exe 一式のフォルダーを生成** | `artifacts/` の `Preferis.exe` を既定ブラウザーにし、M3 と同等の機能が揃う。同一の設定ファイルを両 OS で共有できる | 未着手 |
+| M4 | Windows: スパイク (§12 の 6〜9)、Platform の Windows 実装、Router の Windows 経路、WinUI 3 ピッカー、WinUI 3 の設定 UI (`Preferis.Settings.Core` の ViewModel を使う)。**`PublishWindows` ターゲットで exe 一式のフォルダーを生成** | `artifacts/` の `Preferis.exe` を既定ブラウザーにし、M3 と同等の機能が揃う。同一の設定ファイルを両 OS で共有できる | 実装完了、目視確認待ち (2026-10-02)。`dotnet build build/Preferis.Build.proj` で `artifacts/win-x64/Preferis/` (82 MB: Router 4.9 MB、ピッカー 7.6 MB、設定 10 MB と Windows App SDK) を生成。3 つとも NativeAOT。レジストリからのブラウザー検出、HKCU への登録、`--single-argument`、ピッカー (Router 起動から表示まで約 270 ms)、設定 UI (Windows 11 の設定アプリ風、条件は行のエディター)、テストページからの Router 実行を確認。テスト 424 件 (Core 221, Platform 80, Settings.Core 123)。macOS 側の変更 (ViewModel、`RouterProcess`) は Windows ではビルドとテストのみで、AppKit の 2 プロジェクトは macOS での確認が必要。未確認: 既定ブラウザーにしてのリンククリック (前面表示、スパイク 6)、既定のアプリ一覧への表示 (スパイク 8)、起動中ブラウザーへの受け渡し (スパイク 9)、Firefox。未実装: アプリアイコン、UI の日本語化 |
 | M5 | リリース: Developer ID 署名と公証、インストーラー (macOS: dmg / Homebrew cask、Windows: zip / winget 等)、ベンチ結果の記録、利用者向けドキュメント | 配布物を第三者が導入できる | 未着手 |
 
 本ドキュメントは設計段階のものです。実装と齟齬が出た場合は実装側の判断を本書に反映してください。

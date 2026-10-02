@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
 using AppKit;
+using CoreGraphics;
+using Preferis.Settings.MacOS.Controls;
 using Preferis.Settings.ViewModels;
 
 namespace Preferis.Settings.MacOS;
@@ -41,6 +43,8 @@ internal static class Snapshots
             settings.SelectedPage = settings.Profiles;
             settings.Profiles.SelectedProfile = settings.Profiles.Profiles.ElementAtOrDefault(2) ?? settings.Profiles.SelectedProfile;
         }));
+        // The end of the same editor: this computer's target and the Advanced section.
+        steps.Add(("profiles-third-end", () => ScrollToEnd(window.Window.ContentView!)));
 
         // Behind the desktop picture: on screen for the window server (which captures by window id regardless of what
         // covers it), invisible to the person using the Mac. Off-screen windows cannot be captured at all.
@@ -68,6 +72,19 @@ internal static class Snapshots
             }
             steps[index++].Prepare();
         });
+    }
+
+    // Scrolls the pages (the scroll views of Ui.ScrollPage) to their bottom.
+    private static void ScrollToEnd(NSView view)
+    {
+        if (view is NSScrollView { DocumentView: FlippedView document } scroll)
+        {
+            document.ScrollPoint(new CGPoint(0, Math.Max(0, (double)(document.Frame.Height - scroll.ContentView.Bounds.Height))));
+        }
+        foreach (var child in view.Subviews)
+        {
+            ScrollToEnd(child);
+        }
     }
 
     private static void Capture(NSWindow window, string path)

@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The settings UI for Windows (docs/Design.md §9.1, docs/Platform.md §2.8): WinUI 3 pages over the view models of
+    Preferis.Settings.Core, built in code like the AppKit version. Builds only on Windows. Unpackaged, self-contained
+    and NativeAOT, like the picker it ships next to.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>Preferis.Settings.Windows</RootNamespace>
+    <AssemblyName>Preferis.Settings</AssemblyName>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- Keeps Preferis.Settings.pri in the publish output, without which the controls lose their styles (see the picker). -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <SelfContained>true</SelfContained>
+    <PublishAot>true</PublishAot>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Main checks for a running instance before starting WinUI, which the generated Main cannot do. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <Description>Preferis settings for Windows: profiles, rules and the default browser registration.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.9" />
+    <!-- WinUI 2.3.9 names InteractiveExperiences 2.1.8, which was never published; pin the next one (NU1603). -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Preferis.Settings.Core/Preferis.Settings.Core.csproj" />
+  </ItemGroup>
+
+</Project>

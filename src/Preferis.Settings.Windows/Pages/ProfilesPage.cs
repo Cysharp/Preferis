@@ -1,0 +1,289 @@
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Preferis.Settings.ViewModels;
+using Preferis.Settings.Windows.Controls;
+
+namespace Preferis.Settings.Windows.Pages;
+
+/// <summary>The profiles: the list (with + for the browsers found on this PC) and the selected profile's settings.</summary>
+internal sealed class ProfilesPage : IPageView
+{
+    private const double ListWidth = 320;
+    private readonly ProfilesPageViewModel _page;
+    private readonly Bindings _bindings = new();
+    private readonly ListPane<ProfileViewModel> _list;
+    private readonly ContentControl _editorHost = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
+    private Bindings? _editorBindings;
+    private ProfileViewModel? _shown;
+
+    public ProfilesPage(ProfilesPageViewModel page)
+    {
+        _page = page;
+        _list = new ListPane<ProfileViewModel>(page.Profiles, Row, profile => page.SelectedProfile = profile, page.MoveProfile);
+
+        var add = Ui.IconButton(Ui.Glyphs.Add, "Add a profile");
+        var addMenu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
+        // Built when it opens: the detected browsers change with "Detect Browsers Again".
+        addMenu.Opening += (_, _) => FillAddMenu(addMenu);
+        add.Flyout = addMenu;
+        var remove = Ui.IconButton(Ui.Glyphs.Remove, "Delete the selected profile");
+        _bindings.Command(remove, page.DeleteCommand);
+        var more = Ui.IconButton(Ui.Glyphs.More, "More");
+        more.Flyout = MoreMenu();
+        _list.Bar.Children.Add(add);
+        _list.Bar.Children.Add(remove);
+        _list.Bar.Children.Add(more);
+
+        View = Split(_list.View, _editorHost);
+        _bindings.Observe(page, ShowSelected, nameof(ProfilesPageViewModel.SelectedProfile));
+    }
+
+    public UIElement View { get; }
+
+    public void Dispose()
+    {
+        _editorBindings?.Dispose();
+        _list.Dispose();
+        _bindings.Dispose();
+    }
+
+    /// <summary>The list on the left, the editor of the selected item on the right.</summary>
+    public static Grid Split(UIElement list, UIElement editor)
+    {
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(ListWidth) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = Ui.Star });
+        ((FrameworkElement)list).Margin = new Thickness(32, 0, 0, 24);
+        grid.Children.Add(list);
+        Grid.SetColumn((FrameworkElement)editor, 1);
+        grid.Children.Add(editor);
+        return grid;
+    }
+
+    private static UIElement Row(ProfileViewModel profile, Bindings bindings)
+    {
+        var icon = EditorParts.IconHost();
+        icon.Width = icon.Height = 24;
+        bindings.Observe(profile, () =>
+        {
+            icon.Children.Clear();
+            icon.Children.Add(Ui.Image(profile.IconPng, 24) ?? (UIElement)Ui.Glyph(profile.IsCommand ? Ui.Glyphs.Command : Ui.Glyphs.Globe, 20, Ui.Brush("TextFillColorSecondaryBrush")));
+        }, nameof(ProfileViewModel.IconPng), nameof(ProfileViewModel.TargetKind));
+
+        var name = Ui.Label("");
+        var summary = Ui.Secondary("");
+        bindings.Observe(profile, () =>
+        {
+            name.Text = profile.Name.Length > 0 ? profile.Name : "(Unnamed)";
+            summary.Text = profile.Summary;
+        }, nameof(ProfileViewModel.Name), nameof(ProfileViewModel.Summary));
+
+        var problem = Ui.Glyph(Ui.Glyphs.Error, 14, Ui.Brush("SystemFillColorCriticalBrush"));
+        ToolTipService.SetToolTip(problem, "This profile has problems");
+        bindings.Visible(problem, profile, () => profile.HasIssues, nameof(ProfileViewModel.HasIssues));
+        var star = Ui.Glyph(Ui.Glyphs.Star, 14, Ui.Brush("SystemFillColorCautionBrush"));
+        ToolTipService.SetToolTip(star, "Default profile");
+        bindings.Visible(star, profile, () => profile.IsDefault, nameof(ProfileViewModel.IsDefault));
+
+        return Ui.Columns(12, (icon, Ui.Auto), (Ui.VStack(0, name, summary), Ui.Star), (Ui.HStack(6, problem, star), Ui.Auto));
+    }
+
+    // "+": the browsers and browser profiles of this PC, then the other ways to add a profile.
+    private void FillAddMenu(MenuFlyout menu)
+    {
+        menu.Items.Clear();
+        menu.Items.Add(new MenuFlyoutItem { Text = "Browsers on This PC", IsEnabled = false });
+        foreach (var browser in _page.DetectedBrowsers)
+        {
+            var icon = Images.FromPng(browser.IconPng);
+            if (browser.Items.Count == 1 && browser.Note is null)
+            {
+                menu.Items.Add(DetectedItem(browser.Items[0], browser.Name, icon));
+                continue;
+            }
+            // A browser with browser profiles: a sub menu with the browser itself and each of its profiles.
+            var sub = new MenuFlyoutSubItem { Text = browser.Name };
+            if (icon is not null)
+            {
+                sub.Icon = new ImageIcon { Source = icon };
+            }
+            foreach (var item in browser.Items)
+            {
+                var title = item.Profile is null ? $"{item.Title} (no specific profile)" : item.Subtitle is { } subtitle ? $"{item.Title} — {subtitle}" : item.Title;
+                sub.Items.Add(DetectedItem(item, title, Images.FromPng(item.Profile is null ? browser.IconPng : item.AvatarPng ?? browser.IconPng)));
+            }
+            if (browser.Note is { } note)
+            {
+                sub.Items.Add(new MenuFlyoutSeparator());
+                sub.Items.Add(new MenuFlyoutItem { Text = note, IsEnabled = false });
+            }
+            menu.Items.Add(sub);
+        }
+        if (_page.DetectedBrowsers.Count == 0)
+        {
+            menu.Items.Add(new MenuFlyoutItem { Text = "No browser was found", IsEnabled = false });
+        }
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(Bindings.MenuItem("Add All Browsers and Profiles", _page.AddAllDetectedCommand));
+        menu.Items.Add(Bindings.MenuItem("Command…", _page.AddCommandProfileCommand));
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(Bindings.MenuItem("Detect Browsers Again", _page.RefreshBrowsersCommand));
+    }
+
+    private MenuFlyoutItem DetectedItem(DetectedItemViewModel item, string title, Microsoft.UI.Xaml.Media.ImageSource? icon)
+    {
+        var entry = Bindings.MenuItem(title, _page.AddDetectedCommand, item);
+        if (icon is not null)
+        {
+            entry.Icon = new ImageIcon { Source = icon };
+        }
+        return entry;
+    }
+
+    private MenuFlyout MoreMenu()
+    {
+        var menu = new MenuFlyout();
+        menu.Items.Add(Bindings.MenuItem("Duplicate", _page.DuplicateCommand));
+        var makeDefault = Bindings.MenuItem("Make Default Profile", _page.SetDefaultCommand);
+        makeDefault.Loaded += (_, _) => makeDefault.IsEnabled &= _page.SelectedProfile?.IsDefault == false;
+        menu.Items.Add(makeDefault);
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(Bindings.MenuItem("Move Up", _page.MoveUpCommand));
+        menu.Items.Add(Bindings.MenuItem("Move Down", _page.MoveDownCommand));
+        return menu;
+    }
+
+    private void ShowSelected()
+    {
+        _list.Select(_page.SelectedProfile);
+        if (ReferenceEquals(_shown, _page.SelectedProfile))
+        {
+            return;
+        }
+        _shown = _page.SelectedProfile;
+        _editorBindings?.Dispose();
+        _editorBindings = new Bindings();
+        _editorHost.Content = _shown is null
+            ? Form.Empty("No Profile Selected", "Click + below the list to add the browsers found on this PC, or a command.")
+            : Editor(_shown, _editorBindings);
+    }
+
+    private UIElement Editor(ProfileViewModel profile, Bindings bindings)
+    {
+        var icon = EditorParts.IconHost();
+        bindings.Observe(profile, () => EditorParts.SetIcon(icon, profile.IconPng, profile.IsCommand ? Ui.Glyphs.Command : Ui.Glyphs.Globe), nameof(ProfileViewModel.IconPng), nameof(ProfileViewModel.TargetKind));
+        var title = Ui.Label("");
+        var subtitle = Ui.Secondary("");
+        bindings.Observe(profile, () =>
+        {
+            title.Text = profile.Name.Length > 0 ? profile.Name : "(Unnamed)";
+            subtitle.Text = profile.Summary;
+        }, nameof(ProfileViewModel.Name), nameof(ProfileViewModel.Summary));
+        var header = EditorParts.Header(icon, title, subtitle, profile, nameof(ProfileViewModel.Issues), () => profile.Issues, bindings);
+
+        var name = Ui.TextBox("Name");
+        bindings.Text(name, profile, nameof(ProfileViewModel.Name), () => profile.Name, value => profile.Name = value);
+
+        var isDefault = Ui.Switch();
+        bindings.Observe(profile, () =>
+        {
+            isDefault.IsOn = profile.IsDefault;
+            // There is always one default at most; it changes by choosing another profile.
+            isDefault.IsEnabled = !profile.IsDefault;
+        }, nameof(ProfileViewModel.IsDefault));
+        isDefault.Toggled += (_, _) =>
+        {
+            if (isDefault.IsOn && !profile.IsDefault)
+            {
+                _page.SetDefaultCommand.Execute(null);
+            }
+        };
+
+        var target = Ui.ComboBox(160);
+        bindings.Choice(target, profile, nameof(ProfileViewModel.TargetKind),
+            [(ProfileTargetKind.Browser, "Browser"), (ProfileTargetKind.Command, "Command")],
+            () => profile.TargetKind, value => profile.TargetKind = value);
+
+        var general = Form.Section(null,
+            Form.Card("Name", name, $"Rules refer to the profile by its id, “{profile.Id}”, which stays when you rename it."),
+            Form.Card("Default profile", isDefault, "Opens links that the matching rule does not assign to a profile."),
+            Form.Card("Opens with", target));
+
+        var page = Form.Page(header, general, BrowserSection(profile, bindings), CommandSection(profile, bindings), FallbackSection(profile, bindings));
+        ((FrameworkElement)page.Content).Margin = new Thickness(0, 0, 0, 0);
+        page.Padding = new Thickness(16, 0, 32, 0);
+        return page;
+    }
+
+    private static UIElement BrowserSection(ProfileViewModel profile, Bindings bindings)
+    {
+        var browser = Ui.ComboBox(260);
+        bindings.Popup(browser, profile, nameof(ProfileViewModel.Browser), () => profile.BrowserChoices, () => profile.Browser, value => profile.Browser = value, c => c.Title, c => c.IconPng);
+        var windows = Ui.ComboBox(260);
+        bindings.Popup(windows, profile, nameof(ProfileViewModel.WindowsBrowser), () => profile.WindowsBrowserChoices, () => profile.WindowsBrowser, value => profile.WindowsBrowser = value, c => c.Title, c => c.IconPng);
+        var mac = Ui.ComboBox(260);
+        bindings.Popup(mac, profile, nameof(ProfileViewModel.MacOSBrowser), () => profile.MacOSBrowserChoices, () => profile.MacOSBrowser, value => profile.MacOSBrowser = value, c => c.Title, c => c.IconPng);
+        var perOs = Ui.Switch();
+        bindings.Switch(perOs, profile, nameof(ProfileViewModel.PerOs), () => profile.PerOs, value => profile.PerOs = value);
+        var browserProfile = Ui.ComboBox(260);
+        bindings.Popup(browserProfile, profile, nameof(ProfileViewModel.BrowserProfile), () => profile.BrowserProfileChoices, () => profile.BrowserProfile, value => profile.BrowserProfile = value, c => c.Title);
+        var isPrivate = Ui.Switch();
+        bindings.Switch(isPrivate, profile, nameof(ProfileViewModel.Private), () => profile.Private, value => profile.Private = value);
+        var args = Ui.LinesBox("--new-window");
+        bindings.Text(args, profile, nameof(ProfileViewModel.ExtraArgs), () => profile.ExtraArgs, value => profile.ExtraArgs = value);
+
+        var browserCard = Form.Card("Browser", browser);
+        var windowsCard = Form.Card("Browser on Windows", windows);
+        var macCard = Form.Card("Browser on macOS", mac);
+        var profileCard = Form.Card("Browser profile", browserProfile, "Opens the browser with this profile signed in.");
+        var section = Form.Section("Browser",
+            browserCard,
+            Form.Card("Different browser on each OS", perOs, "For a configuration shared with Mac computers."),
+            windowsCard,
+            macCard,
+            profileCard,
+            Form.Card("Private window", isPrivate, "InPrivate in Edge, incognito in Chrome."),
+            Form.Card("Extra arguments", args, "One per line."));
+
+        bindings.Observe(profile, () =>
+        {
+            Ui.Show(section, profile.IsBrowser);
+            Ui.Show(browserCard, !profile.PerOs);
+            Ui.Show(windowsCard, profile.PerOs);
+            Ui.Show(macCard, profile.PerOs);
+            Ui.Show(profileCard, profile.HasBrowserProfiles);
+        }, nameof(ProfileViewModel.TargetKind), nameof(ProfileViewModel.PerOs), nameof(ProfileViewModel.HasBrowserProfiles));
+        return section;
+    }
+
+    private static UIElement CommandSection(ProfileViewModel profile, Bindings bindings)
+    {
+        var windowsPath = Ui.TextBox(@"%LOCALAPPDATA%\Programs\Foo\foo.exe");
+        bindings.Text(windowsPath, profile, nameof(ProfileViewModel.WindowsCommandPath), () => profile.WindowsCommandPath, value => profile.WindowsCommandPath = value);
+        var browse = Ui.Button("Browse…");
+        bindings.Command(browse, profile.BrowseWindowsCommandCommand);
+        var windowsArgs = Ui.LinesBox("{url}");
+        bindings.Text(windowsArgs, profile, nameof(ProfileViewModel.WindowsCommandArgs), () => profile.WindowsCommandArgs, value => profile.WindowsCommandArgs = value);
+        var macPath = Ui.TextBox("/Applications/Foo.app/Contents/MacOS/Foo");
+        bindings.Text(macPath, profile, nameof(ProfileViewModel.MacOSCommandPath), () => profile.MacOSCommandPath, value => profile.MacOSCommandPath = value);
+        var macArgs = Ui.LinesBox("{url}");
+        bindings.Text(macArgs, profile, nameof(ProfileViewModel.MacOSCommandArgs), () => profile.MacOSCommandArgs, value => profile.MacOSCommandArgs = value);
+
+        var section = Form.Section("Command",
+            "{url} in the arguments is replaced with the URL; without it the URL is added at the end. Environment variables such as %LOCALAPPDATA% are expanded.",
+            Form.Card("Program on Windows", Ui.HStack(8, windowsPath, browse)),
+            Form.Card("Arguments on Windows", windowsArgs, "One per line."),
+            Form.Card("Program on macOS", macPath, "For a configuration shared with Mac computers."),
+            Form.Card("Arguments on macOS", macArgs, "One per line."));
+        bindings.Observe(profile, () => Ui.Show(section, profile.IsCommand), nameof(ProfileViewModel.TargetKind));
+        return section;
+    }
+
+    private static UIElement FallbackSection(ProfileViewModel profile, Bindings bindings)
+    {
+        var fallback = Ui.ComboBox(260);
+        bindings.Popup(fallback, profile, nameof(ProfileViewModel.Fallback), () => profile.FallbackChoices, () => profile.Fallback, value => profile.Fallback = value, c => c.Title);
+        return Form.Section("When Not Available",
+            Form.Card("Use instead", fallback, "For example when the browser is not installed on another computer that shares this configuration."));
+    }
+}

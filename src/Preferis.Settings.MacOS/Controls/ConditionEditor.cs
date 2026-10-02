@@ -2,6 +2,7 @@ using AppKit;
 using CoreData;
 using Foundation;
 using Preferis.Core.Configuration;
+using Preferis.Core.Localization;
 using Preferis.Settings.ViewModels;
 using static Preferis.Settings.Localization.SettingsText;
 
@@ -46,11 +47,15 @@ internal sealed class ConditionEditor : IDisposable
         _editor = new NSPredicateEditor
         {
             NestingMode = NSRuleEditorNestingMode.Compound,
-            RowTemplates = [CompoundTemplate(), ComparisonTemplate()],
             CanRemoveAllRows = false,
             RowHeight = 28,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
+        if (CompoundFormatting() is { } formatting)
+        {
+            _editor.FormattingDictionary = formatting;
+        }
+        _editor.RowTemplates = [CompoundTemplate(), ComparisonTemplate()];
         _editor.ObjectValue = ToPredicate(tree);
         _last = _editor.Predicate?.PredicateFormat;
         _height = _editor.HeightAnchor.ConstraintEqualTo(Height());
@@ -102,6 +107,28 @@ internal sealed class ConditionEditor : IDisposable
             { } row => new CompoundPredicate(CompoundKind.All, [row]),
             null => new CompoundPredicate(CompoundKind.All, []),
         });
+    }
+
+    /// <summary>
+    /// The compound rows in the language of the UI. AppKit writes "[Any] of the following are true" in English whatever the
+    /// language (it has no translations of it), and the words around the choice differ by language, so in Japanese the
+    /// choice becomes the whole sentence, as in the Windows editor. The keys are the rows as AppKit formats them.
+    /// </summary>
+    private static NSDictionary? CompoundFormatting()
+    {
+        if (UiLanguages.Current == UiLanguage.English)
+        {
+            return null;
+        }
+        var rows = new (string Choice, string Sentence)[]
+        {
+            ("All", L("All of the following are true")),
+            ("Any", L("Any of the following are true")),
+            ("None", L("None of the following are true")),
+        };
+        return NSDictionary.FromObjectsAndKeys(
+            rows.Select(r => (NSObject)new NSString($"%[{r.Sentence}]@")).ToArray(),
+            rows.Select(r => (NSObject)new NSString($"%[{r.Choice}]@ of the following are true")).ToArray());
     }
 
     private static NSPredicateEditorRowTemplate CompoundTemplate()

@@ -641,9 +641,10 @@ UI は英語と日本語です。`settings.language` (Configuration.md §2.9) �
   (解決できない理由など) は、ログにも設定した言語で書かれる。
 - 設定 UI が新しく作る名前 (「新しいルール」「… のコピー」、コマンドのプロファイル、CSV からインポートしたルール) も
   表示言語で付ける。言語名は選択肢でそれぞれの言語で書く (English / 日本語)。
-- **OS が描く部分は OS の言語**: Windows のファイル選択ダイアログやテキストボックスのメニュー、macOS の開くパネルや
-  NSPredicateEditor の複合条件の行。macOS のバンドルは `CFBundleLocalizations` に en と ja を宣言し、日本語の macOS では
-  AppKit 自身の文字列も日本語になる (Platform.md §3.7, §3.8)。WinUI 3 は日本語のときウィンドウのルートの `Language` を
+- **OS が描く部分は OS の言語**: Windows のファイル選択ダイアログやテキストボックスのメニュー、macOS の開くパネル。
+  macOS のバンドルは `CFBundleLocalizations` に en と ja を宣言し、日本語の macOS では AppKit 自身の文字列も日本語になる
+  (Platform.md §3.7, §3.8)。ただし NSPredicateEditor の複合条件の行 (「[Any] of the following are true」) は AppKit に訳が
+  無く常に英語のため、日本語のときは Windows と同じ文全体 (「次のいずれかを満たす」) を `formattingDictionary` で与える。WinUI 3 は日本語のときウィンドウのルートの `Language` を
   `ja-JP` にし、英語の Windows でも漢字を日本語のフォントで描く (Platform.md §2.6, §2.8)。
 - Windows の条件エディターの複合条件は「次のすべてを満たす」のように文全体を 1 つの選択肢にする (英語も
   「All of the following are true」)。以前の「[All] of the following are true」は選択肢の前後の語が言語で違い、訳せないため。

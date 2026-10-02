@@ -571,12 +571,14 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
   確認は `NSAlert` (どちらもモーダル)。
 - macOS 27 で Chromium のプロファイルデータが読めない場合 (§3.4) は、検出一覧に「フルディスクアクセスを与える」旨を表示する。
 - 表示言語は起動時に `config.json` から決める (§2.8 と同じ)。メニューバーも自前で作るため項目名を訳す (Apple の日本語の
-  用語に合わせる: 「… を非表示」「ほかを非表示」「しまう」など)。`NSPredicateEditor` の複合条件の行
-  (All / Any / None of the following are true) と `NSOpenPanel` の既定の部分は AppKit の文字列で、`Info.plist` の
-  `CFBundleLocalizations` (en, ja) のうち macOS の言語に合うもので表示される。Preferis の言語の設定には従わないため、英語の
-  macOS で日本語を選んでもこれらは英語のまま。比較の行の対象と演算子は項目名を書き換えているので Preferis の言語になる。
-  **未確認**: Windows で書いたため、macOS でのビルドと表示 (NSPredicateEditor の複合条件の行が日本語になるかを含む) を
-  確かめる必要がある。
+  用語に合わせる: 「… を非表示」「ほかを非表示」「しまう」など)。`NSOpenPanel` や `NSAlert` の既定の部分は AppKit の文字列で、
+  `Info.plist` の `CFBundleLocalizations` (en, ja) のうち macOS の言語に合うもので表示される。Preferis の言語の設定には従わない
+  ため、英語の macOS で日本語を選んでもこれらは英語のまま。`NSPredicateEditor` の複合条件の行 (「[Any] of the following are
+  true」) は AppKit に訳が無く、日本語の macOS でも英語だった (macOS 26 で確認。AppKit の .loctable に該当する文字列が無い)。
+  日本語のときは `formattingDictionary` で選択肢を文全体 (「次のすべてを満たす」「次のいずれかを満たす」「次のいずれも満たさ
+  ない」、Windows の条件エディターと同じ訳) にする。キーは AppKit が組み立てる行の書式 (`%[Any]@ of the following are true`)、
+  値は `%[次のいずれかを満たす]@`。英語は AppKit の既定のまま。比較の行の対象と演算子は項目名を書き換えているので
+  Preferis の言語になる。macOS でのビルドと日本語の表示 (設定 UI の各ページ、ピッカー) はスナップショットで確認した。
 - Launch Services 経由で開いた場合 `HOME` などの環境変数はシェルのものではない。開発中に別の設定で試すときは、
   実行ファイルを直接 `HOME=<dir>` 付きで起動する。
 - `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で各ページ (とルール・プロファイル画面のいくつかの状態) を PNG に書き出して終了する。

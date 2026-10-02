@@ -215,7 +215,7 @@ internal sealed class ProfilesPage : IPageView
             () => profile.TargetKind, value => profile.TargetKind = value);
 
         var general = Form.Section(null,
-            Form.Card(L("Name"), name, L("Shown in the picker, so each profile needs a name of its own.")),
+            Form.Card(L("Name"), name, L("The name shown in the picker. Each profile needs a name of its own.")),
             Form.Card(L("Default profile"), isDefault, L("Opens links that the matching rule does not assign to a profile.")),
             Form.Card(L("Opens with"), target));
 
@@ -351,7 +351,7 @@ internal sealed class ProfilesPage : IPageView
         bindings.Add(() => targetBindings?.Dispose());
 
         return Form.Section(L("This Computer"),
-            Form.Card(L("Open something else on this computer"), uses, L("In place of the browser or command above, for example another browser profile. Saved on this computer only; rules and other computers are not affected.")),
+            Form.Card(L("Open with another browser or command on this computer"), uses, L("In place of the browser or command above, for example another browser profile. Saved on this computer only; rules and other computers are not affected.")),
             cards);
     }
 

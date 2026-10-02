@@ -214,7 +214,7 @@ internal sealed class ProfilesPage : IPageView
             () => profile.TargetKind, value => profile.TargetKind = value);
 
         var general = Form.Section(null,
-            Form.Row(L("Name"), name, L("Shown in the picker, so each profile needs a name of its own.")),
+            Form.Row(L("Name"), name, L("The name shown in the picker. Each profile needs a name of its own.")),
             Form.Row(L("Default profile"), isDefault, L("Opens links that the matching rule does not assign to a profile.")),
             Form.Row(L("Opens with"), target));
 
@@ -332,7 +332,7 @@ internal sealed class ProfilesPage : IPageView
         var uses = Ui.Switch();
         bindings.Switch(uses, profile, nameof(ProfileViewModel.UsesLocalTarget), () => profile.UsesLocalTarget, value => profile.UsesLocalTarget = value);
         var section = (NSStackView)Form.Section(L("This Computer"),
-            Form.Row(L("Open something else on this computer"), uses, L("In place of the browser or command above, for example another browser profile. Saved on this computer only; rules and other computers are not affected.")));
+            Form.Row(L("Open with another browser or command on this computer"), uses, L("In place of the browser or command above, for example another browser profile. Saved on this computer only; rules and other computers are not affected.")));
         // The target's group follows the switch's as a continuation.
         section.SetCustomSpacing((nfloat)Form.GroupSpacing, section.ArrangedSubviews[^1]);
 

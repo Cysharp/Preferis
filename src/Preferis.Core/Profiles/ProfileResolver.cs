@@ -123,7 +123,7 @@ public sealed class ProfileResolver
             var flag = browser.CatalogEntry?.PrivateModeArgument ?? DefaultPrivateFlag(browser.Family);
             if (flag is null)
             {
-                warnings.Add(L("Browser '{0}' has no known private mode flag; ignoring it.", browser.Id));
+                warnings.Add(L("Browser '{0}' does not support private mode; ignoring it.", browser.Id));
             }
             else
             {

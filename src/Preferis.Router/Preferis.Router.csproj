@@ -2,10 +2,16 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <!--
+      Windows: a GUI program, so that no console window flashes up whenever a link is clicked. Its commands borrow the
+      terminal's console instead (WindowsProcess.AttachToParentConsole).
+    -->
+    <OutputType Condition="$([MSBuild]::IsOSPlatform('Windows'))">WinExe</OutputType>
     <AssemblyName>Preferis</AssemblyName>
     <RootNamespace>Preferis.Router</RootNamespace>
     <PublishAot>true</PublishAot>
     <SelfContained>true</SelfContained>
+    <ApplicationManifest>Windows/app.manifest</ApplicationManifest>
     <Description>Preferis router: receives URLs, routes them and launches the browser. No UI framework.</Description>
   </PropertyGroup>
 

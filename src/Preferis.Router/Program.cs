@@ -1,5 +1,6 @@
 using System.Reflection;
 using Preferis.Platform.MacOS;
+using Preferis.Platform.Windows;
 
 namespace Preferis.Router;
 
@@ -11,11 +12,29 @@ internal static class Program
         var launchedByLaunchServices = OperatingSystem.IsMacOS() && MacUrlActivationSource.IsLaunchedByLaunchServices;
         var urls = args.Where(a => !a.StartsWith("-psn_", StringComparison.Ordinal)).ToList();
 
+        if (OperatingSystem.IsWindows())
+        {
+            // The registered command: the URL is the rest of the raw command line, so that quotes in it cannot add
+            // options (docs/Platform.md §2.2). Nothing is printed, so there is no console to attach to.
+            if (urls.FirstOrDefault() == CommandLine.SingleArgumentMarker)
+            {
+                return CommandLine.SingleArgument(Environment.CommandLine) is { } url
+                    ? RouterHost.Create(interactive: false).HandleUrls([url])
+                    : 1;
+            }
+            WindowsProcess.AttachToParentConsole();
+        }
+
         if (urls.Count == 0)
         {
             if (OperatingSystem.IsMacOS() && launchedByLaunchServices)
             {
                 return RouterHost.Create(interactive: false).RunLaunchServicesLoop();
+            }
+            if (OperatingSystem.IsWindows())
+            {
+                // Opened from Explorer or the Start menu's browser entry: the settings are what the user is after.
+                return RouterHost.OpenSettings(RouterHost.Create(interactive: true).Log) ? 0 : 1;
             }
             return Usage();
         }
@@ -30,7 +49,7 @@ internal static class Program
                 return Report(RouterHost.Create(interactive: true).Registrar.Unregister());
             case "--status":
                 return Status(RouterHost.Create(interactive: true));
-            case "--settings" when OperatingSystem.IsMacOS():
+            case "--settings":
                 return RouterHost.OpenSettings(RouterHost.Create(interactive: true).Log) ? 0 : 1;
             case "--version":
                 Console.WriteLine(typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0");
@@ -74,7 +93,7 @@ internal static class Program
 
     private static int Usage()
     {
-        Console.Error.WriteLine("""
+        Console.Error.WriteLine($"""
             Preferis router
 
             Usage:
@@ -84,7 +103,9 @@ internal static class Program
               Preferis --settings                            Open the settings.
               Preferis --version | --help
 
-            When started by Launch Services (as the default browser) Preferis receives URLs from the OS instead.
+            {(OperatingSystem.IsWindows()
+                ? "Windows starts Preferis with --single-argument <url> as the default browser. Without arguments it opens the settings."
+                : "When started by Launch Services (as the default browser) Preferis receives URLs from the OS instead.")}
             """);
         return 1;
     }

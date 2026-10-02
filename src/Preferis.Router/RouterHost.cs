@@ -7,6 +7,7 @@ using Preferis.Core.Routing;
 using Preferis.Platform.Browsers;
 using Preferis.Platform.Launching;
 using Preferis.Platform.MacOS;
+using Preferis.Platform.Windows;
 
 namespace Preferis.Router;
 
@@ -46,45 +47,99 @@ internal sealed class RouterHost
         var local = config.LoadLocal();
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var log = new FileLog(config.Paths.LogDirectory, local.Logging?.Level, echoToStderr: interactive);
+        var pickerLog = (string line) => log.Write(LogLevel.Trace, "picker: " + line);
 
-        if (!OperatingSystem.IsMacOS())
+        RoutingServices services;
+        IDefaultBrowserRegistrar registrar;
+        if (OperatingSystem.IsWindows())
         {
-            throw new PlatformNotSupportedException("Windows support arrives in M4 (docs/Design.md §14).");
+            WindowsProcess.KeepStandardHandlesFromChildren();
+            // The picker and the settings are executables next to ours (docs/Platform.md §2.1).
+            var picker = new ProcessPickerLauncher(
+                Path.Combine(AppContext.BaseDirectory, PickerExecutable),
+                TimeSpan.FromMinutes(5),
+                pickerLog,
+                // The shell lets the Router come to the front, but not the picker it starts: hand the right over.
+                processId =>
+                {
+                    if (OperatingSystem.IsWindows())
+                    {
+                        WindowsProcess.AllowForeground(processId);
+                    }
+                });
+            services = new RoutingServices(
+                config,
+                HostPlatform.Windows,
+                new WindowsBrowserDetector(local.BrowserOverrides),
+                new BrowserProfileEnumerator(),
+                new LaunchPlanExecutor(HostPlatform.Windows),
+                new WindowsSystemOpener(WindowsUrlAssociations.Instance),
+                picker,
+                new WindowsUserNotifier(),
+                log,
+                Environment.GetEnvironmentVariable,
+                home);
+            registrar = new WindowsDefaultBrowserRegistrar(Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Preferis.exe"));
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            // The picker is a helper bundle next to our own (docs/Platform.md §3.1).
+            var pickerPath = Path.Combine(HelpersDirectory, "Preferis Picker.app", "Contents", "MacOS", "Preferis Picker");
+            services = new RoutingServices(
+                config,
+                HostPlatform.MacOS,
+                new MacBrowserDetector(local.BrowserOverrides, home),
+                new BrowserProfileEnumerator(),
+                new LaunchPlanExecutor(HostPlatform.MacOS),
+                new MacSystemOpener(),
+                new ProcessPickerLauncher(pickerPath, TimeSpan.FromMinutes(5), pickerLog),
+                new MacUserNotifier(),
+                log,
+                Environment.GetEnvironmentVariable,
+                home);
+            registrar = MacDefaultBrowserRegistrar.ForMainBundle();
+        }
+        else
+        {
+            throw new PlatformNotSupportedException("Preferis runs on Windows and macOS.");
         }
 
-        // The picker is a helper bundle next to our own (docs/Platform.md §3.1).
-        var pickerPath = Path.Combine(HelpersDirectory, "Preferis Picker.app", "Contents", "MacOS", "Preferis Picker");
-        var services = new RoutingServices(
-            config,
-            HostPlatform.MacOS,
-            new MacBrowserDetector(local.BrowserOverrides, home),
-            new BrowserProfileEnumerator(),
-            new LaunchPlanExecutor(HostPlatform.MacOS),
-            new MacSystemOpener(),
-            new ProcessPickerLauncher(pickerPath, TimeSpan.FromMinutes(5), line => log.Write(LogLevel.Trace, "picker: " + line)),
-            new MacUserNotifier(),
-            log,
-            Environment.GetEnvironmentVariable,
-            home);
-
-        return new RouterHost(config, new RoutingService(services), MacDefaultBrowserRegistrar.ForMainBundle(), log, local);
+        return new RouterHost(config, new RoutingService(services), registrar, log, local);
     }
+
+    private const string PickerExecutable = "Preferis.Picker.exe";
+
+    private const string SettingsExecutable = "Preferis.Settings.exe";
 
     /// <summary><c>Preferis.app/Contents/Helpers</c>: the picker and settings bundles (docs/Platform.md §3.1).</summary>
     private static string HelpersDirectory => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Helpers"));
 
     private static string SettingsAppPath => Path.Combine(HelpersDirectory, "Preferis Settings.app");
 
-    /// <summary>Opens the settings UI. Launch Services brings an already running instance to the front instead of starting another.</summary>
-    [SupportedOSPlatform("macos")]
+    /// <summary>Opens the settings UI. An already running instance comes to the front instead of a second one starting.</summary>
     public static bool OpenSettings(IRoutingLog log)
     {
+        if (OperatingSystem.IsWindows())
+        {
+            var settings = Path.Combine(AppContext.BaseDirectory, SettingsExecutable);
+            if (!File.Exists(settings))
+            {
+                log.Write(LogLevel.Error, $"The settings were not found at {settings}. Build Preferis with build/Preferis.Build.proj.");
+                return false;
+            }
+            // The new process either shows its window or brings the running one forward; either needs the right.
+            WindowsProcess.AllowAnyForeground();
+            using var started = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(settings) { UseShellExecute = false });
+            return started is not null;
+        }
+
         if (!Directory.Exists(SettingsAppPath))
         {
             log.Write(LogLevel.Error, $"The settings app was not found at {SettingsAppPath}. Build Preferis.app with build/Preferis.Build.proj.");
             return false;
         }
 
+        // Launch Services brings a running instance to the front.
         var info = new System.Diagnostics.ProcessStartInfo("/usr/bin/open") { UseShellExecute = false };
         info.ArgumentList.Add(SettingsAppPath);
         using var process = System.Diagnostics.Process.Start(info);

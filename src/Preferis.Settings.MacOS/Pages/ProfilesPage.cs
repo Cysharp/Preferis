@@ -407,6 +407,6 @@ internal sealed class ProfilesPage : IPageView
         var fallback = Ui.Popup();
         bindings.Popup(fallback, profile, nameof(ProfileViewModel.Fallback), () => profile.FallbackChoices, () => profile.Fallback, value => profile.Fallback = value, c => c.Title);
         return Form.Section(L("When Not Available"),
-            Form.Row(L("Use instead"), fallback, L("For example when the browser is not installed on another computer that shares this configuration.")));
+            Form.Row(L("Profile to use instead"), fallback, L("For example when the browser is not installed on another computer that shares this configuration.")));
     }
 }

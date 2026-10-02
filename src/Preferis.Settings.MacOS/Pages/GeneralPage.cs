@@ -115,7 +115,7 @@ internal sealed class GeneralPage : IPageView
 
         return Form.Section(L("This Mac"), L("Kept in local.json on this Mac only, never synced."),
             Form.Row(L("Log level"), Ui.HStack(8, level, logs)),
-            Form.Row(L("Keep a history of opened links"), history, L("Shown on the Test page to try them again. Contains URLs.")),
+            Form.Row(L("Keep a history of opened links"), history, L("Records the URL of every link Preferis receives. The Test page shows the history to route them again.")),
             Form.Row(L("Links to keep"), size));
     }
 

@@ -63,8 +63,8 @@ public static partial class SettingsText
         { "Make Default", "既定にする" },
         { "Open Windows Settings", "Windows の設定を開く" },
         { "Open System Settings", "システム設定を開く" },
-        { "Windows lets you choose the default browser only in its Settings: Make Default registers Preferis and opens that page. Preferis then receives every link and opens it according to the rules.", "Windows では既定のブラウザーは Windows の設定でのみ選択できます。「既定にする」は Preferis を登録して設定画面を開きます。Preferis を既定のブラウザーにすると、すべてのリンクを受け取り、ルールに従って開きます。" },
-        { "macOS asks you to confirm the change. Preferis then receives every link and opens it according to the rules.", "変更は macOS が確認を求めます。Preferis を既定のブラウザーに設定すると、すべてのリンクを受け取り、ルールに従って開きます。" },
+        { "Windows lets you choose the default browser only in its Settings: Make Default registers Preferis and opens that page. Preferis then receives every link and opens it according to the rules.", "Windows では既定のブラウザーは Windows の設定でのみ選択できます。「既定にする」は Preferis を登録して設定画面を開きます。Preferis を既定のブラウザーに設定するとすべてのリンクを受け取り、ルールに従って開きます。" },
+        { "macOS asks you to confirm the change. Preferis then receives every link and opens it according to the rules.", "既定のブラウザーの変更は macOS が確認を求めます。Preferis を既定のブラウザーに設定するとすべてのリンクを受け取り、ルールに従って開きます。" },
         { "Registering needs Preferis Settings to run next to Preferis.exe (build it with build/Preferis.Build.proj).", "登録するには、Preferis Settings を Preferis.exe と同じフォルダーから実行する必要があります (build/Preferis.Build.proj でビルドしてください)。" },
         { "Registering needs Preferis Settings to run from inside Preferis.app (build it with build/Preferis.Build.proj).", "登録するには、Preferis Settings を Preferis.app の中から実行する必要があります (build/Preferis.Build.proj でビルドしてください)。" },
         { "Preferis is the default browser.", "Preferis は既定のブラウザーです。" },
@@ -79,7 +79,7 @@ public static partial class SettingsText
 
         // ---- general: configuration file ----
         { "Configuration File", "設定ファイル" },
-        { "Keep config.json in a synced folder (OneDrive, Google Drive, iCloud Drive...) to share it with other computers. {0} stays on this computer and remembers where it is.", "config.json を同期されるフォルダー (OneDrive、Google Drive、iCloud Drive など) に置くと、ほかのコンピューターと共有できます。{0} はこのコンピューターに残り、config.json の場所を記憶します。" },
+        { "Keep config.json in a synced folder (OneDrive, Google Drive, iCloud Drive...) to share it with other computers. {0} stays on this computer and remembers where it is.", "config.json を同期されるフォルダー (OneDrive、Google Drive、iCloud Drive など) に置くと、設定を他のコンピューターと共有できます。{0} はこのコンピューターに残り config.json の場所を記憶します。" },
         { "Show in Explorer", "エクスプローラーで表示" },
         { "Show in Finder", "Finder に表示" },
         { "Change Location", "場所を変更" },
@@ -91,7 +91,7 @@ public static partial class SettingsText
         { "The current config.json cannot be read. Save a working configuration before moving it.", "現在の config.json を読み込めません。正しい設定を保存してから移動してください。" },
         { "config.json changed on disk while it was being edited here. Reload or save first, then move it.", "編集中に config.json が外部で変更されました。先に読み込み直すか保存してから移動してください。" },
         { "A configuration already exists there", "移動先に設定ファイルが既に存在します" },
-        { "{0} already exists, for example synced from another computer. Use it, or replace it with the configuration shown here?", "{0} は既に存在します (ほかのコンピューターから同期されたものなど)。既存のファイルを使用しますか? または、現在表示している設定で置き換えますか?" },
+        { "{0} already exists, for example synced from another computer. Use it, or replace it with the configuration shown here?", "{0} は既に存在します (他のコンピューターから同期されたものなど)。既存のファイルを使用しますか? 現在表示している設定で置き換えますか?" },
         { "Use It", "既存のファイルを使用する" },
         { "Replace It", "置き換える" },
         { "Could not move the configuration: {0}", "設定ファイルを移動できませんでした: {0}" },
@@ -114,7 +114,7 @@ public static partial class SettingsText
         { "Checks “Always open this host with this choice” when the picker opens.", "ピッカーを開いたときに「… は常にこの選択で開く」をオンにしておきます。" },
         { "Language", "言語" },
         { "Same as the system", "システムと同じ" },
-        { "The picker shows a new language from the next link on, the settings the next time they open.", "ピッカーには次のリンクから、設定画面には次に開いたときから反映されます。" },
+        { "The picker shows a new language from the next link on, the settings the next time they open.", "言語設定はピッカーは次のリンクを開いた時、設定画面は次に開いた時に反映されます。" },
         { "This PC", "この PC" },
         { "This Mac", "この Mac" },
         { "Kept in local.json on this PC only, never synced.", "この PC の local.json だけに保存され、同期されません。" },
@@ -126,7 +126,7 @@ public static partial class SettingsText
         { "Trace", "トレース" },
         { "Show Logs", "ログを表示" },
         { "Keep a history of opened links", "開いたリンクの履歴を残す" },
-        { "Shown on the Test page to try them again. Contains URLs.", "テストページに表示され、もう一度試せます。URL が記録されます。" },
+        { "Records the URL of every link Preferis receives. The Test page shows the history to route them again.", "Preferis に渡されたリンクの URL を記録します。履歴はテストページに表示され、再度振り分けを試せます。" },
         { "Links to keep", "残すリンクの数" },
 
         // ---- profiles: list ----
@@ -214,7 +214,7 @@ public static partial class SettingsText
         { "Arguments", "引数" },
         { "One per line. {url} is replaced with the URL; without it the URL is added at the end.", "1 行に 1 つずつ指定します。{url} は URL に置き換えられ、{url} がなければ URL は最後に追加されます。" },
         { "When Not Available", "使用できないとき" },
-        { "Use instead", "代わりに使用する" },
+        { "Profile to use instead", "代わりに使用するプロファイル" },
         { "For example when the browser is not installed on another computer that shares this configuration.", "この設定を共有するほかのコンピューターにブラウザーがインストールされていない場合などに使用します。" },
 
         // ---- profiles: what this computer cannot open ----

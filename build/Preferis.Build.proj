@@ -1,26 +1,34 @@
-<Project DefaultTargets="PublishMacOS">
+<Project DefaultTargets="Publish">
 
   <!--
     Orchestrates `dotnet publish` of the executables and assembles the distributable artifacts
     (docs/Design.md §4.4). Only `dotnet` is required.
 
+      dotnet build build/Preferis.Build.proj                     the artifacts of the OS this runs on
       dotnet build build/Preferis.Build.proj -t:PublishMacOS -p:RuntimeIdentifier=osx-arm64
       dotnet build build/Preferis.Build.proj -t:PublishMacOS -p:SigningIdentity="Developer ID Application: ..."
+      dotnet build build/Preferis.Build.proj -t:PublishWindows -p:RuntimeIdentifier=win-x64
   -->
 
   <PropertyGroup>
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
-    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">osx-arm64</RuntimeIdentifier>
+    <!-- The machine's own: NativeAOT does not cross-compile between operating systems. -->
+    <_HostArchitecture>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant())</_HostArchitecture>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('Windows'))">win-$(_HostArchitecture)</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">osx-$(_HostArchitecture)</RuntimeIdentifier>
     <RepoRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..'))</RepoRoot>
     <ArtifactsDir>$(RepoRoot)artifacts/$(RuntimeIdentifier)/</ArtifactsDir>
     <PublishRoot>$(ArtifactsDir)publish/</PublishRoot>
     <BundleDir>$(ArtifactsDir)Preferis.app/</BundleDir>
     <HelpersDir>$(BundleDir)Contents/Helpers/</HelpersDir>
+    <WindowsDir>$(ArtifactsDir)Preferis/</WindowsDir>
     <!-- "-" is ad-hoc signing for local testing; release builds pass a Developer ID (M5). -->
     <SigningIdentity Condition="'$(SigningIdentity)' == ''">-</SigningIdentity>
     <RouterProject>$(RepoRoot)src/Preferis.Router/Preferis.Router.csproj</RouterProject>
     <PickerProject>$(RepoRoot)src/Preferis.Picker.MacOS/Preferis.Picker.MacOS.csproj</PickerProject>
     <SettingsProject>$(RepoRoot)src/Preferis.Settings.MacOS/Preferis.Settings.MacOS.csproj</SettingsProject>
+    <WindowsPickerProject>$(RepoRoot)src/Preferis.Picker.Windows/Preferis.Picker.Windows.csproj</WindowsPickerProject>
+    <WindowsSettingsProject>$(RepoRoot)src/Preferis.Settings.Windows/Preferis.Settings.Windows.csproj</WindowsSettingsProject>
     <PublishProperties>Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier)</PublishProperties>
     <PickerBuiltBundle>$(RepoRoot)src/Preferis.Picker.MacOS/bin/$(Configuration)/net10.0-macos/$(RuntimeIdentifier)/Preferis Picker.app</PickerBuiltBundle>
     <SettingsBuiltBundle>$(RepoRoot)src/Preferis.Settings.MacOS/bin/$(Configuration)/net10.0-macos/$(RuntimeIdentifier)/Preferis Settings.app</SettingsBuiltBundle>
@@ -28,6 +36,11 @@
 
   <!-- `dotnet build` implies a restore of this project; there is nothing to restore here. -->
   <Target Name="Restore" />
+
+  <Target Name="Publish">
+    <CallTarget Targets="PublishMacOS" Condition="$([MSBuild]::IsOSPlatform('OSX'))" />
+    <CallTarget Targets="PublishWindows" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+  </Target>
 
   <Target Name="PublishRouter">
     <MSBuild Projects="$(RouterProject)" Targets="Restore" Properties="$(PublishProperties);MSBuildRestoreSessionId=$([System.Guid]::NewGuid())" />
@@ -79,6 +92,28 @@
     <Exec Command="codesign --force --sign &quot;$(SigningIdentity)&quot; &quot;$(BundleDir)&quot;" />
     <Exec Command="codesign --verify --strict &quot;$(BundleDir)&quot;" />
     <Message Importance="high" Text="Preferis.app: $(BundleDir)" />
+  </Target>
+
+  <!-- The WinUI executables publish self-contained: each brings the Windows App SDK runtime it was built with. -->
+  <Target Name="PublishWindowsApps" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <MSBuild Projects="$(WindowsPickerProject);$(WindowsSettingsProject)" Targets="Restore" Properties="$(PublishProperties);MSBuildRestoreSessionId=$([System.Guid]::NewGuid())" />
+    <MSBuild Projects="$(WindowsPickerProject)" Targets="Publish" Properties="$(PublishProperties);_IsPublishing=true;PublishDir=$(PublishRoot)Picker/" />
+    <MSBuild Projects="$(WindowsSettingsProject)" Targets="Publish" Properties="$(PublishProperties);_IsPublishing=true;PublishDir=$(PublishRoot)Settings/" />
+  </Target>
+
+  <!--
+    One folder (docs/Platform.md §2.1): the Router, the picker and the settings side by side. The two WinUI programs
+    share the Windows App SDK files, which are the same for both. Symbols stay in the publish folders.
+  -->
+  <Target Name="PublishWindows" DependsOnTargets="PublishRouter;PublishWindowsApps" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <ItemGroup>
+      <_WindowsAppFile Include="$(PublishRoot)Picker/**/*;$(PublishRoot)Settings/**/*" Exclude="$(PublishRoot)Picker/**/*.pdb;$(PublishRoot)Settings/**/*.pdb" />
+    </ItemGroup>
+    <RemoveDir Directories="$(WindowsDir)" />
+    <Copy SourceFiles="$(PublishRoot)Router/Preferis.exe" DestinationFolder="$(WindowsDir)" />
+    <Copy SourceFiles="@(_WindowsAppFile)" DestinationFiles="@(_WindowsAppFile->'$(WindowsDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="false" />
+    <Error Condition="!Exists('$(WindowsDir)Preferis.Picker.exe') or !Exists('$(WindowsDir)Preferis.Settings.exe')" Text="The WinUI executables were not published." />
+    <Message Importance="high" Text="Preferis: $(WindowsDir)" />
   </Target>
 
 </Project>

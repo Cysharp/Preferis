@@ -5,7 +5,9 @@
       "src/Preferis.Core/Preferis.Core.csproj",
       "src/Preferis.Platform/Preferis.Platform.csproj",
       "src/Preferis.Router/Preferis.Router.csproj",
+      "src/Preferis.Picker.Windows/Preferis.Picker.Windows.csproj",
       "src/Preferis.Settings.Core/Preferis.Settings.Core.csproj",
+      "src/Preferis.Settings.Windows/Preferis.Settings.Windows.csproj",
       "test/Preferis.Core.Tests/Preferis.Core.Tests.csproj",
       "test/Preferis.Platform.Tests/Preferis.Platform.Tests.csproj",
       "test/Preferis.Settings.Core.Tests/Preferis.Settings.Core.Tests.csproj"

@@ -4,8 +4,10 @@
     <Project Path="src/Preferis.Platform/Preferis.Platform.csproj" />
     <Project Path="src/Preferis.Router/Preferis.Router.csproj" />
     <Project Path="src/Preferis.Picker.MacOS/Preferis.Picker.MacOS.csproj" />
+    <Project Path="src/Preferis.Picker.Windows/Preferis.Picker.Windows.csproj" />
     <Project Path="src/Preferis.Settings.Core/Preferis.Settings.Core.csproj" />
     <Project Path="src/Preferis.Settings.MacOS/Preferis.Settings.MacOS.csproj" />
+    <Project Path="src/Preferis.Settings.Windows/Preferis.Settings.Windows.csproj" />
   </Folder>
   <Folder Name="/test/">
     <Project Path="test/Preferis.Core.Tests/Preferis.Core.Tests.csproj" />

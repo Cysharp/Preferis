@@ -328,6 +328,7 @@ Preferis.app/
         Contents/Info.plist          Microsoft.macOS が生成 (src/Preferis.Settings.MacOS/Info.plist をマージ)
         Contents/MacOS/Preferis Settings
         Contents/MonoBundle/         ピッカーと同じ
+        Contents/Resources/ja.lproj/InfoPlist.strings   日本語の macOS で表示する名前「Preferis 設定」
     Resources/                       アイコン (Preferis.icns) は未作成
 ```
 
@@ -579,6 +580,12 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
   ない」、Windows の条件エディターと同じ訳) にする。キーは AppKit が組み立てる行の書式 (`%[Any]@ of the following are true`)、
   値は `%[次のいずれかを満たす]@`。英語は AppKit の既定のまま。比較の行の対象と演算子は項目名を書き換えているので
   Preferis の言語になる。macOS でのビルドと日本語の表示 (設定 UI の各ページ、ピッカー) はスナップショットで確認した。
+- アプリ名は日本語の macOS では「Preferis 設定」(Dock、メニューバー、⌘Tab、「Preferis 設定について」のパネル、Finder)。
+  `Resources/ja.lproj/InfoPlist.strings` の `CFBundleName` / `CFBundleDisplayName` と `Info.plist` の
+  `LSHasLocalizedDisplayName` による。macOS が表示する名前なので Preferis の言語の設定ではなく macOS の言語に従う。
+  ファイル名は `Preferis Settings.app` のまま (Router はパスで開く)。Finder の表示は Launch Services が登録し直した時
+  (新しいビルドを開いた時など) に変わる。日本語の文言でこのアプリを指す箇所 (メニュー、登録や「開く」の説明、
+  フルディスクアクセスの案内) も「Preferis 設定」と書く。
 - Launch Services 経由で開いた場合 `HOME` などの環境変数はシェルのものではない。開発中に別の設定で試すときは、
   実行ファイルを直接 `HOME=<dir>` 付きで起動する。
 - `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で各ページ (とルール・プロファイル画面のいくつかの状態) を PNG に書き出して終了する。

@@ -641,6 +641,9 @@ UI は英語と日本語です。`settings.language` (Configuration.md §2.9) �
   (解決できない理由など) は、ログにも設定した言語で書かれる。
 - 設定 UI が新しく作る名前 (「新しいルール」「… のコピー」、コマンドのプロファイル、CSV からインポートしたルール) も
   表示言語で付ける。言語名は選択肢でそれぞれの言語で書く (English / 日本語)。
+- 設定 UI の名前は日本語で「Preferis 設定」(英語は Preferis Settings)。ウィンドウのタイトルと、このアプリを指す文言は表示言語に
+  従う。macOS の Dock、メニューバー、Finder の名前はバンドルの `ja.lproj/InfoPlist.strings` によるため macOS の言語に従う
+  (Platform.md §3.8)。ファイル名 (`Preferis Settings.app`、`Preferis.Settings.exe`) は変えない。
 - **OS が描く部分は OS の言語**: Windows のファイル選択ダイアログやテキストボックスのメニュー、macOS の開くパネル。
   macOS のバンドルは `CFBundleLocalizations` に en と ja を宣言し、日本語の macOS では AppKit 自身の文字列も日本語になる
   (Platform.md §3.7, §3.8)。ただし NSPredicateEditor の複合条件の行 (「[Any] of the following are true」) は AppKit に訳が

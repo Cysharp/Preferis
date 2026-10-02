@@ -1,0 +1,6 @@
+/*
+  The name of the settings app on a Japanese Mac: the Dock, the menu bar, the About panel and Finder (with
+  LSHasLocalizedDisplayName). It follows the language of macOS, like other names macOS shows; docs/Design.md §9.4.
+*/
+"CFBundleName" = "Preferis 設定";
+"CFBundleDisplayName" = "Preferis 設定";

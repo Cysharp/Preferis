@@ -20,5 +20,8 @@
     <string>en</string>
     <string>ja</string>
   </array>
+  <!-- The name in the Dock, the menu bar and Finder is localized (Resources/ja.lproj/InfoPlist.strings: Preferis 設定). -->
+  <key>LSHasLocalizedDisplayName</key>
+  <true/>
 </dict>
 </plist>

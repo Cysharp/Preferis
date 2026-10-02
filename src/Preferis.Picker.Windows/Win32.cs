@@ -5,6 +5,8 @@ namespace Preferis.Picker.Windows;
 /// <summary>Window management WinUI does not offer: foreground, rounded corners, dragging, the monitor's scale.</summary>
 internal static partial class Win32
 {
+    private const int DwmwaTransitionsForceDisabled = 3;
+    private const int DwmwaCloak = 13;
     private const int DwmwaWindowCornerPreference = 33;
     private const int DwmwcpRound = 2;
     private const uint WmNclButtonDown = 0xA1;
@@ -33,6 +35,17 @@ internal static partial class Win32
     {
         var preference = DwmwcpRound;
         DwmSetWindowAttribute(window, DwmwaWindowCornerPreference, ref preference, sizeof(int));
+    }
+
+    /// <summary>
+    /// Keeps a shown window from being seen (DWM cloaking) and from being animated, or lets it be both again. For
+    /// laying the window out before it appears.
+    /// </summary>
+    public static void Conceal(IntPtr window, bool concealed)
+    {
+        var value = concealed ? 1 : 0;
+        DwmSetWindowAttribute(window, DwmwaCloak, ref value, sizeof(int));
+        DwmSetWindowAttribute(window, DwmwaTransitionsForceDisabled, ref value, sizeof(int));
     }
 
     /// <summary>Starts moving the window with the mouse, as if its title bar had been grabbed.</summary>

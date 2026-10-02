@@ -50,6 +50,7 @@ internal sealed class PickerWindow
     private readonly FontIcon _copyIcon;
     private DispatcherQueueTimer? _timer;
     private bool _answered;
+    private bool _placed;
     private bool _closing;
 
     /// <param name="images">The candidates' icons, loading since the process started.</param>
@@ -163,20 +164,36 @@ internal sealed class PickerWindow
 
     public void Show()
     {
-        // Laid out off screen first: the window can only be sized to its content once that content has loaded.
+        // Laid out unseen first: the window can only be sized to its content once that content has loaded. Off screen
+        // alone was not enough: at -32000, where minimized windows are, the move into place was animated like a window
+        // restored from the taskbar, growing from the bottom right. Cloaked, it is not animated or seen at all. Not
+        // activated yet either: hiding the active window gives the foreground away, and it could not be had back.
+        Win32.Conceal(Handle, true);
         _window.AppWindow.Move(new PointInt32(-32000, -32000));
-        _window.Activate();
+        _window.AppWindow.Show(activateWindow: false);
     }
 
     private void OnLoaded(string position)
     {
+        // Showing the window again must not lay it out again.
+        if (_placed)
+        {
+            return;
+        }
+        _placed = true;
         Program.Mark("loaded");
         Place(position);
+        // In place now: hidden and shown again, so that it appears there the way every window opens.
+        _window.AppWindow.Hide();
+        Win32.Conceal(Handle, false);
+        _window.Activate();
         Win32.SetForegroundWindow(Handle);
         if (_session.SelectedIndex >= 0)
         {
             _list.SelectedIndex = _session.SelectedIndex;
-            (_list.ContainerFromIndex(_session.SelectedIndex) as ListViewItem)?.Focus(FocusState.Programmatic);
+            // Activating the loaded window focuses it as if by keyboard, and a programmatic focus keeps the rectangle that
+            // goes with it around the selection. As pointer focus there is none until the keys are used, as before.
+            (_list.ContainerFromIndex(_session.SelectedIndex) as ListViewItem)?.Focus(FocusState.Pointer);
         }
         Program.Mark(Win32.GetForegroundWindow() == Handle ? "shown" : "shown (not in front)");
 

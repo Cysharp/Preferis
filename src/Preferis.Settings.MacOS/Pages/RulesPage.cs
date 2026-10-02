@@ -339,7 +339,7 @@ internal sealed class RulesPage : IPageView
         {
             0 => "None checked: the default profile opens the URL.",
             1 => "The checked profile opens the URL.",
-            _ => "The picker offers the checked profiles, in the order they were checked.",
+            _ => "The picker offers the checked profiles, in the order of the Profiles page.",
         }, nameof(OpenActionViewModel.UsesDefaultProfile));
         return Form.Row(Ui.Label("Profiles"), checks, note);
     }

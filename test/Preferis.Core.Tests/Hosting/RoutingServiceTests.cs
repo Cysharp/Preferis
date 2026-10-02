@@ -70,7 +70,7 @@ public class RoutingServiceTests
 
         Assert.Equal(HandleOutcome.Launched, result.Outcome);
         var request = Assert.Single(host.PickerRequests);
-        Assert.Equal(["edge", "chrome-work", "chrome-default"], request.Candidates.Select(c => c.ProfileId));
+        Assert.Equal(["edge", "chrome-default", "chrome-work"], request.Candidates.Select(c => c.ProfileId));
         Assert.Null(request.Message);
         Assert.Equal("--profile-directory=Default", Assert.Single(host.Launched).Arguments[0]);
     }

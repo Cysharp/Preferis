@@ -133,8 +133,10 @@ public sealed class Router
 
     private RoutingDecision.Open Open(List<string>? requested, string? ruleId, RoutingUrl url, List<TraceEntry> trace)
     {
-        var known = (requested ?? []).Where(_profileIds.Contains).ToList();
-        foreach (var missing in (requested ?? []).Except(known))
+        // In the order of the profile list, which the settings arrange; the action only says which profiles take part.
+        var listed = (requested ?? []).ToHashSet(StringComparer.Ordinal);
+        var known = _config.Profiles.Select(p => p.Id).Where(listed.Remove).ToList();
+        foreach (var missing in listed)
         {
             trace.Add(new TraceEntry(TraceKind.Warning, ruleId, $"Profile '{missing}' does not exist and was ignored"));
         }

@@ -21,8 +21,8 @@ public sealed class TestPageTests : IDisposable
         Assert.Null(page.Error);
         Assert.Contains(page.Trace, t => t.Rule == "Microsoft ログインは選択する" && t.Kind == "matched");
         Assert.Equal("Show the picker with 3 profiles (rule \"Microsoft ログインは選択する\")", page.Decision);
-        Assert.Equal(["Microsoft Edge", "Chrome (Work)", "Chrome (Default)"], page.Candidates.Select(c => c.Name));
-        var work = page.Candidates[1];
+        Assert.Equal(["Microsoft Edge", "Chrome (Default)", "Chrome (Work)"], page.Candidates.Select(c => c.Name));
+        var work = page.Candidates[2];
         Assert.True(work.IsResolved);
         Assert.Equal("\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" \"--profile-directory=Profile 1\" https://login.microsoftonline.com/common", work.Detail);
     }

@@ -190,21 +190,20 @@ public sealed partial class ProfileToggleViewModel : ObservableObject
 }
 
 /// <summary>
-/// <c>open</c>: a checklist of profiles. The stored order (the picker's order) is kept; newly checked profiles go last.
-/// Ids that no longer exist stay listed, marked missing, until unchecked.
+/// <c>open</c>: a checklist of profiles, in the order of the profile list, which is also the order the picker shows them
+/// in. The checked ones are stored in that order. Ids that no longer exist stay listed, marked missing, until unchecked.
 /// </summary>
 public sealed class OpenActionViewModel : ActionViewModel
 {
-    private readonly List<string> _order;
     private readonly bool _ready;
 
     public OpenActionViewModel(ActionListViewModel list, OpenAction model)
         : base(list)
     {
-        _order = [.. model.Profiles ?? []];
+        var stored = model.Profiles ?? [];
         var config = list.Settings.Config;
-        var toggles = config.Profiles.Select(p => new ProfileToggleViewModel(this, p.Id, p.Name, false, _order.Contains(p.Id))).ToList();
-        toggles.AddRange(_order.Where(id => config.Profiles.All(p => p.Id != id)).Distinct().Select(id => new ProfileToggleViewModel(this, id, id, true, true)));
+        var toggles = config.Profiles.Select(p => new ProfileToggleViewModel(this, p.Id, p.Name, false, stored.Contains(p.Id))).ToList();
+        toggles.AddRange(stored.Where(id => config.Profiles.All(p => p.Id != id)).Distinct().Select(id => new ProfileToggleViewModel(this, id, id, true, true)));
         Profiles = new ObservableCollection<ProfileToggleViewModel>(toggles);
         _ready = true;
     }
@@ -214,20 +213,19 @@ public sealed class OpenActionViewModel : ActionViewModel
     public ObservableCollection<ProfileToggleViewModel> Profiles { get; }
 
     /// <summary>No profile checked: the default profile opens (docs/Configuration.md §2.8).</summary>
-    public bool UsesDefaultProfile => _order.Count == 0;
+    public bool UsesDefaultProfile => !Profiles.Any(p => p.IsSelected);
 
-    public override RoutingAction ToModel() => new OpenAction { Profiles = _order.Count == 0 ? null : [.. _order] };
+    public override RoutingAction ToModel()
+    {
+        var ids = Profiles.Where(p => p.IsSelected).Select(p => p.Id).ToList();
+        return new OpenAction { Profiles = ids.Count == 0 ? null : ids };
+    }
 
     internal void Toggled(ProfileToggleViewModel toggle)
     {
         if (!_ready)
         {
             return;
-        }
-        _order.Remove(toggle.Id);
-        if (toggle.IsSelected)
-        {
-            _order.Add(toggle.Id);
         }
         OnPropertyChanged(nameof(UsesDefaultProfile));
         Changed();

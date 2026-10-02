@@ -275,6 +275,18 @@ public sealed class RulesPageTests : IDisposable
     }
 
     [Fact]
+    public void Open_actions_store_the_checked_profiles_in_the_order_of_the_profile_list()
+    {
+        var page = Page(out var settings);
+        var open = Assert.IsType<OpenActionViewModel>(Rule(page, "google-admin").Actions.Items[0]);
+
+        // Checked after chrome-work, but listed before it.
+        open.Profiles.Single(p => p.Id == "edge").IsSelected = true;
+
+        Assert.Equal(["edge", "chrome-work"], Assert.IsType<OpenAction>(settings.Config.Rules[1].Actions[0]).Profiles);
+    }
+
+    [Fact]
     public void An_open_action_without_profiles_means_the_default_profile()
     {
         var page = Page(out var settings);

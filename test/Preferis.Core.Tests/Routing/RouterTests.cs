@@ -41,13 +41,24 @@ public class RouterTests
     }
 
     [Fact]
-    public void Several_profiles_are_handed_over_for_the_picker()
+    public void Several_profiles_are_handed_over_for_the_picker_in_the_order_of_the_profile_list()
     {
+        // The rule lists ["edge", "chrome-work", "chrome-default"]; the profiles are edge, chrome-default, chrome-work.
         var result = Route(Sample(), "https://login.microsoftonline.com/common/oauth2");
 
         var open = Assert.IsType<RoutingDecision.Open>(result.Decision);
-        Assert.Equal(["edge", "chrome-work", "chrome-default"], open.ProfileIds);
+        Assert.Equal(["edge", "chrome-default", "chrome-work"], open.ProfileIds);
         Assert.Equal("ms-login", open.RuleId);
+    }
+
+    [Fact]
+    public void A_profile_listed_twice_in_an_open_action_is_offered_once()
+    {
+        var config = Config("edge", RuleFor("r", Host("a.example.com"), new OpenAction { Profiles = ["chrome", "edge", "chrome"] }));
+
+        var open = Assert.IsType<RoutingDecision.Open>(Route(config, "https://a.example.com/").Decision);
+
+        Assert.Equal(["edge", "chrome"], open.ProfileIds);
     }
 
     [Fact]

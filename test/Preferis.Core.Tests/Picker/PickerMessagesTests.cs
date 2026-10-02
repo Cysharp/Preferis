@@ -21,8 +21,8 @@ public class PickerMessagesTests
         var request = PickerMessages.CreateRequest(config, decision, HostPlatform.MacOS, message: null);
 
         Assert.Equal("https://login.microsoftonline.com/common", request.Url);
-        Assert.Equal(["edge", "chrome-work", "chrome-default"], request.Candidates.Select(c => c.ProfileId));
-        var work = request.Candidates[1];
+        Assert.Equal(["edge", "chrome-default", "chrome-work"], request.Candidates.Select(c => c.ProfileId));
+        var work = request.Candidates[2];
         Assert.Equal("Chrome (Work)", work.Name);
         Assert.Equal("chrome", work.Browser);
         Assert.Equal("Profile 1", work.BrowserProfile?.Directory);

@@ -225,7 +225,7 @@ Firefox のプロファイルは `-P <name>` で選ぶため `name` だけを保
 ### 2.8 Action
 
 ```json
-{ "type": "open", "profiles": ["chrome-work"] }         // profiles 省略または空 = デフォルトプロファイル。複数ならこの順でピッカーに並ぶ
+{ "type": "open", "profiles": ["chrome-work"] }         // profiles 省略または空 = デフォルトプロファイル。複数ならピッカーに出す (並びはトップレベルの profiles の順で、ここでの順序は問わない)
 { "type": "system" }
 { "type": "none" }
 { "type": "rewrite", "mode": "regex", "pattern": "^http://", "replacement": "https://" }

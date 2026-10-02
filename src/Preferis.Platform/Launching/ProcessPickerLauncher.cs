@@ -15,12 +15,18 @@ public sealed class ProcessPickerLauncher : IPickerLauncher
     private readonly string _executablePath;
     private readonly TimeSpan _timeout;
     private readonly Action<string>? _logStderr;
+    private readonly Action<int>? _started;
 
-    public ProcessPickerLauncher(string executablePath, TimeSpan timeout, Action<string>? logStderr)
+    /// <param name="started">
+    /// Called with the picker's process id before the request is written. On Windows the Router hands the picker its
+    /// right to come to the foreground (docs/Platform.md §2.6).
+    /// </param>
+    public ProcessPickerLauncher(string executablePath, TimeSpan timeout, Action<string>? logStderr, Action<int>? started = null)
     {
         _executablePath = executablePath;
         _timeout = timeout;
         _logStderr = logStderr;
+        _started = started;
     }
 
     public PickerResponse? Show(PickerRequest request)
@@ -42,6 +48,7 @@ public sealed class ProcessPickerLauncher : IPickerLauncher
         try
         {
             using var process = Process.Start(info) ?? throw new InvalidOperationException("Process.Start returned null.");
+            _started?.Invoke(process.Id);
             var stderr = Task.Run(async () =>
             {
                 while (await process.StandardError.ReadLineAsync().ConfigureAwait(false) is { } line)

@@ -351,4 +351,65 @@ public sealed class RulesPageTests : IDisposable
         Assert.Contains("com.tinyspeck.slackmacgap", saved, StringComparison.Ordinal);
         Assert.Contains("moon", saved, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task Rules_imported_from_csv_go_after_the_others_and_the_result_is_shown()
+    {
+        var page = Page(out var settings);
+        var csv = Path.Combine(_harness.Root, "rules.csv");
+        File.WriteAllText(csv, "URL,Profile\nhttps://www.example.com,Microsoft Edge\n*.slack.com,Chrome (Work)\nhttps://github.com/*,microsoft edge\nfoo.example.com,Nobody\n", new System.Text.UTF8Encoding(true));
+        _harness.Dialogs.Files.Enqueue(csv);
+
+        await page.ImportRulesCommand.ExecuteAsync(null);
+
+        Assert.Equal(["Imported Rule for Microsoft Edge", "Imported Rule for Chrome (Work)"], settings.Config.Rules.Skip(4).Select(r => r.Name));
+        Assert.Equal(settings.Config.Rules.Select(r => r.Id), page.Rules.Select(r => r.Id));
+        Assert.Same(page.Rules[4], page.SelectedRule);
+        Assert.Equal("any of 2 conditions → open Microsoft Edge", page.Rules[4].Summary);
+        var (title, message, buttons) = _harness.Dialogs.Asked[^1];
+        Assert.Equal("Imported 3 lines.", title);
+        Assert.Contains("• Imported Rule for Microsoft Edge (2 lines)", message, StringComparison.Ordinal);
+        Assert.Contains("• Line 5: No profile is named “Nobody”.", message, StringComparison.Ordinal);
+        Assert.Equal(["OK"], buttons);
+
+        _harness.Saves.RunPending();
+        Assert.Equal(6, _harness.SavedConfig().Rules.Count);
+    }
+
+    [Fact]
+    public async Task Nothing_changes_when_no_file_is_chosen()
+    {
+        var page = Page(out var settings);
+
+        await page.ImportRulesCommand.ExecuteAsync(null);
+
+        Assert.Equal(4, settings.Config.Rules.Count);
+        Assert.Empty(_harness.Dialogs.Asked);
+        Assert.False(settings.IsDirty);
+    }
+
+    [Fact]
+    public async Task A_file_without_anything_to_import_says_so()
+    {
+        var page = Page(out var settings);
+        var csv = Path.Combine(_harness.Root, "rules.csv");
+        File.WriteAllText(csv, "URL,Profile\nfoo.example.com,Nobody\n");
+        _harness.Dialogs.Files.Enqueue(csv);
+
+        await page.ImportRulesCommand.ExecuteAsync(null);
+
+        Assert.Equal(4, settings.Config.Rules.Count);
+        Assert.Equal("No rules were imported.", _harness.Dialogs.Asked[^1].Title);
+    }
+
+    [Fact]
+    public async Task A_file_that_cannot_be_read_is_reported()
+    {
+        var page = Page(out _);
+        _harness.Dialogs.Files.Enqueue(Path.Combine(_harness.Root, "missing.csv"));
+
+        await page.ImportRulesCommand.ExecuteAsync(null);
+
+        Assert.Equal("The file could not be read.", _harness.Dialogs.Asked[^1].Title);
+    }
 }

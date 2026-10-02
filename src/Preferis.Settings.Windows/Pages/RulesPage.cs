@@ -57,6 +57,8 @@ internal sealed class RulesPage : IPageView
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(Bindings.MenuItem("Move Up", page.MoveRuleUpCommand));
         menu.Items.Add(Bindings.MenuItem("Move Down", page.MoveRuleDownCommand));
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(Bindings.MenuItem("Import from CSV…", page.ImportRulesCommand));
         more.Flyout = menu;
         _rules.Bar.Children.Add(add);
         _rules.Bar.Children.Add(remove);

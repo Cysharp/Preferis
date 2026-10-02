@@ -147,6 +147,8 @@ internal sealed class RulesPage : IPageView
         more.Menu.AddItem(NSMenuItem.SeparatorItem);
         more.Menu.AddItem(up);
         more.Menu.AddItem(down);
+        more.Menu.AddItem(NSMenuItem.SeparatorItem);
+        more.Menu.AddItem(new NSMenuItem("Import from CSV…", (_, _) => _page.ImportRulesCommand.Execute(null)));
         void Update()
         {
             duplicate.Enabled = _page.DuplicateRuleCommand.CanExecute(null);

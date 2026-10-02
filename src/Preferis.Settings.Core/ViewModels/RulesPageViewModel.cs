@@ -92,6 +92,73 @@ public sealed partial class RulesPageViewModel : PageViewModel
         Insert(copy, Rules.IndexOf(source) + 1);
     }
 
+    /// <summary>
+    /// Rules from a CSV of "URL or domain, profile name" lines (docs/Configuration.md §2.12), added after the existing
+    /// ones. Says what was imported and what was not, line by line.
+    /// </summary>
+    [RelayCommand]
+    private async Task ImportRules()
+    {
+        if (await Settings.Dialogs.PickFileAsync("Choose a CSV file of URLs or domains and profile names") is not { } path)
+        {
+            return;
+        }
+        string csv;
+        try
+        {
+            // UTF-8, with or without a byte order mark.
+            csv = File.ReadAllText(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await Settings.Dialogs.AskAsync("The file could not be read.", ex.Message, ["OK"]);
+            return;
+        }
+
+        var result = RuleCsvImport.Import(Settings.Config, csv);
+        foreach (var rule in result.Rules)
+        {
+            Settings.Config.Rules.Add(rule);
+            Rules.Add(new RuleViewModel(Settings, rule));
+        }
+        if (result.Rules.Count > 0)
+        {
+            SelectedRule = Rules[^result.Rules.Count];
+            Settings.MarkChanged();
+        }
+        var (title, message) = Report(result);
+        await Settings.Dialogs.AskAsync(title, message, ["OK"]);
+    }
+
+    private static (string Title, string Message) Report(RuleImportResult result)
+    {
+        const int ShownSkipped = 10;
+        static string Lines(int count) => count == 1 ? "1 line" : $"{count} lines";
+
+        var parts = new List<string>();
+        if (result.Rules.Count > 0)
+        {
+            parts.Add((result.Rules.Count == 1 ? "Added 1 rule:" : $"Added {result.Rules.Count} rules:")
+                + string.Concat(result.Rules.Select(r => $"\n• {r.Name} ({Lines(r.Condition is OrCondition or ? or.Conditions.Count : 1)})")));
+        }
+        if (result.Skipped.Count > 0)
+        {
+            var skipped = $"Skipped {Lines(result.Skipped.Count)}:"
+                + string.Concat(result.Skipped.Take(ShownSkipped).Select(s => $"\n• Line {s.Line}: {s.Reason}"));
+            if (result.Skipped.Count > ShownSkipped)
+            {
+                skipped += $"\n• … and {result.Skipped.Count - ShownSkipped} more";
+            }
+            parts.Add(skipped);
+        }
+        if (parts.Count == 0)
+        {
+            parts.Add("The file has no lines to import.");
+        }
+        var title = result.ImportedLines == 0 ? "No rules were imported." : $"Imported {Lines(result.ImportedLines)}.";
+        return (title, string.Join("\n\n", parts));
+    }
+
     [RelayCommand(CanExecute = nameof(HasRule))]
     private void DeleteRule()
     {

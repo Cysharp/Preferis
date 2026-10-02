@@ -346,7 +346,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private void ReplacePages(PageViewModel? select)
     {
-        Pages = [Profiles, Rules, Test, General];
+        Pages = [General, Profiles, Rules, Test];
         if (select is not null)
         {
             SelectedPage = select;

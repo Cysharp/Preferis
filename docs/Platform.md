@@ -271,8 +271,8 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
 - `src/Preferis.Settings.Windows` (実行ファイル名 `Preferis.Settings`) は WinUI 3 のプログラムで、構成 (パッケージ、自己完結、
   NativeAOT、コードで組む UI) はピッカーと同じ (§2.6)。画面は `Preferis.Settings.Core` の ViewModel の上に組み、
   `Controls/Bindings` が変更通知とコントロールのイベントで双方向に結ぶ (AppKit 版の `Bindings` と同じ形)。
-- 見た目は Windows 11 の設定アプリに倣う: タイトルバーまで広げた Mica、左の `NavigationView` (プロファイル / ルール /
-  テスト / 一般)、28 px のページ見出しとその下に問題の件数、4 px 間隔のカード (左に名前と説明、右にコントロール)。
+- 見た目は Windows 11 の設定アプリに倣う: タイトルバーまで広げた Mica、左の `NavigationView` (一般 / プロファイル /
+  ルール / テスト)、28 px のページ見出しとその下に問題の件数、4 px 間隔のカード (左に名前と説明、右にコントロール)。
   Community Toolkit の `SettingsCard` は使わない (カードは Border と Grid で足り、外部の XAML コントロールを NativeAOT で検証する手間を避ける)。
   プロファイルとルールは左に一覧 (`ListPane`。ドラッグで並べ替え、下に + − ⋯)、右に選択中の項目の編集画面。
 - 「+」のメニューは検出したブラウザーごとのサブメニュー (ブラウザー自体と各ブラウザープロファイル)。条件は

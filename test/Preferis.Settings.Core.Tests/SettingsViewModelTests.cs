@@ -18,8 +18,8 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.Null(settings.LoadError);
         Assert.Equal(6, settings.Profiles.Profiles.Count);
         Assert.Equal(4, settings.Rules.Rules.Count);
-        Assert.Equal([settings.Profiles, settings.Rules, settings.Test, settings.General], settings.Pages);
-        Assert.Same(settings.Profiles, settings.SelectedPage);
+        Assert.Equal([settings.General, settings.Profiles, settings.Rules, settings.Test], settings.Pages);
+        Assert.Same(settings.General, settings.SelectedPage);
     }
 
     [Fact]

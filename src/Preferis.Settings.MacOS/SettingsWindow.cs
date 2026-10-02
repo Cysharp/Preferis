@@ -14,14 +14,6 @@ namespace Preferis.Settings.MacOS;
 /// </summary>
 internal sealed class SettingsWindow
 {
-    private static readonly (string Symbol, NSColor Color)[] PageIcons =
-    [
-        ("person.2.fill", NSColor.SystemBlue),
-        ("arrow.triangle.branch", NSColor.SystemOrange),
-        ("play.fill", NSColor.SystemGreen),
-        ("gearshape.fill", NSColor.SystemGray),
-    ];
-
     private readonly SettingsViewModel _settings;
     private readonly Bindings _bindings = new();
     private readonly NSTableView _sidebar;
@@ -147,6 +139,15 @@ internal sealed class SettingsWindow
         }
     }
 
+    // By page rather than by position in the sidebar, which may change.
+    private static (string Symbol, NSColor Color) PageIcon(PageViewModel page) => page switch
+    {
+        GeneralPageViewModel => ("gearshape.fill", NSColor.SystemGray),
+        ProfilesPageViewModel => ("person.2.fill", NSColor.SystemBlue),
+        RulesPageViewModel => ("arrow.triangle.branch", NSColor.SystemOrange),
+        _ => ("play.fill", NSColor.SystemGreen),
+    };
+
     private void UpdateTitle()
     {
         Window.Title = _settings.SelectedPage?.Title ?? "Preferis Settings";
@@ -169,7 +170,7 @@ internal sealed class SettingsWindow
         public override NSView GetViewForItem(NSTableView tableView, NSTableColumn tableColumn, nint row)
         {
             var page = owner._settings.Pages[(int)row];
-            var (symbol, color) = PageIcons[Math.Min((int)row, PageIcons.Length - 1)];
+            var (symbol, color) = PageIcon(page);
 
             // White symbol on a colored rounded square, like the icons of System Settings.
             var badge = new NSView(new CGRect(0, 0, 22, 22)) { WantsLayer = true, TranslatesAutoresizingMaskIntoConstraints = false };

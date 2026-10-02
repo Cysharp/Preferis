@@ -17,8 +17,6 @@ namespace Preferis.Settings.Windows;
 /// </summary>
 internal sealed class SettingsWindow
 {
-    private static readonly string[] PageGlyphs = [Ui.Glyphs.People, Ui.Glyphs.Branch, Ui.Glyphs.Play, Ui.Glyphs.Settings];
-
     private readonly SettingsViewModel _settings;
     private readonly Bindings _bindings = new();
     private readonly NavigationView _navigation;
@@ -153,7 +151,7 @@ internal sealed class SettingsWindow
                 _navigation.MenuItems.Add(new NavigationViewItem
                 {
                     Content = _settings.Pages[i].Title,
-                    Icon = new FontIcon { Glyph = PageGlyphs[Math.Min(i, PageGlyphs.Length - 1)] },
+                    Icon = new FontIcon { Glyph = PageGlyph(_settings.Pages[i]) },
                     Tag = i,
                 });
             }
@@ -162,6 +160,15 @@ internal sealed class SettingsWindow
         _navigation.SelectedItem = index >= 0 ? _navigation.MenuItems[index] : null;
         _updatingNavigation = false;
     }
+
+    // By page rather than by position in the pane, which may change.
+    private static string PageGlyph(PageViewModel page) => page switch
+    {
+        GeneralPageViewModel => Ui.Glyphs.Settings,
+        ProfilesPageViewModel => Ui.Glyphs.People,
+        RulesPageViewModel => Ui.Glyphs.Branch,
+        _ => Ui.Glyphs.Play,
+    };
 
     private void UpdateTitle()
     {

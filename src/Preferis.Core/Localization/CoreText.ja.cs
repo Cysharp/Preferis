@@ -49,7 +49,7 @@ public static partial class CoreText
         { "The ID can have at most {0} characters.", "ID は {0} 文字以内にしてください。" },
         { "Use only ASCII letters, digits, “-”, “_” and “.”.", "半角英数字と「-」「_」「.」のみを使用できます。" },
         { "“{0}” is already the ID of “{1}”.", "「{0}」は既に「{1}」の ID です。" },
-        { "“{0}” was the ID of “{1}”, and other computers may still know it by it.", "「{0}」は「{1}」の以前の ID で、ほかのコンピューターではまだその ID で参照されている可能性があります。" },
+        { "“{0}” was the ID of “{1}”, and other computers may still know it by it.", "「{0}」は「{1}」の以前の ID で、他のコンピューターではまだその ID で参照されている可能性があります。" },
 
         // ---- importing rules ----
         { "Imported Rule for {0}", "{0} 用にインポートしたルール" },

@@ -21,6 +21,10 @@ public class SettingsTextTests
     }
 
     [Fact]
+    public void A_text_can_be_had_in_every_language()
+        => Assert.Equal(["Preferis Settings", "Preferis 設定"], SettingsText.InEveryLanguage("Preferis Settings"));
+
+    [Fact]
     public void Texts_are_english_unless_japanese_is_chosen()
     {
         Assert.Equal("Profiles", SettingsText.Catalog.Get(UiLanguage.English, "Profiles"));

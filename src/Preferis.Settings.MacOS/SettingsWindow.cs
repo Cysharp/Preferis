@@ -151,7 +151,7 @@ internal sealed class SettingsWindow
 
     private void UpdateTitle()
     {
-        Window.Title = _settings.SelectedPage?.Title ?? "Preferis Settings";
+        Window.Title = _settings.SelectedPage?.Title ?? L("Preferis Settings");
         Window.Subtitle = _settings.IssueSummary;
     }
 

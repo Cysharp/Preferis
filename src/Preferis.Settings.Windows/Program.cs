@@ -1,12 +1,14 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Preferis.Settings.Localization;
+using static Preferis.Settings.Localization.SettingsText;
 
 namespace Preferis.Settings.Windows;
 
 internal static class Program
 {
     /// <summary>The window title, also how a second start finds the running window.</summary>
-    public const string Title = "Preferis Settings";
+    public static string Title => L("Preferis Settings");
 
     public static bool IsSnapshot => Environment.GetEnvironmentVariable("PREFERIS_SETTINGS_SNAPSHOT") is { Length: > 0 };
 
@@ -17,7 +19,8 @@ internal static class Program
         using var instance = new Mutex(initiallyOwned: true, @"Local\Preferis.Settings", out var isFirst);
         if (!isFirst && !IsSnapshot)
         {
-            Win32.ActivateWindow(Title);
+            // The running window may show another language than this start would, after the language was changed.
+            Win32.ActivateWindow(SettingsText.InEveryLanguage("Preferis Settings"));
             return 0;
         }
 

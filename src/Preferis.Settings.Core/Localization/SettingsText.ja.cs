@@ -9,6 +9,7 @@ public static partial class SettingsText
     private static Dictionary<string, string> Japanese() => new(StringComparer.Ordinal)
     {
         // ---- window and pages ----
+        { "Preferis Settings", "Preferis 設定" },
         { "General", "一般" },
         { "Profiles", "プロファイル" },
         { "Rules", "ルール" },
@@ -65,7 +66,7 @@ public static partial class SettingsText
         { "Open System Settings", "システム設定を開く" },
         { "Windows lets you choose the default browser only in its Settings: Make Default registers Preferis and opens that page. Preferis then receives every link and opens it according to the rules.", "Windows では既定のブラウザーは Windows の設定でのみ選択できます。「既定にする」は Preferis を登録して設定画面を開きます。Preferis を既定のブラウザーに設定するとすべてのリンクを受け取り、ルールに従って開きます。" },
         { "macOS asks you to confirm the change. Preferis then receives every link and opens it according to the rules.", "既定のブラウザーの変更は macOS が確認を求めます。Preferis を既定のブラウザーに設定するとすべてのリンクを受け取り、ルールに従って開きます。" },
-        { "Registering needs Preferis Settings to run next to Preferis.exe (build it with build/Preferis.Build.proj).", "登録するには、Preferis Settings を Preferis.exe と同じフォルダーから実行する必要があります (build/Preferis.Build.proj でビルドしてください)。" },
+        { "Registering needs Preferis Settings to run next to Preferis.exe (build it with build/Preferis.Build.proj).", "登録するには、Preferis 設定を Preferis.exe と同じフォルダーから実行する必要があります (build/Preferis.Build.proj でビルドしてください)。" },
         { "Registering needs Preferis Settings to run from inside Preferis.app (build it with build/Preferis.Build.proj).", "登録するには、Preferis Settings を Preferis.app の中から実行する必要があります (build/Preferis.Build.proj でビルドしてください)。" },
         { "Preferis is the default browser.", "Preferis は既定のブラウザーです。" },
         { "The default browser is {0}.", "既定のブラウザーは {0} です。" },
@@ -184,7 +185,7 @@ public static partial class SettingsText
         { "Opens with", "リンクを開く対象" },
         { "Browser", "ブラウザー" },
         { "Advanced", "詳細" },
-        { "How rules in config.json refer to the profile, for example “work” instead of a number. Changing it updates them, and other computers still find their own targets under the old one.", "config.json のルールがこのプロファイルを参照するときの ID です (番号の代わりに「work」など)。変更するとルールも更新され、ほかのコンピューターは古い ID でそのコンピューター独自の設定を引き続き見つけられます。" },
+        { "How rules in config.json refer to the profile, for example “work” instead of a number. Changing it updates them, and other computers still find their own targets under the old one.", "config.json のルールがこのプロファイルを参照するときの ID です (番号の代わりに「work」など)。変更するとルールも更新され、他のコンピューターは古い ID でそのコンピューター独自の設定を引き続き見つけられます。" },
         { "Change", "変更" },
         { "Browser on Windows", "Windows のブラウザー" },
         { "Browser on macOS", "macOS のブラウザー" },
@@ -209,13 +210,13 @@ public static partial class SettingsText
         { "Arguments on macOS", "macOS の引数" },
         { "This Computer", "このコンピューター" },
         { "Open with another browser or command on this computer", "このコンピューターでは別なブラウザーまたはコマンドで開く" },
-        { "In place of the browser or command above, for example another browser profile. Saved on this computer only; rules and other computers are not affected.", "上で設定されたブラウザーやコマンドの代わりに、別のブラウザーなどを使用します。このコンピューターだけに保存され、ルールやほかのコンピューターには影響しません。" },
+        { "In place of the browser or command above, for example another browser profile. Saved on this computer only; rules and other computers are not affected.", "上で設定されたブラウザーやコマンドの代わりに、別のブラウザーなどを使用します。このコンピューターだけに保存され、ルールや他のコンピューターには影響しません。" },
         { "Program", "プログラム" },
         { "Arguments", "引数" },
         { "One per line. {url} is replaced with the URL; without it the URL is added at the end.", "1 行に 1 つずつ指定します。{url} は URL に置き換えられ、{url} がなければ URL は最後に追加されます。" },
         { "When Not Available", "使用できないとき" },
         { "Profile to use instead", "代わりに使用するプロファイル" },
-        { "For example when the browser is not installed on another computer that shares this configuration.", "この設定を共有するほかのコンピューターにブラウザーがインストールされていない場合などに使用します。" },
+        { "For example when the browser is not installed on another computer that shares this configuration.", "この設定を共有する他のコンピューターにブラウザーがインストールされていない場合などに使用します。" },
 
         // ---- profiles: what this computer cannot open ----
         { "{0}; {1}", "{0}。{1}" },
@@ -274,7 +275,7 @@ public static partial class SettingsText
         { "Added {0} rules:", "{0} 個のルールを追加しました:" },
         { "Skipped {0}:", "{0} をスキップしました:" },
         { "Line {0}: {1}", "{0} 行目: {1}" },
-        { "… and {0} more", "… ほか {0} 行" },
+        { "… and {0} more", "… 他 {0} 行" },
         { "The file has no lines to import.", "インポートする行が存在しません。" },
         { "No rules were imported.", "ルールはインポートされませんでした。" },
         { "Imported {0}.", "{0} をインポートしました。" },
@@ -282,7 +283,7 @@ public static partial class SettingsText
         // ---- rules: editor ----
         { "ID: {0}", "ID: {0}" },
         { "Routing skips a rule that is turned off.", "オフにしたルールは振り分けで飛ばされます。" },
-        { "The catch-all rule comes after every other rule and has no condition; only its actions can be changed.", "キャッチオールルールはほかのすべてのルールの後に評価され、条件はありません。アクションのみ指定可能です。" },
+        { "The catch-all rule comes after every other rule and has no condition; only its actions can be changed.", "キャッチオールルールは他のすべてのルールの後に評価され、条件はありません。アクションのみ指定可能です。" },
         { "If", "条件" },
         { "Host is the host name alone (www.example.com) and never case-sensitive; URL is the whole URL. “matches” takes * for any characters and ? for one; “matches regex” takes a .NET regular expression. A rule without a condition never matches.", "ホストはホスト名だけ (www.example.com) で、大文字と小文字を区別しません。URL は URL 全体です。「が次のパターンに一致」では * が任意の文字列、? が任意の 1 文字に一致し、「が次の正規表現に一致」では .NET の正規表現を使用します。条件のないルールは一致しません。" },
         { "Host is the host name alone (www.example.com) and never case-sensitive; URL is the whole URL. “matches” takes * for any characters and ? for one; “matches regex” takes a .NET regular expression. Hold ⌥ and click + to nest a group. A rule without a condition never matches.", "ホストはホスト名だけ (www.example.com) で、大文字と小文字を区別しません。URL は URL 全体です。「が次のパターンに一致」では * が任意の文字列、? が任意の 1 文字に一致し、「が次の正規表現に一致」では .NET の正規表現を使用します。⌥ キーを押しながら + をクリックするとグループを入れ子にできます。条件のないルールは一致しません。" },
@@ -354,7 +355,7 @@ public static partial class SettingsText
         { "Open", "開く" },
         { "Open the URL with Preferis, as if a link was clicked: the picker appears when the rules say so.", "リンクをクリックしたときと同じように Preferis で URL を開きます。ルールに従ってピッカーも表示されます。" },
         { "Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so the picker and the browser can be tried for real.", "「テスト」は、編集中の設定 (保存前の変更を含む) で URL がどう振り分けられるかを何も開かずに表示します。「開く」はクリックしたリンクと同じように URL を Preferis に渡してピッカーやブラウザーを実際に試せます。" },
-        { "Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so the picker and the browser can be tried for real. Open needs Preferis Settings to run next to Preferis.exe.", "「テスト」は、編集中の設定 (保存前の変更を含む) で URL がどう振り分けられるかを何も開かずに表示します。「開く」はクリックしたリンクと同じように URL を Preferis に渡してピッカーやブラウザーを実際に試せます。「開く」を使用するには、Preferis Settings を Preferis.exe と同じフォルダーから実行する必要があります。" },
+        { "Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so the picker and the browser can be tried for real. Open needs Preferis Settings to run next to Preferis.exe.", "「テスト」は、編集中の設定 (保存前の変更を含む) で URL がどう振り分けられるかを何も開かずに表示します。「開く」はクリックしたリンクと同じように URL を Preferis に渡してピッカーやブラウザーを実際に試せます。「開く」を使用するには、Preferis 設定を Preferis.exe と同じフォルダーから実行する必要があります。" },
         { "Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so the picker and the browser can be tried for real. Open needs Preferis Settings to run from inside Preferis.app.", "「テスト」は、編集中の設定 (保存前の変更を含む) で URL がどう振り分けられるかを何も開かずに表示します。「開く」はクリックしたリンクと同じように URL を Preferis に渡してピッカーやブラウザーを実際に試せます。「開く」を使用するには、Preferis Settings を Preferis.app の中から実行する必要があります。" },
         { "Enter an absolute URL, such as https://www.example.com/.", "https://www.example.com/ のような絶対 URL を入力してください。" },
         { "Result", "結果" },

@@ -16,4 +16,8 @@ public static partial class SettingsText
 
     /// <summary><paramref name="format"/> in the language of the UI, with <paramref name="args"/> in its placeholders.</summary>
     public static string L(string format, params ReadOnlySpan<object?> args) => Catalog.Format(UiLanguages.Current, format, args);
+
+    /// <summary><paramref name="text"/> in each language, for finding what an instance showing another language shows.</summary>
+    public static IReadOnlyList<string> InEveryLanguage(string text)
+        => [.. Enum.GetValues<UiLanguage>().Select(language => Catalog.Get(language, text)).Distinct()];
 }

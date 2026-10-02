@@ -294,9 +294,10 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
 - 表示言語は起動時、ViewModel を作る前に `config.json` から決める (`SettingsConfigLoader.UseConfiguredLanguage`、
   Design.md §9.4)。ルートの `Language` はピッカーと同じく日本語のとき `ja-JP`。ファイル選択ダイアログ、テキストボックスの
   メニューなど WinUI と OS が描く文字列は Windows の言語に従う (自己完結の出力に WinUI の各言語の `.mui` が入っている)。
-  ウィンドウのタイトル `Preferis Settings` は 2 つ目の起動が探す名前なので訳さない。
+  ウィンドウのタイトルも表示言語に従う (`Preferis Settings` / `Preferis 設定`)。
 - 単一インスタンス: 名前付きミューテックス `Local\Preferis.Settings` で 2 つ目の起動を検出し、起動中のウィンドウ
-  (クラス `WinUIDesktopWin32WindowClass`、タイトル `Preferis Settings`) を前面に出して終了する。Router の `--settings` と
+  (クラス `WinUIDesktopWin32WindowClass`、タイトル `Preferis Settings` か `Preferis 設定`) を前面に出して終了する。言語を変えた後は
+  起動中のウィンドウと新しい起動で言語が違うことがあるため、すべての言語のタイトルで探す (`SettingsText.InEveryLanguage`)。Router の `--settings` と
   引数なしの起動は、新しいプロセスが前に出られるよう `AllowSetForegroundWindow(ASFW_ANY)` を呼んでから起動する。
 - `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で各ページ (とルール・プロファイル画面のいくつかの状態) を PNG に書き出して
   終了する。ウィンドウはアクティブにせず画面外に出し、`RenderTargetBitmap` で描く (Mica の代わりにテーマの背景色)。

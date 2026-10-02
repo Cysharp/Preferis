@@ -7,10 +7,10 @@ internal static partial class Win32
     private const int SwRestore = 9;
     private const string WinUIWindowClass = "WinUIDesktopWin32WindowClass";
 
-    /// <summary>Brings the running settings window to the front (restored when minimized).</summary>
-    public static void ActivateWindow(string title)
+    /// <summary>Brings the running settings window, titled one of <paramref name="titles"/>, to the front (restored when minimized).</summary>
+    public static void ActivateWindow(IEnumerable<string> titles)
     {
-        var window = FindWindow(WinUIWindowClass, title);
+        var window = titles.Select(title => FindWindow(WinUIWindowClass, title)).FirstOrDefault(handle => handle != IntPtr.Zero);
         if (window == IntPtr.Zero)
         {
             return;

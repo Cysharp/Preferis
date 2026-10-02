@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices.WindowsRuntime;
@@ -49,9 +50,10 @@ internal sealed class PickerWindow
     private readonly Button _open;
     private readonly FontIcon _copyIcon;
     private DispatcherQueueTimer? _timer;
+    private DispatcherQueueTimer? _fade;
+    private double _opacity;
     private bool _answered;
-    private bool _placed;
-    private bool _closing;
+    private bool _closed;
 
     /// <param name="images">The candidates' icons, loading since the process started.</param>
     /// <param name="answer">Delivers the answer to the Router.</param>
@@ -71,12 +73,12 @@ internal sealed class PickerWindow
         presenter.IsAlwaysOnTop = true;
         presenter.SetBorderAndTitleBar(hasBorder: true, hasTitleBar: false);
         _window.AppWindow.SetPresenter(presenter);
-        _window.AppWindow.Closing += (_, _) =>
+        _window.AppWindow.Closing += (_, args) =>
         {
-            // Alt+F4 and the like count as cancelling.
-            if (!_answered)
+            // Alt+F4 and the like count as cancelling, and the window fades out as after any answer.
+            if (!_closed)
             {
-                _closing = true;
+                args.Cancel = true;
                 Answer(_session.Cancel());
             }
         };
@@ -164,36 +166,26 @@ internal sealed class PickerWindow
 
     public void Show()
     {
-        // Laid out unseen first: the window can only be sized to its content once that content has loaded. Off screen
-        // alone was not enough: at -32000, where minimized windows are, the move into place was animated like a window
-        // restored from the taskbar, growing from the bottom right. Cloaked, it is not animated or seen at all. Not
-        // activated yet either: hiding the active window gives the foreground away, and it could not be had back.
-        Win32.Conceal(Handle, true);
+        // Laid out unseen first: the window can only be sized to its content once that content has loaded. It fades in
+        // and out by itself instead of with the system's animations, which drew it off screen first (at -32000, where
+        // minimized windows are, the move into place grew from the bottom right like a window restored from the
+        // taskbar), and when shown again in place drew it empty, white, until the content was rendered again.
+        Win32.DisableTransitions(Handle);
+        Win32.SetOpacity(Handle, _opacity);
         _window.AppWindow.Move(new PointInt32(-32000, -32000));
-        _window.AppWindow.Show(activateWindow: false);
+        _window.Activate();
     }
 
     private void OnLoaded(string position)
     {
-        // Showing the window again must not lay it out again.
-        if (_placed)
-        {
-            return;
-        }
-        _placed = true;
         Program.Mark("loaded");
         Place(position);
-        // In place now: hidden and shown again, so that it appears there the way every window opens.
-        _window.AppWindow.Hide();
-        Win32.Conceal(Handle, false);
-        _window.Activate();
+        Fade(1, TimeSpan.FromMilliseconds(150), null);
         Win32.SetForegroundWindow(Handle);
         if (_session.SelectedIndex >= 0)
         {
             _list.SelectedIndex = _session.SelectedIndex;
-            // Activating the loaded window focuses it as if by keyboard, and a programmatic focus keeps the rectangle that
-            // goes with it around the selection. As pointer focus there is none until the keys are used, as before.
-            (_list.ContainerFromIndex(_session.SelectedIndex) as ListViewItem)?.Focus(FocusState.Pointer);
+            (_list.ContainerFromIndex(_session.SelectedIndex) as ListViewItem)?.Focus(FocusState.Programmatic);
         }
         Program.Mark(Win32.GetForegroundWindow() == Handle ? "shown" : "shown (not in front)");
 
@@ -346,11 +338,37 @@ internal sealed class PickerWindow
         _timer?.Stop();
         // Answer first: the Router opens the browser while the window goes away.
         _answer(response);
-        if (!_closing)
+        // Closed only once faded out: closing at once tears the content down, and the window was drawn black meanwhile.
+        Fade(0, TimeSpan.FromMilliseconds(100), () =>
         {
+            _closed = true;
             _window.Close();
-        }
-        _quit();
+            _quit();
+        });
+    }
+
+    /// <summary>Fades the whole window to an opacity, easing out, then calls <paramref name="done"/>.</summary>
+    /// <remarks>From the opacity it has: an answer may come while it is still fading in.</remarks>
+    private void Fade(double to, TimeSpan duration, Action? done)
+    {
+        _fade?.Stop();
+        var from = _opacity;
+        var started = Stopwatch.GetTimestamp();
+        var timer = _window.DispatcherQueue.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(8);
+        timer.Tick += (_, _) =>
+        {
+            var progress = Math.Min(1, Stopwatch.GetElapsedTime(started) / duration);
+            _opacity = from + (to - from) * (1 - Math.Pow(1 - progress, 3));
+            Win32.SetOpacity(Handle, _opacity);
+            if (progress >= 1)
+            {
+                timer.Stop();
+                done?.Invoke();
+            }
+        };
+        _fade = timer;
+        timer.Start();
     }
 
     /// <summary>Developer aid: writes the window's content as PNG, for checking the layout without a screenshot.</summary>

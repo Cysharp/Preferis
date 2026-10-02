@@ -213,18 +213,25 @@ internal sealed class ProfilesPage : IPageView
             () => profile.TargetKind, value => profile.TargetKind = value);
 
         var general = Form.Section(null,
-            Form.Row("Name", name, "Shown in the picker. Renaming the profile keeps its ID."),
-            IdRow(profile, bindings),
+            Form.Row("Name", name, "Shown in the picker, so each profile needs a name of its own."),
             Form.Row("Default profile", isDefault, "Opens links that the matching rule does not assign to a profile."),
             Form.Row("Opens with", target));
 
-        return Form.Page(header, general, BrowserSection(profile, bindings), CommandSection(profile, bindings), LocalSection(profile, bindings), FallbackSection(profile, bindings));
+        return Form.Page(
+            header,
+            general,
+            BrowserSection(profile, bindings),
+            CommandSection(profile, bindings),
+            LocalSection(profile, bindings),
+            FallbackSection(profile, bindings),
+            // Ids are numbers by default; most people never need to see them.
+            Form.Section("Advanced", IdRow(profile, bindings)));
     }
 
     /// <summary>The id, changed with a button (or Return) rather than as typed: every reference to it is rewritten.</summary>
     private static NSView IdRow(ProfileViewModel profile, Bindings bindings)
     {
-        const string Explanation = "Rules refer to the profile by its ID. Changing it updates them, and other computers still find their own targets under the old one.";
+        const string Explanation = "How rules in config.json refer to the profile, for example “work” instead of a number. Changing it updates them, and other computers still find their own targets under the old one.";
         var id = Ui.Field("work", monospaced: true);
         bindings.Text(id, profile, nameof(ProfileViewModel.IdDraft), () => profile.IdDraft, value => profile.IdDraft = value);
         // Return applies the id; leaving the field does not.

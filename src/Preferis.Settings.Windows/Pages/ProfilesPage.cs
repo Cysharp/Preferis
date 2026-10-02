@@ -214,12 +214,19 @@ internal sealed class ProfilesPage : IPageView
             () => profile.TargetKind, value => profile.TargetKind = value);
 
         var general = Form.Section(null,
-            Form.Card("Name", name, "Shown in the picker. Renaming the profile keeps its ID."),
-            IdCard(profile, bindings),
+            Form.Card("Name", name, "Shown in the picker, so each profile needs a name of its own."),
             Form.Card("Default profile", isDefault, "Opens links that the matching rule does not assign to a profile."),
             Form.Card("Opens with", target));
 
-        var page = Form.Page(header, general, BrowserSection(profile, bindings), CommandSection(profile, bindings), LocalSection(profile, bindings), FallbackSection(profile, bindings));
+        var page = Form.Page(
+            header,
+            general,
+            BrowserSection(profile, bindings),
+            CommandSection(profile, bindings),
+            LocalSection(profile, bindings),
+            FallbackSection(profile, bindings),
+            // Ids are numbers by default; most people never need to see them.
+            Form.Section("Advanced", IdCard(profile, bindings)));
         ((FrameworkElement)page.Content).Margin = new Thickness(0, 0, 0, 0);
         page.Padding = new Thickness(16, 0, 32, 0);
         return page;
@@ -228,7 +235,7 @@ internal sealed class ProfilesPage : IPageView
     /// <summary>The id, changed with a button (or Enter) rather than as typed: every reference to it is rewritten.</summary>
     private static UIElement IdCard(ProfileViewModel profile, Bindings bindings)
     {
-        const string Explanation = "Rules refer to the profile by its ID. Changing it updates them, and other computers still find their own targets under the old one.";
+        const string Explanation = "How rules in config.json refer to the profile, for example “work” instead of a number. Changing it updates them, and other computers still find their own targets under the old one.";
         var id = Ui.TextBox("work", monospaced: true, width: 200);
         bindings.Text(id, profile, nameof(ProfileViewModel.IdDraft), () => profile.IdDraft, value => profile.IdDraft = value);
         id.KeyDown += (_, e) =>

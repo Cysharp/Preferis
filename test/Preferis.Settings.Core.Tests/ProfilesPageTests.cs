@@ -36,7 +36,7 @@ public sealed class ProfilesPageTests : IDisposable
 
         var profile = Assert.Single(page.Profiles);
         Assert.Same(profile, page.SelectedProfile);
-        Assert.Equal("safari", profile.Id);
+        Assert.Equal("profile-1", profile.Id);
         Assert.Equal("Safari", profile.Name);
         Assert.Equal("safari", profile.Model.Browser?.Default);
         Assert.Null(profile.Model.BrowserProfile);
@@ -51,7 +51,7 @@ public sealed class ProfilesPageTests : IDisposable
         page.AddDetectedCommand.Execute(Item(page, "chrome", "Profile 1"));
 
         var profile = Assert.Single(page.Profiles).Model;
-        Assert.Equal("google-chrome-work", profile.Id);
+        Assert.Equal("profile-1", profile.Id);
         Assert.Equal("Google Chrome (Work)", profile.Name);
         Assert.Equal("chrome", profile.Browser?.Default);
         Assert.Equal("Profile 1", profile.BrowserProfile?.Directory);
@@ -80,20 +80,23 @@ public sealed class ProfilesPageTests : IDisposable
         page.AddDetectedCommand.Execute(Item(page, "safari"));
         page.AddDetectedCommand.Execute(Item(page, "edge"));
 
-        Assert.Equal("safari", settings.Config.DefaultProfile);
+        Assert.Equal("profile-1", settings.Config.DefaultProfile);
         Assert.True(page.Profiles[0].IsDefault);
         Assert.False(page.Profiles[1].IsDefault);
     }
 
     [Fact]
-    public void Adding_the_same_browser_twice_gets_a_new_id()
+    public void Adding_the_same_browser_twice_gets_a_new_id_and_name()
     {
-        var page = _harness.Create().Profiles;
+        var settings = _harness.Create();
+        var page = settings.Profiles;
 
         page.AddDetectedCommand.Execute(Item(page, "safari"));
         page.AddDetectedCommand.Execute(Item(page, "safari"));
 
-        Assert.Equal(["safari", "safari-2"], page.Profiles.Select(p => p.Id));
+        Assert.Equal(["profile-1", "profile-2"], page.Profiles.Select(p => p.Id));
+        Assert.Equal(["Safari", "Safari 2"], page.Profiles.Select(p => p.Name));
+        Assert.Empty(settings.Issues);
     }
 
     [Fact]
@@ -104,9 +107,10 @@ public sealed class ProfilesPageTests : IDisposable
 
         page.AddAllDetectedCommand.Execute(null);
 
+        Assert.Equal(["profile-1", "profile-2", "profile-3", "profile-4", "profile-5", "profile-6"], page.Profiles.Select(p => p.Id));
         Assert.Equal(
-            ["google-chrome-mayuki", "google-chrome-work", "microsoft-edge-personal", "safari", "mozilla-firefox-default-release", "mozilla-firefox-work"],
-            page.Profiles.Select(p => p.Id));
+            ["Google Chrome (Mayuki)", "Google Chrome (Work)", "Microsoft Edge (Personal)", "Safari", "Mozilla Firefox (default-release)", "Mozilla Firefox (Work)"],
+            page.Profiles.Select(p => p.Name));
     }
 
     [Fact]
@@ -115,11 +119,25 @@ public sealed class ProfilesPageTests : IDisposable
         var page = _harness.Create().Profiles;
 
         page.AddCommandProfileCommand.Execute(null);
+        page.AddCommandProfileCommand.Execute(null);
 
-        var profile = Assert.Single(page.Profiles);
+        var profile = page.Profiles[0];
         Assert.Equal(ProfileTargetKind.Command, profile.TargetKind);
         Assert.NotNull(profile.Model.Command);
         Assert.Null(profile.Model.Browser);
+        Assert.Equal(["Command", "Command 2"], page.Profiles.Select(p => p.Name));
+    }
+
+    [Fact]
+    public void A_renamed_profile_keeps_its_id_and_a_name_in_use_is_an_error()
+    {
+        var settings = _harness.WithSample().Create();
+        var profile = settings.Profiles.Profiles.Single(p => p.Id == "chrome-work");
+
+        profile.Name = "microsoft edge";
+
+        Assert.Equal("chrome-work", profile.Id);
+        Assert.Contains(profile.Issues, i => i.Severity == IssueSeverity.Error && i.Message.Contains("“Microsoft Edge”", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -133,10 +151,15 @@ public sealed class ProfilesPageTests : IDisposable
 
         var copy = page.SelectedProfile!;
         Assert.Equal(3, page.Profiles.IndexOf(copy));
-        Assert.Equal("chrome-work-2", copy.Id);
+        Assert.Equal("profile-1", copy.Id);
         Assert.Equal("Chrome (Work) copy", copy.Name);
         Assert.Equal("Profile 1", copy.Model.BrowserProfile?.Directory);
         Assert.NotSame(page.Profiles[2].Model.BrowserProfile, copy.Model.BrowserProfile);
+
+        page.SelectedProfile = page.Profiles[2];
+        page.DuplicateCommand.Execute(null);
+        Assert.Equal("profile-2", page.SelectedProfile!.Id);
+        Assert.Equal("Chrome (Work) copy 2", page.SelectedProfile.Name);
     }
 
     [Fact]

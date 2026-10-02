@@ -39,7 +39,7 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
 
     [RelayCommand]
     private void AddDetected(DetectedItemViewModel item)
-        => AddProfile(CreateFromDetected(item.Browser.Info.Browser, item.Profile, ProfileIds.Taken(Settings.Config)));
+        => AddProfile(CreateFromDetected(item.Browser.Info.Browser, item.Profile));
 
     /// <summary>One profile for every detected browser profile (or browser without profiles) that no profile uses yet.</summary>
     [RelayCommand]
@@ -51,7 +51,7 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
             var targets = info.Profiles is { Count: > 0 } profiles ? profiles.Select(p => (BrowserProfileInfo?)p) : [null];
             foreach (var target in targets.Where(t => !IsConfigured(browser, t)))
             {
-                AddProfile(CreateFromDetected(browser, target, ProfileIds.Taken(Settings.Config)));
+                AddProfile(CreateFromDetected(browser, target));
             }
         }
     }
@@ -59,11 +59,11 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
     [RelayCommand]
     private void AddCommandProfile()
     {
-        var name = "Command";
+        var name = UniqueName("Command");
         var spec = new CommandSpec { Path = "", Args = ["{url}"] };
         AddProfile(new Profile
         {
-            Id = IdGenerator.ForName(name, "command", ProfileIds.Taken(Settings.Config)),
+            Id = NewId(),
             Name = name,
             Command = Settings.Platform.Platform == HostPlatform.Windows ? new CommandTarget { Windows = spec } : new CommandTarget { MacOS = spec },
         });
@@ -74,10 +74,10 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
     {
         var source = SelectedProfile!;
         var copy = JsonSerializer.Deserialize(JsonSerializer.Serialize(source.Model, PreferisJsonContext.Default.Profile), PreferisJsonContext.Default.Profile)!;
-        copy.Id = IdGenerator.Unique(source.Id, ProfileIds.Taken(Settings.Config));
+        copy.Id = NewId();
         // The ids it had belong to the original.
         copy.PreviousIds = null;
-        copy.Name = source.Name + " copy";
+        copy.Name = UniqueName(source.Name + " copy");
         if (LocalProfileTargets.Find(Settings.Local, source.Model, Settings.Config) is { } target)
         {
             Settings.Local.ProfileTargets![copy.Id] = LocalProfileTargets.Copy(target);
@@ -142,18 +142,26 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
         Settings.MarkChanged();
     }
 
-    internal static Profile CreateFromDetected(DetectedBrowser browser, BrowserProfileInfo? info, IEnumerable<string> existingIds)
+    private Profile CreateFromDetected(DetectedBrowser browser, BrowserProfileInfo? info)
     {
         var label = info is null ? null : info.Name ?? info.Email ?? info.Directory;
-        var name = label is null ? browser.DisplayName : $"{browser.DisplayName} ({label})";
         return new Profile
         {
-            Id = IdGenerator.ForName(name, "profile", existingIds),
-            Name = name,
+            Id = NewId(),
+            Name = UniqueName(label is null ? browser.DisplayName : $"{browser.DisplayName} ({label})"),
             Browser = new BrowserReference(browser.Id),
             BrowserProfile = info is null ? null : ReferenceTo(info, browser.Family),
         };
     }
+
+    /// <summary>
+    /// <c>profile-N</c> (docs/Configuration.md §2.10), not from the name: the first name is the browser's, and the id would
+    /// keep it after a rename. Numbers that this machine's targets or previous ids use are not given out again.
+    /// </summary>
+    private string NewId() => IdGenerator.NextProfileId(ProfileIds.Taken(Settings.Config).Concat(Settings.Local.ProfileTargets?.Keys ?? Enumerable.Empty<string>()));
+
+    // The picker tells profiles apart by name.
+    private string UniqueName(string name) => ProfileNames.Unique(name, Settings.Config.Profiles.Select(p => p.Name));
 
     /// <summary>Everything that identifies a browser profile, so it can be found on another machine (docs/Design.md §7.2).</summary>
     internal static BrowserProfileRef ReferenceTo(BrowserProfileInfo info, BrowserFamily family) => family == BrowserFamily.Firefox

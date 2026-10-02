@@ -258,11 +258,22 @@ public sealed class LocalTargetTests : IDisposable
     [Fact]
     public void New_profiles_do_not_take_an_id_another_computer_may_still_know()
     {
-        File.WriteAllText(_harness.Paths.DefaultConfigPath, """{ "profiles": [ { "id": "work", "name": "Work", "previousIds": ["safari"], "browser": "edge" } ] }""");
+        File.WriteAllText(_harness.Paths.DefaultConfigPath, """{ "profiles": [ { "id": "work", "name": "Work", "previousIds": ["profile-4"], "browser": "edge" } ] }""");
         var page = _harness.Create().Profiles;
 
         page.AddDetectedCommand.Execute(page.DetectedBrowsers.Single(b => b.Id == "safari").Items[0]);
 
-        Assert.Equal("safari-2", page.SelectedProfile?.Id);
+        Assert.Equal("profile-5", page.SelectedProfile?.Id);
+    }
+
+    [Fact]
+    public void New_profiles_do_not_take_an_id_this_computer_keeps_a_target_under()
+    {
+        WriteLocal("""{ "profileTargets": { "profile-6": { "browser": "safari" } } }""");
+        var page = _harness.Create().Profiles;
+
+        page.AddCommandProfileCommand.Execute(null);
+
+        Assert.Equal("profile-7", page.SelectedProfile?.Id);
     }
 }

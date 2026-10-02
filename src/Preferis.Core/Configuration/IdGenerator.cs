@@ -49,4 +49,24 @@ public static class IdGenerator
     }
 
     public static string ForName(string name, string fallback, IEnumerable<string> existing) => Unique(Slugify(name, fallback), existing);
+
+    /// <summary>
+    /// <c>profile-N</c>, N one more than the highest number among <paramref name="taken"/> (docs/Configuration.md §2.10).
+    /// Gaps are not filled: a number given up may still be the key of a target on another machine.
+    /// </summary>
+    public static string NextProfileId(IEnumerable<string> taken)
+    {
+        const string Prefix = "profile-";
+        var highest = 0L;
+        foreach (var id in taken)
+        {
+            // Digits only: no sign, no spaces.
+            if (id.StartsWith(Prefix, StringComparison.Ordinal)
+                && long.TryParse(id.AsSpan(Prefix.Length), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number))
+            {
+                highest = Math.Max(highest, number);
+            }
+        }
+        return $"{Prefix}{highest + 1}";
+    }
 }

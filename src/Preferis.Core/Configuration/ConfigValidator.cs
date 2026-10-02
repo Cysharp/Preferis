@@ -41,9 +41,15 @@ public static class ConfigValidator
         }
 
         var seenProfiles = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var profile in config.Profiles)
+        for (var i = 0; i < config.Profiles.Count; i++)
         {
+            var profile = config.Profiles[i];
             ValidateProfile(profile, profileIds, seenProfiles, issues);
+            // Names are what the picker shows; two that look alike cannot be told apart there.
+            if (config.Profiles.Take(i).FirstOrDefault(p => ProfileNames.Same(p.Name, profile.Name)) is { } earlier)
+            {
+                issues.Add(new(IssueSeverity.Error, IssueScope.Profile, profile.Id, $"Another profile is already named “{earlier.Name.Trim()}”."));
+            }
         }
 
         var seenRules = new HashSet<string>(StringComparer.Ordinal);

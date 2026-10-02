@@ -42,6 +42,31 @@ public class ConfigValidatorTests
     }
 
     [Fact]
+    public void Profile_names_are_unique_whatever_the_case_and_surrounding_spaces()
+    {
+        var config = WithProfiles(Browser("a"), Browser("b"), Browser("c"));
+        config.Profiles[0].Name = "Work";
+        config.Profiles[1].Name = "Personal";
+        config.Profiles[2].Name = " work ";
+
+        var issue = Single(config, IssueSeverity.Error);
+
+        Assert.Equal(IssueScope.Profile, issue.Scope);
+        Assert.Equal("c", issue.Id);
+        Assert.Contains("“Work”", issue.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Profiles_without_a_name_are_not_compared()
+    {
+        var config = WithProfiles(Browser("a"), Browser("b"));
+        config.Profiles[0].Name = "";
+        config.Profiles[1].Name = " ";
+
+        Assert.Empty(ConfigValidator.Validate(config));
+    }
+
+    [Fact]
     public void A_profile_needs_a_browser_or_a_command()
     {
         var issue = Single(WithProfiles(new Profile { Id = "x", Name = "X" }), IssueSeverity.Error);

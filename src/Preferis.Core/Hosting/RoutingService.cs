@@ -82,13 +82,13 @@ public sealed class RoutingService
                 {
                     Log(LogLevel.Warning, warning);
                 }
-                if (TryLaunch(resolved.Plan, resolved.ProfileId, out var error))
+                if (TryLaunch(context, resolved.Plan, resolved.ProfileId, out var error))
                 {
-                    return Launched(resolved.ProfileId);
+                    return Launched(context, resolved.ProfileId);
                 }
                 // A launch failure goes straight to the picker (docs/Design.md §8 step 3): the user should see
                 // which profile failed and choose, rather than silently landing in the default browser.
-                var launchFailure = $"Could not start '{resolved.ProfileId}': {error}";
+                var launchFailure = $"Could not start {Describe(context, resolved.ProfileId)}: {error}";
                 return ShowProfilePicker(context, context.Config.Profiles.Select(p => p.Id).ToList(), ruleId: null, message: launchFailure, allowFallbackPicker: false)
                     ?? Fallback(context, launchFailure, resolved.ProfileId, allowPicker: false);
             case ResolveResult.Unresolved unresolved:
@@ -106,11 +106,11 @@ public sealed class RoutingService
 
         if (config.DefaultProfile is { } defaultId && defaultId != failedProfileId && config.Profiles.Any(p => p.Id == defaultId))
         {
-            Log(LogLevel.Info, $"Falling back to the default profile '{defaultId}'.");
+            Log(LogLevel.Info, $"Falling back to the default profile {Describe(context, defaultId)}.");
             if (context.Resolver.ResolveWithFallback(config, defaultId, context.Url) is ResolveResult.Resolved resolved
-                && TryLaunch(resolved.Plan, resolved.ProfileId, out _))
+                && TryLaunch(context, resolved.Plan, resolved.ProfileId, out _))
             {
-                return Launched(resolved.ProfileId);
+                return Launched(context, resolved.ProfileId);
             }
         }
 
@@ -159,10 +159,10 @@ public sealed class RoutingService
 
         switch (context.Resolver.ResolveWithFallback(context.Config, chosen, context.Url))
         {
-            case ResolveResult.Resolved resolved when TryLaunch(resolved.Plan, resolved.ProfileId, out _):
-                return Launched(resolved.ProfileId);
+            case ResolveResult.Resolved resolved when TryLaunch(context, resolved.Plan, resolved.ProfileId, out _):
+                return Launched(context, resolved.ProfileId);
             case ResolveResult.Resolved resolved:
-                return Fallback(context, $"Could not start '{resolved.ProfileId}'.", resolved.ProfileId, allowFallbackPicker);
+                return Fallback(context, $"Could not start {Describe(context, resolved.ProfileId)}.", resolved.ProfileId, allowFallbackPicker);
             case ResolveResult.Unresolved unresolved:
                 Log(LogLevel.Warning, unresolved.Reason);
                 return Fallback(context, unresolved.Reason, chosen, allowFallbackPicker);
@@ -186,7 +186,7 @@ public sealed class RoutingService
         {
             RememberedRule.Insert(current.Config, RememberedRule.Create(context.Url, profileId), ruleId);
             _services.Config.Save(current.Config, current.ConfigPath);
-            Log(LogLevel.Info, $"Remembered '{context.Url.Host}' -> '{profileId}'.");
+            Log(LogLevel.Info, $"Remembered '{context.Url.Host}' -> {Describe(context, profileId)}.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -223,9 +223,9 @@ public sealed class RoutingService
             if (response?.ProfileId is { } chosen && browsers.FirstOrDefault(b => DetectedBrowserPrefix + b.Id == chosen) is { } browser)
             {
                 var plan = ProfileResolver.PlanForBrowser(browser, context.Url, _services.HostPlatform);
-                if (TryLaunch(plan, chosen, out var error))
+                if (TryLaunch(context, plan, chosen, out var error))
                 {
-                    return Launched(chosen);
+                    return Launched(context, chosen);
                 }
                 message = $"Could not start '{browser.DisplayName}': {error}";
             }
@@ -245,24 +245,27 @@ public sealed class RoutingService
         return new HandleResult(HandleOutcome.Failed, null, message);
     }
 
-    private bool TryLaunch(LaunchPlan plan, string profileId, out string? error)
+    private bool TryLaunch(Context context, LaunchPlan plan, string profileId, out string? error)
     {
         try
         {
             _services.Launcher.Launch(plan);
-            Log(LogLevel.Info, $"Launched '{profileId}': {plan.Kind} {plan.Path} {string.Join(' ', plan.Arguments)}");
+            Log(LogLevel.Info, $"Launched {Describe(context, profileId)}: {plan.Kind} {plan.Path} {string.Join(' ', plan.Arguments)}");
             error = null;
             return true;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Log(LogLevel.Error, $"Launch of '{profileId}' failed: {ex.Message}");
+            Log(LogLevel.Error, $"Launch of {Describe(context, profileId)} failed: {ex.Message}");
             error = ex.Message;
             return false;
         }
     }
 
-    private static HandleResult Launched(string profileId) => new(HandleOutcome.Launched, profileId, $"Launched '{profileId}'.");
+    private static HandleResult Launched(Context context, string profileId) => new(HandleOutcome.Launched, profileId, $"Launched {Describe(context, profileId)}.");
+
+    // Ids are numbers unless someone chose one (docs/Configuration.md §2.10): logs say which profile by its name too.
+    private static string Describe(Context context, string profileId) => ProfileNames.Describe(context.Config, profileId);
 
     private void Log(LogLevel level, string message) => _services.Log.Write(level, message);
 

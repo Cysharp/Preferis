@@ -156,9 +156,9 @@ public sealed class Router
         return new RoutingDecision.Open(url, _config.Profiles.Select(p => p.Id).ToList(), OpenSource.AllProfiles, ruleId);
     }
 
-    private static string Describe(RoutingDecision decision) => decision switch
+    private string Describe(RoutingDecision decision) => decision switch
     {
-        RoutingDecision.Open open => $"open {open.Url.AbsoluteUri} with [{string.Join(", ", open.ProfileIds)}] ({open.Source})",
+        RoutingDecision.Open open => $"open {open.Url.AbsoluteUri} with [{string.Join(", ", open.ProfileIds.Select(id => ProfileNames.Describe(_config, id)))}] ({open.Source})",
         RoutingDecision.System system => $"system {system.Url.AbsoluteUri}",
         RoutingDecision.None => "none",
         RoutingDecision.Failed failed => $"failed: {failed.Reason}",

@@ -48,7 +48,7 @@ public sealed class ProfileResolver
                 case ResolveResult.Resolved resolved:
                     return new ResolveResult.Resolved(resolved.Plan, [.. warnings, .. resolved.Warnings], currentId);
                 case ResolveResult.Unresolved unresolved when profile.Fallback is { } fallback && visited.Add(fallback):
-                    warnings.Add($"Profile '{currentId}' could not be resolved ({unresolved.Reason}); using fallback '{fallback}'.");
+                    warnings.Add($"Profile {ProfileNames.Describe(profile)} could not be resolved ({unresolved.Reason}); using fallback {ProfileNames.Describe(config, fallback)}.");
                     currentId = fallback;
                     continue;
                 case ResolveResult.Unresolved unresolved:
@@ -67,7 +67,7 @@ public sealed class ProfileResolver
         var browserId = profile.Browser?.For(_platform);
         if (browserId is null)
         {
-            return new ResolveResult.Unresolved($"Profile '{profile.Id}' has no browser or command for {_platform}.");
+            return new ResolveResult.Unresolved($"Profile {ProfileNames.Describe(profile)} has no browser or command for {_platform}.");
         }
 
         var browser = _locator.TryResolve(browserId);
@@ -163,7 +163,7 @@ public sealed class ProfileResolver
         var spec = profile.Command!.For(_platform);
         if (spec is null || string.IsNullOrWhiteSpace(spec.Path))
         {
-            return new ResolveResult.Unresolved($"Profile '{profile.Id}' has no command for {_platform}.");
+            return new ResolveResult.Unresolved($"Profile {ProfileNames.Describe(profile)} has no command for {_platform}.");
         }
 
         var path = EnvironmentExpander.Expand(spec.Path, _platform, _getEnvironmentVariable, _homeDirectory);

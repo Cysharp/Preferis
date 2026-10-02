@@ -37,6 +37,18 @@ public class RoutingServiceTests
         Assert.Empty(host.PickerRequests);
     }
 
+    [Fact]
+    public void The_log_names_profiles_as_well_as_their_ids()
+    {
+        var host = FullHost();
+
+        var result = Handle(host, "https://admin.google.com/ac/users");
+
+        Assert.Contains(host.Log, l => l.Message.Contains("with ['Chrome (Work)' (chrome-work)]", StringComparison.Ordinal));
+        Assert.Contains(host.Log, l => l.Message.StartsWith("Launched 'Chrome (Work)' (chrome-work):", StringComparison.Ordinal));
+        Assert.Equal("Launched 'Chrome (Work)' (chrome-work).", result.Summary);
+    }
+
     [Theory]
     [InlineData("https://admin.google.com/", "google-admin")]
     [InlineData("https://nl.safelinks.protection.outlook.com/?url=https%3A%2F%2Fadmin.google.com%2F", "google-admin")]

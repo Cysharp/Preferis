@@ -1,5 +1,4 @@
 using Microsoft.UI.Xaml;
-using Preferis.Core.Configuration;
 using Preferis.Settings.Services;
 using Preferis.Settings.ViewModels;
 
@@ -27,7 +26,7 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        var loader = ConfigLoader.ForCurrentMachine();
+        var loader = SettingsConfigLoader.Create();
         _settings = new SettingsViewModel(loader, new WindowsSettingsPlatform(loader.LoadLocal()), new WinUIDialogService(() => _window?.Window), new DispatcherSaveScheduler());
         _window = new SettingsWindow(_settings);
 

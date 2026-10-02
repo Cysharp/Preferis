@@ -6,6 +6,7 @@ using Preferis.Core.Browsers;
 using Preferis.Core.Configuration;
 using Preferis.Core.Picker;
 using Preferis.Core.Profiles;
+using Preferis.Settings.Services;
 
 namespace Preferis.Settings.ViewModels;
 
@@ -40,7 +41,7 @@ public sealed partial class ProfileViewModel : ObservableObject
     {
         _settings = settings;
         Model = model;
-        BrowserChoices = BuildBrowserChoices(model);
+        BrowserChoices = BuildBrowserChoices(settings.Browsers, Platform, model.Browser?.Default, model.Browser?.For(Platform));
         // This machine's OS chooses from what is installed here; the other OS from the catalog.
         MacOSBrowserChoices = Platform == HostPlatform.MacOS ? BrowserChoices : BuildCatalogChoices(model, HostPlatform.MacOS);
         WindowsBrowserChoices = Platform == HostPlatform.Windows ? BrowserChoices : BuildCatalogChoices(model, HostPlatform.Windows);
@@ -51,18 +52,32 @@ public sealed partial class ProfileViewModel : ObservableObject
 
     public string Id => Model.Id;
 
+    /// <summary>The id being typed; <see cref="ChangeIdCommand"/> applies it (docs/Configuration.md §2.11).</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ChangeIdCommand))]
+    public partial string IdDraft { get; set; } = "";
+
+    /// <summary>Why <see cref="IdDraft"/> cannot be applied, or null.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ChangeIdCommand))]
+    public partial string? IdError { get; private set; }
+
     private HostPlatform Platform => _settings.Platform.Platform;
 
     [ObservableProperty]
     public partial string Name { get; set; } = "";
 
+    /// <summary>What the shared target is; <see cref="OpensCommand"/> says what this machine opens.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsBrowser), nameof(IsCommand))]
+    [NotifyPropertyChangedFor(nameof(IsBrowser), nameof(IsCommand), nameof(OpensCommand))]
     public partial ProfileTargetKind TargetKind { get; set; }
 
     public bool IsBrowser => TargetKind == ProfileTargetKind.Browser;
 
     public bool IsCommand => TargetKind == ProfileTargetKind.Command;
+
+    /// <summary>This machine runs a command for the profile (its own target or the shared one), for the icon.</summary>
+    public bool OpensCommand => LocalTarget is { } local ? local.IsCommand : IsCommand;
 
     public IReadOnlyList<ProfileTargetKind> TargetKinds { get; } = [ProfileTargetKind.Browser, ProfileTargetKind.Command];
 
@@ -123,31 +138,48 @@ public sealed partial class ProfileViewModel : ObservableObject
     public partial bool IsDefault { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasIssues))]
+    [NotifyPropertyChangedFor(nameof(HasIssues), nameof(HasErrors))]
     public partial IReadOnlyList<ConfigIssue> Issues { get; set; } = [];
 
     public bool HasIssues => Issues.Count > 0;
 
-    /// <summary>Second line in the profile list.</summary>
+    /// <summary>Some of <see cref="Issues"/> are errors; the rest are warnings, such as a browser this machine does not have.</summary>
+    public bool HasErrors => Issues.Any(i => i.Severity == IssueSeverity.Error);
+
+    /// <summary>
+    /// This machine opens <see cref="LocalTarget"/> instead of the shared target (<c>local.json</c> <c>profileTargets</c>,
+    /// docs/Configuration.md §3.1). Turning it on starts from what the shared target opens here.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool UsesLocalTarget { get; set; }
+
+    /// <summary>The editor of this machine's target while <see cref="UsesLocalTarget"/> is on.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OpensCommand))]
+    public partial LocalTargetViewModel? LocalTarget { get; private set; }
+
+    /// <summary>Second line in the profile list: what this machine opens.</summary>
     public string Summary
     {
         get
         {
+            if (LocalTarget is { } local)
+            {
+                return $"This computer: {local.Summary}";
+            }
             if (IsCommand)
             {
-                var path = Platform == HostPlatform.MacOS ? MacOSCommandPath : WindowsCommandPath;
-                return path.Length == 0 ? "Command" : $"Command: {Path.GetFileName(path)}";
+                return CommandSummary(Platform == HostPlatform.MacOS ? MacOSCommandPath : WindowsCommandPath);
             }
             var browser = PerOs
                 ? $"{MacOSBrowser?.Title ?? "?"} on macOS, {WindowsBrowser?.Title ?? "?"} on Windows"
                 : Browser?.Title ?? "No browser";
-            var details = BrowserProfile?.Reference is { } reference ? PickerDisplay.DetailLine(new PickerCandidate { BrowserProfile = reference, Private = Private }) : Private ? "Private" : "";
-            return details.Length == 0 ? browser : $"{browser} · {details}";
+            return BrowserSummary(browser, BrowserProfile?.Reference, Private);
         }
     }
 
     /// <summary>Icon of the browser used on this machine.</summary>
-    public byte[]? IconPng => _settings.Browsers.FirstOrDefault(b => b.Browser.Id == CurrentBrowserId)?.IconPng;
+    public byte[]? IconPng => _settings.Browsers.FirstOrDefault(b => b.Browser.Id == (LocalTarget is { } local ? local.BrowserId : CurrentBrowserId))?.IconPng;
 
     private string? CurrentBrowserId => PerOs ? (Platform == HostPlatform.MacOS ? MacOSBrowser : WindowsBrowser)?.Id : Browser?.Id;
 
@@ -175,6 +207,12 @@ public sealed partial class ProfileViewModel : ObservableObject
             WindowsCommandArgs = string.Join("\n", model.Command?.Windows?.Args ?? []);
 
             BuildBrowserProfileChoices();
+
+            var local = LocalProfileTargets.Find(_settings.Local, model, _settings.Config);
+            UsesLocalTarget = local is not null;
+            LocalTarget = local is null ? null : new LocalTargetViewModel(this, _settings, local);
+
+            IdDraft = Id;
             RefreshRelations();
         }
         finally
@@ -204,10 +242,75 @@ public sealed partial class ProfileViewModel : ObservableObject
                 FallbackChoices.Add(new ProfileChoice(fallback, $"{fallback} (missing)"));
             }
             Fallback = FallbackChoices.First(c => c.Id == Model.Fallback);
+            // Another profile may have taken (or given up) the id being typed.
+            IdError = ProfileIds.Validate(_settings.Config, Id, IdDraft.Trim());
         }
         finally
         {
             _syncing = wasSyncing;
+        }
+    }
+
+    partial void OnIdDraftChanged(string value) => IdError = ProfileIds.Validate(_settings.Config, Id, value.Trim());
+
+    private bool CanChangeId => IdError is null && IdDraft.Trim() != Id;
+
+    /// <summary>Gives the profile the id in <see cref="IdDraft"/> and rewrites everything that refers to it.</summary>
+    [RelayCommand(CanExecute = nameof(CanChangeId))]
+    private void ChangeId()
+    {
+        ProfileIds.Rename(_settings.Config, _settings.Local, Id, IdDraft.Trim());
+        OnPropertyChanged(nameof(Id));
+        IdDraft = Id;
+        // Fallback lists, the default mark and the issues are keyed by id.
+        _settings.Profiles.ProfilesChanged();
+    }
+
+    partial void OnUsesLocalTargetChanged(bool value)
+    {
+        if (_syncing)
+        {
+            return;
+        }
+        if (value)
+        {
+            var target = LocalProfileTargets.FromShared(Model, Platform);
+            (_settings.Local.ProfileTargets ??= [])[Id] = target;
+            LocalTarget = new LocalTargetViewModel(this, _settings, target);
+        }
+        else
+        {
+            ForgetLocalTarget(_settings, Model);
+            LocalTarget = null;
+        }
+        OnLocalTargetChanged();
+    }
+
+    /// <summary>Called by <see cref="LocalTarget"/> after every edit.</summary>
+    internal void OnLocalTargetChanged()
+    {
+        OnPropertyChanged(nameof(Summary));
+        OnPropertyChanged(nameof(IconPng));
+        OnPropertyChanged(nameof(OpensCommand));
+        _settings.MarkChanged();
+    }
+
+    /// <summary>Removes the local target of <paramref name="profile"/>, under its id or one of its previous ids.</summary>
+    internal static void ForgetLocalTarget(SettingsViewModel settings, Profile profile)
+    {
+        if (settings.Local.ProfileTargets is not { } targets)
+        {
+            return;
+        }
+        targets.Remove(profile.Id);
+        // A previous id that is now another profile's id is that profile's key.
+        foreach (var previous in (profile.PreviousIds ?? []).Where(id => settings.Config.Profiles.All(p => p.Id != id)))
+        {
+            targets.Remove(previous);
+        }
+        if (targets.Count == 0)
+        {
+            settings.Local.ProfileTargets = null;
         }
     }
 
@@ -317,16 +420,9 @@ public sealed partial class ProfileViewModel : ObservableObject
         _syncing = true;
         try
         {
-            if (path.TrimEnd('/').EndsWith(".app", StringComparison.OrdinalIgnoreCase))
-            {
-                // An app bundle is a folder, not an executable: let Launch Services open the URL with it.
-                MacOSCommandPath = "/usr/bin/open";
-                MacOSCommandArgs = $"-a\n{path.TrimEnd('/')}\n{{url}}";
-            }
-            else
-            {
-                MacOSCommandPath = path;
-            }
+            var (commandPath, args) = MacOSCommandFor(path);
+            MacOSCommandPath = commandPath;
+            MacOSCommandArgs = args ?? MacOSCommandArgs;
         }
         finally
         {
@@ -334,6 +430,13 @@ public sealed partial class ProfileViewModel : ObservableObject
         }
         WriteTarget();
     }
+
+    /// <summary>The command for a file chosen on macOS; <c>Args</c> is null when the arguments stay as they are.</summary>
+    internal static (string Path, string? Args) MacOSCommandFor(string chosen)
+        // An app bundle is a folder, not an executable: let Launch Services open the URL with it.
+        => chosen.TrimEnd('/').EndsWith(".app", StringComparison.OrdinalIgnoreCase)
+            ? ("/usr/bin/open", $"-a\n{chosen.TrimEnd('/')}\n{{url}}")
+            : (chosen, null);
 
     [RelayCommand]
     private async Task BrowseWindowsCommand()
@@ -385,8 +488,16 @@ public sealed partial class ProfileViewModel : ObservableObject
     private static CommandSpec? Spec(string path, string args, CommandSpec? previous)
         => path.Length == 0 && args.Trim().Length == 0 ? null : new CommandSpec { Path = path.Trim(), Args = Lines(args), ExtensionData = previous?.ExtensionData };
 
-    private static List<string> Lines(string text)
+    internal static List<string> Lines(string text)
         => text.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+
+    internal static string CommandSummary(string path) => path.Length == 0 ? "Command" : $"Command: {Path.GetFileName(path)}";
+
+    internal static string BrowserSummary(string browser, BrowserProfileRef? reference, bool isPrivate)
+    {
+        var details = reference is not null ? PickerDisplay.DetailLine(new PickerCandidate { BrowserProfile = reference, Private = isPrivate }) : isPrivate ? "Private" : "";
+        return details.Length == 0 ? browser : $"{browser} · {details}";
+    }
 
     private void BuildBrowserProfileChoices()
     {
@@ -394,43 +505,7 @@ public sealed partial class ProfileViewModel : ObservableObject
         _syncing = true;
         try
         {
-            BrowserProfileChoices.Clear();
-            BrowserProfileChoices.Add(NoBrowserProfile);
-            BrowserProfileChoice selected = NoBrowserProfile;
-
-            var detected = _settings.Browsers.FirstOrDefault(b => b.Browser.Id == CurrentBrowserId);
-            var family = detected?.Browser.Family ?? (CurrentBrowserId is { } id ? BrowserCatalog.Find(id)?.Family : null) ?? BrowserFamily.Other;
-            var profiles = detected?.Profiles ?? [];
-            var stored = Model.BrowserProfile;
-            var match = stored is null ? null : BrowserProfileMatcher.Match(profiles, stored, family);
-
-            if (family != BrowserFamily.Other)
-            {
-                foreach (var profile in profiles)
-                {
-                    var reference = ProfilesPageViewModel.ReferenceTo(profile, family);
-                    var title = PickerDisplay.DetailLine(new PickerCandidate { BrowserProfile = reference });
-                    if (ReferenceEquals(profile, match))
-                    {
-                        // Keep the stored reference as it is (identifiers from another machine, unknown properties):
-                        // an unrelated edit of this profile must not replace it with this machine's view.
-                        selected = new BrowserProfileChoice(stored, title);
-                        BrowserProfileChoices.Add(selected);
-                    }
-                    else
-                    {
-                        BrowserProfileChoices.Add(new BrowserProfileChoice(reference, title));
-                    }
-                }
-            }
-
-            if (stored is not null && match is null)
-            {
-                // Keep what is stored even when this machine does not have it: it may exist on another one.
-                selected = new BrowserProfileChoice(stored, $"{stored.Name ?? stored.Email ?? stored.Directory} (not found on this computer)");
-                BrowserProfileChoices.Add(selected);
-            }
-            BrowserProfile = selected;
+            BrowserProfile = FillBrowserProfileChoices(BrowserProfileChoices, _settings.Browsers, CurrentBrowserId, Model.BrowserProfile);
         }
         finally
         {
@@ -439,13 +514,58 @@ public sealed partial class ProfileViewModel : ObservableObject
         OnPropertyChanged(nameof(HasBrowserProfiles));
     }
 
-    private IReadOnlyList<BrowserChoice> BuildBrowserChoices(Profile model)
+    /// <summary>
+    /// Fills <paramref name="choices"/> with "(None)" and the browser profiles of <paramref name="browserId"/> on this
+    /// machine, and returns the one to select for <paramref name="stored"/>.
+    /// </summary>
+    internal static BrowserProfileChoice FillBrowserProfileChoices(ObservableCollection<BrowserProfileChoice> choices, IReadOnlyList<DetectedBrowserInfo> browsers, string? browserId, BrowserProfileRef? stored)
     {
-        var choices = _settings.Browsers.Select(b => new BrowserChoice(b.Browser.Id, b.Browser.DisplayName, true, b.IconPng)).ToList();
+        choices.Clear();
+        choices.Add(NoBrowserProfile);
+        var selected = NoBrowserProfile;
+
+        var detected = browsers.FirstOrDefault(b => b.Browser.Id == browserId);
+        var family = detected?.Browser.Family ?? (browserId is null ? null : BrowserCatalog.Find(browserId)?.Family) ?? BrowserFamily.Other;
+        var profiles = detected?.Profiles ?? [];
+        var match = stored is null ? null : BrowserProfileMatcher.Match(profiles, stored, family);
+
+        if (family != BrowserFamily.Other)
+        {
+            foreach (var profile in profiles)
+            {
+                var reference = ProfilesPageViewModel.ReferenceTo(profile, family);
+                var title = PickerDisplay.DetailLine(new PickerCandidate { BrowserProfile = reference });
+                if (ReferenceEquals(profile, match))
+                {
+                    // Keep the stored reference as it is (identifiers from another machine, unknown properties):
+                    // an unrelated edit of this profile must not replace it with this machine's view.
+                    selected = new BrowserProfileChoice(stored, title);
+                    choices.Add(selected);
+                }
+                else
+                {
+                    choices.Add(new BrowserProfileChoice(reference, title));
+                }
+            }
+        }
+
+        if (stored is not null && match is null)
+        {
+            // Keep what is stored even when this machine does not have it: it may exist on another one.
+            selected = new BrowserProfileChoice(stored, $"{stored.Name ?? stored.Email ?? stored.Directory} (not found on this computer)");
+            choices.Add(selected);
+        }
+        return selected;
+    }
+
+    /// <summary>Browsers for this machine's OS: detected ones first, then the rest of the catalog, then <paramref name="storedIds"/> not among them.</summary>
+    internal static IReadOnlyList<BrowserChoice> BuildBrowserChoices(IReadOnlyList<DetectedBrowserInfo> browsers, HostPlatform platform, params string?[] storedIds)
+    {
+        var choices = browsers.Select(b => new BrowserChoice(b.Browser.Id, b.Browser.DisplayName, true, b.IconPng)).ToList();
         choices.AddRange(BrowserCatalog.Entries
-            .Where(e => choices.All(c => c.Id != e.Id) && ExistsOn(e, Platform))
+            .Where(e => choices.All(c => c.Id != e.Id) && ExistsOn(e, platform))
             .Select(e => new BrowserChoice(e.Id, $"{e.DisplayName} (not installed)", false, null)));
-        AddStoredIds(choices, model.Browser?.Default, model.Browser?.For(Platform));
+        AddStoredIds(choices, storedIds);
         return choices;
     }
 
@@ -473,5 +593,5 @@ public sealed partial class ProfileViewModel : ObservableObject
         }
     }
 
-    private static BrowserChoice? Find(IReadOnlyList<BrowserChoice> choices, string? id) => id is null ? null : choices.FirstOrDefault(c => c.Id == id);
+    internal static BrowserChoice? Find(IReadOnlyList<BrowserChoice> choices, string? id) => id is null ? null : choices.FirstOrDefault(c => c.Id == id);
 }

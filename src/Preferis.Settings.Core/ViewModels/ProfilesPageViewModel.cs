@@ -39,7 +39,7 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
 
     [RelayCommand]
     private void AddDetected(DetectedItemViewModel item)
-        => AddProfile(CreateFromDetected(item.Browser.Info.Browser, item.Profile, Settings.Config.Profiles.Select(p => p.Id)));
+        => AddProfile(CreateFromDetected(item.Browser.Info.Browser, item.Profile, ProfileIds.Taken(Settings.Config)));
 
     /// <summary>One profile for every detected browser profile (or browser without profiles) that no profile uses yet.</summary>
     [RelayCommand]
@@ -51,7 +51,7 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
             var targets = info.Profiles is { Count: > 0 } profiles ? profiles.Select(p => (BrowserProfileInfo?)p) : [null];
             foreach (var target in targets.Where(t => !IsConfigured(browser, t)))
             {
-                AddProfile(CreateFromDetected(browser, target, Settings.Config.Profiles.Select(p => p.Id)));
+                AddProfile(CreateFromDetected(browser, target, ProfileIds.Taken(Settings.Config)));
             }
         }
     }
@@ -63,7 +63,7 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
         var spec = new CommandSpec { Path = "", Args = ["{url}"] };
         AddProfile(new Profile
         {
-            Id = IdGenerator.ForName(name, "command", Settings.Config.Profiles.Select(p => p.Id)),
+            Id = IdGenerator.ForName(name, "command", ProfileIds.Taken(Settings.Config)),
             Name = name,
             Command = Settings.Platform.Platform == HostPlatform.Windows ? new CommandTarget { Windows = spec } : new CommandTarget { MacOS = spec },
         });
@@ -74,8 +74,14 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
     {
         var source = SelectedProfile!;
         var copy = JsonSerializer.Deserialize(JsonSerializer.Serialize(source.Model, PreferisJsonContext.Default.Profile), PreferisJsonContext.Default.Profile)!;
-        copy.Id = IdGenerator.Unique(source.Id, Settings.Config.Profiles.Select(p => p.Id));
+        copy.Id = IdGenerator.Unique(source.Id, ProfileIds.Taken(Settings.Config));
+        // The ids it had belong to the original.
+        copy.PreviousIds = null;
         copy.Name = source.Name + " copy";
+        if (LocalProfileTargets.Find(Settings.Local, source.Model, Settings.Config) is { } target)
+        {
+            Settings.Local.ProfileTargets![copy.Id] = LocalProfileTargets.Copy(target);
+        }
         AddProfile(copy, Profiles.IndexOf(source) + 1);
     }
 
@@ -94,6 +100,7 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
         }
 
         RemoveReferences(Settings.Config, profile.Id);
+        ProfileViewModel.ForgetLocalTarget(Settings, profile.Model);
         var index = Profiles.IndexOf(profile);
         Settings.Config.Profiles.Remove(profile.Model);
         Profiles.Remove(profile);
@@ -154,8 +161,9 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
         ? new BrowserProfileRef { Name = info.Name ?? info.Directory }
         : new BrowserProfileRef { Directory = info.Directory, Name = info.Name, Email = info.Email };
 
+    // What this machine opens counts, its own targets included.
     private bool IsConfigured(DetectedBrowser browser, BrowserProfileInfo? target)
-        => Settings.Config.Profiles.Any(p =>
+        => LocalProfileTargets.Apply(Settings.Config, Settings.Local).Profiles.Any(p =>
             p.Command is null
             && p.Browser?.For(Settings.Platform.Platform) == browser.Id
             && (target is null

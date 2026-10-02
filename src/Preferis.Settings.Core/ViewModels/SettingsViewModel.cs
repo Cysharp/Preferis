@@ -136,7 +136,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         var configEdited = ConfigEdited;
         var localEdited = ConfigSerializer.SerializeLocal(Local) != _savedLocalJson;
         IsDirty = configEdited || localEdited;
-        Issues = ConfigValidator.Validate(Config);
+        Issues = [.. ConfigValidator.Validate(Config), .. ProfileAvailability.Check(Config, Local, Browsers, Platform.Platform)];
         Profiles.UpdateIssues(Issues);
         Rules.UpdateIssues(Issues);
         // Held config.json edits wait for a decision; asking for a save again would only hold them again.
@@ -319,6 +319,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             _savedLocalJson = ConfigSerializer.SerializeLocal(Local);
             LocalUnreadable = File.Exists(_loader.Paths.LocalConfigPath) && !IsParsable(_loader.Paths.LocalConfigPath, ConfigSerializer.DeserializeLocal);
         }
+        // Profiles renamed on another machine: this machine's targets follow them to their new ids (saved as an edit).
+        LocalProfileTargets.MigrateKeys(Config, Local);
         LoadError = result.Error;
         HasExternalChanges = false;
         IsHoldingEditsForUnreadableFile = false;

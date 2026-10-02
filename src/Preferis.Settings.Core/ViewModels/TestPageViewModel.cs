@@ -26,6 +26,8 @@ public sealed record HistoryLine(string Time, string Url, string Rule, string Ou
 /// </summary>
 public sealed partial class TestPageViewModel : PageViewModel
 {
+    private const string ThisComputer = "With the target of this computer.";
+
     public TestPageViewModel(SettingsViewModel settings)
         : base(settings)
     {
@@ -98,7 +100,8 @@ public sealed partial class TestPageViewModel : PageViewModel
             return;
         }
 
-        var config = Settings.Config;
+        // As the Router on this machine sees it: with this machine's own targets.
+        var config = LocalProfileTargets.Apply(Settings.Config, Settings.Local);
         var result = new Router(config).Route(url);
         foreach (var entry in result.Trace)
         {
@@ -115,7 +118,8 @@ public sealed partial class TestPageViewModel : PageViewModel
             var resolver = new ProfileResolver(platform.Platform, platform.BrowserLocator, platform.BrowserProfiles, platform.GetEnvironmentVariable, platform.HomeDirectory);
             foreach (var id in open.ProfileIds)
             {
-                Candidates.Add(Resolve(resolver, config, id, open.Url));
+                var isLocal = Settings.Config.Profiles.FirstOrDefault(p => p.Id == id) is { } shared && LocalProfileTargets.Find(Settings.Local, shared, Settings.Config) is not null;
+                Candidates.Add(Resolve(resolver, config, id, open.Url, isLocal));
             }
         }
     }
@@ -212,7 +216,7 @@ public sealed partial class TestPageViewModel : PageViewModel
         }
     }
 
-    private static CandidateLine Resolve(ProfileResolver resolver, PreferisConfig config, string id, RoutingUrl url)
+    private static CandidateLine Resolve(ProfileResolver resolver, PreferisConfig config, string id, RoutingUrl url, bool isLocal)
     {
         string NameOf(string profileId) => config.Profiles.FirstOrDefault(p => p.Id == profileId)?.Name ?? profileId;
 
@@ -226,10 +230,15 @@ public sealed partial class TestPageViewModel : PageViewModel
         if (direct is ResolveResult.Resolved resolved)
         {
             var command = CommandLine(resolved.Plan);
-            return new CandidateLine(profile.Name, true, resolved.Warnings.Count == 0 ? command : $"{command}  ({string.Join(" ", resolved.Warnings)})");
+            var notes = isLocal ? resolved.Warnings.Prepend(ThisComputer).ToList() : resolved.Warnings.ToList();
+            return new CandidateLine(profile.Name, true, notes.Count == 0 ? command : $"{command}  ({string.Join(" ", notes)})");
         }
 
         var reason = direct is ResolveResult.Unresolved unresolved ? unresolved.Reason : "Unexpected resolution result.";
+        if (isLocal)
+        {
+            reason = $"{ThisComputer} {reason}";
+        }
         if (profile.Fallback is not { } fallbackId)
         {
             return new CandidateLine(profile.Name, false, reason);

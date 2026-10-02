@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices.WindowsRuntime;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Preferis.Settings.Windows.Controls;
 using Preferis.Settings.ViewModels;
@@ -13,7 +15,9 @@ namespace Preferis.Settings.Windows;
 /// Developer aid (<c>PREFERIS_SETTINGS_SNAPSHOT=&lt;folder&gt;</c>): renders each page to PNG and quits. The window is
 /// shown off screen without being activated, so nothing visible changes and the focus stays where it is.
 /// <c>PREFERIS_SETTINGS_SNAPSHOT_APPEARANCE=dark</c> draws the dark theme, <c>PREFERIS_SETTINGS_SNAPSHOT_URL</c> tests that
-/// URL on the test page. Mica is drawn by the compositor and does not appear; the theme's plain background stands in for it.
+/// URL on the test page, <c>PREFERIS_SETTINGS_SNAPSHOT_WIDTH</c> sets the window width (DIP) and
+/// <c>PREFERIS_SETTINGS_SNAPSHOT_CONFIG</c> reads the configuration from that folder instead of this machine's.
+/// Mica is drawn by the compositor and does not appear; the theme's plain background stands in for it.
 /// </summary>
 internal static class Snapshots
 {
@@ -43,6 +47,14 @@ internal static class Snapshots
         {
             settings.SelectedPage = settings.Profiles;
             settings.Profiles.SelectedProfile = settings.Profiles.Profiles.ElementAtOrDefault(2) ?? settings.Profiles.SelectedProfile;
+        }));
+        // The end of the long profile editor: this computer's target and the fallback.
+        steps.Add(("profiles-third-end", () =>
+        {
+            foreach (var viewer in Descendants(window.Root).OfType<ScrollViewer>().Where(v => v.ScrollableHeight > 0))
+            {
+                viewer.ChangeView(null, viewer.ScrollableHeight, null, disableAnimation: true);
+            }
         }));
 
         var root = window.Root;
@@ -80,6 +92,19 @@ internal static class Snapshots
             timer.Start();
         };
         timer.Start();
+    }
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            yield return child;
+            foreach (var descendant in Descendants(child))
+            {
+                yield return descendant;
+            }
+        }
     }
 
     private static async Task Capture(UIElement element, string path)

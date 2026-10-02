@@ -294,7 +294,8 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
 - `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で各ページ (とルール・プロファイル画面のいくつかの状態) を PNG に書き出して
   終了する。ウィンドウはアクティブにせず画面外に出し、`RenderTargetBitmap` で描く (Mica の代わりにテーマの背景色)。
   大きさは通常の起動と同じ既定サイズ (DIP)。`PREFERIS_SETTINGS_SNAPSHOT_WIDTH=<DIP>` で幅を変えて狭いウィンドウを確かめられる
-  (最小幅は 900)。`PREFERIS_SETTINGS_SNAPSHOT_URL`、`PREFERIS_SETTINGS_SNAPSHOT_APPEARANCE=dark` は macOS と同じ。チェックボックスの
+  (最小幅は 900)。長いプロファイルの編集画面は末尾までスクロールした状態も書き出す。`PREFERIS_SETTINGS_SNAPSHOT_URL`、
+  `PREFERIS_SETTINGS_SNAPSHOT_APPEARANCE=dark`、`PREFERIS_SETTINGS_SNAPSHOT_CONFIG` は macOS と同じ。チェックボックスの
   チェックは `RenderTargetBitmap` では「−」に写る (実際の状態は UI Automation で確認した)。
 
 ## 3. macOS
@@ -557,7 +558,9 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
   実行ファイルを直接 `HOME=<dir>` 付きで起動する。
 - `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で各ページ (とルール・プロファイル画面のいくつかの状態) を PNG に書き出して終了する。
   `PREFERIS_SETTINGS_SNAPSHOT_URL=<url>` を併せて指定するとテストページでその URL を試した状態を、
-  `PREFERIS_SETTINGS_SNAPSHOT_APPEARANCE=dark` でダークモードを描く。開発用。
+  `PREFERIS_SETTINGS_SNAPSHOT_APPEARANCE=dark` でダークモードを描く。`PREFERIS_SETTINGS_SNAPSHOT_CONFIG=<フォルダー>` で
+  そのフォルダーの `config.json` と `local.json` を使い、このマシンの設定に触れずに用意した設定 (マシンごとのターゲットなど) を
+  写せる。開発用。
   アプリはアクセサリー (Dock に出ない) として起動し、ウィンドウはデスクトップより後ろのレベルに置くので、画面の見た目も
   フォーカスも変わらない。キャプチャは `screencapture -l <ウィンドウ番号>` で行う (macOS 26 ではビューのビットマップ描画に
   スクロールビューの中身が入らず、画面外のウィンドウはキャプチャできない)。起動元 (ターミナルなど) に画面収録の許可が要る。

@@ -26,7 +26,7 @@ internal sealed class ProfilesPage : IPageView
             profile => page.SelectedProfile = profile,
             page.MoveProfile,
             44,
-            nameof(ProfileViewModel.Name), nameof(ProfileViewModel.Summary), nameof(ProfileViewModel.IsDefault), nameof(ProfileViewModel.HasIssues), nameof(ProfileViewModel.IconPng));
+            nameof(ProfileViewModel.Name), nameof(ProfileViewModel.Summary), nameof(ProfileViewModel.IsDefault), nameof(ProfileViewModel.HasIssues), nameof(ProfileViewModel.HasErrors), nameof(ProfileViewModel.IconPng), nameof(ProfileViewModel.OpensCommand));
 
         var add = Ui.IconButton("plus", "Add a profile");
         add.Activated += (_, _) => ShowAddMenu(add);
@@ -69,7 +69,7 @@ internal sealed class ProfilesPage : IPageView
 
     private static NSView Row(ProfileViewModel profile)
     {
-        var icon = new NSImageView { Image = Images.FromPng(profile.IconPng) ?? Images.Symbol(profile.IsCommand ? "terminal" : "globe", 18)!, ImageScaling = NSImageScale.ProportionallyUpOrDown };
+        var icon = new NSImageView { Image = Images.FromPng(profile.IconPng) ?? Images.Symbol(profile.OpensCommand ? "terminal" : "globe", 18)!, ImageScaling = NSImageScale.ProportionallyUpOrDown };
         icon.ContentTintColor = NSColor.SecondaryLabel;
         icon.WidthAnchor.ConstraintEqualTo(26).Active = true;
         icon.HeightAnchor.ConstraintEqualTo(26).Active = true;
@@ -79,9 +79,14 @@ internal sealed class ProfilesPage : IPageView
         texts.SetHuggingPriority(1, NSLayoutConstraintOrientation.Horizontal);
         var row = Ui.HStack(8, icon, texts);
         row.EdgeInsets = new NSEdgeInsets(0, 2, 0, 6);
-        if (profile.HasIssues)
+        if (profile.HasErrors)
         {
             row.AddArrangedSubview(Badge("exclamationmark.circle.fill", NSColor.SystemRed, "This profile has problems"));
+        }
+        else if (profile.HasIssues)
+        {
+            // Warnings only, typically a browser that this Mac does not have: it still opens something.
+            row.AddArrangedSubview(Badge("exclamationmark.triangle.fill", NSColor.SystemYellow, "This profile cannot be used as configured on this computer"));
         }
         if (profile.IsDefault)
         {
@@ -180,7 +185,7 @@ internal sealed class ProfilesPage : IPageView
     private NSView Editor(ProfileViewModel profile, Bindings bindings)
     {
         var icon = EditorParts.Icon();
-        bindings.Observe(profile, () => icon.Image = Images.FromPng(profile.IconPng) ?? Images.Symbol(profile.IsCommand ? "terminal" : "globe", 24), nameof(ProfileViewModel.IconPng), nameof(ProfileViewModel.TargetKind));
+        bindings.Observe(profile, () => icon.Image = Images.FromPng(profile.IconPng) ?? Images.Symbol(profile.OpensCommand ? "terminal" : "globe", 24), nameof(ProfileViewModel.IconPng), nameof(ProfileViewModel.OpensCommand));
         var title = Ui.Label("");
         var subtitle = Ui.Flowing("");
         bindings.Observe(profile, () =>
@@ -208,11 +213,40 @@ internal sealed class ProfilesPage : IPageView
             () => profile.TargetKind, value => profile.TargetKind = value);
 
         var general = Form.Section(null,
-            Form.Row("Name", name, $"Rules refer to the profile by its id, “{profile.Id}”, which stays when you rename it."),
+            Form.Row("Name", name, "Shown in the picker. Renaming the profile keeps its ID."),
+            IdRow(profile, bindings),
             Form.Row("Default profile", isDefault, "Opens links that the matching rule does not assign to a profile."),
             Form.Row("Opens with", target));
 
-        return Form.Page(header, general, BrowserSection(profile, bindings), CommandSection(profile, bindings), FallbackSection(profile, bindings));
+        return Form.Page(header, general, BrowserSection(profile, bindings), CommandSection(profile, bindings), LocalSection(profile, bindings), FallbackSection(profile, bindings));
+    }
+
+    /// <summary>The id, changed with a button (or Return) rather than as typed: every reference to it is rewritten.</summary>
+    private static NSView IdRow(ProfileViewModel profile, Bindings bindings)
+    {
+        const string Explanation = "Rules refer to the profile by its ID. Changing it updates them, and other computers still find their own targets under the old one.";
+        var id = Ui.Field("work", monospaced: true);
+        bindings.Text(id, profile, nameof(ProfileViewModel.IdDraft), () => profile.IdDraft, value => profile.IdDraft = value);
+        // Return applies the id; leaving the field does not.
+        id.Cell.SendsActionOnEndEditing = false;
+        id.Activated += (_, _) =>
+        {
+            if (profile.ChangeIdCommand.CanExecute(null))
+            {
+                profile.ChangeIdCommand.Execute(null);
+            }
+        };
+        var change = Ui.Button("Change");
+        bindings.Command(change, profile.ChangeIdCommand);
+
+        // The explanation gives way to what is wrong with the id being typed.
+        var detail = Ui.Flowing(Explanation);
+        bindings.Observe(profile, () =>
+        {
+            detail.StringValue = profile.IdError ?? Explanation;
+            detail.TextColor = profile.IdError is null ? NSColor.SecondaryLabel : NSColor.SystemRed;
+        }, nameof(ProfileViewModel.IdError));
+        return Form.Row(Ui.Label("ID"), Ui.HStack(8, id, change), detail);
     }
 
     private static NSView BrowserSection(ProfileViewModel profile, Bindings bindings)
@@ -278,6 +312,86 @@ internal sealed class ProfilesPage : IPageView
             Form.Row("Arguments", winArgs, "One per line."));
         bindings.Observe(profile, () => section.Hidden = !profile.IsCommand, nameof(ProfileViewModel.TargetKind));
         return section;
+    }
+
+    /// <summary>
+    /// What this Mac opens instead of the shared target (local.json). The rows of the target belong to its own view
+    /// model, which is replaced when the switch turns it on again, so they are a second group rebuilt with it; the
+    /// switch stays in place.
+    /// </summary>
+    private static NSView LocalSection(ProfileViewModel profile, Bindings bindings)
+    {
+        var uses = Ui.Switch();
+        bindings.Switch(uses, profile, nameof(ProfileViewModel.UsesLocalTarget), () => profile.UsesLocalTarget, value => profile.UsesLocalTarget = value);
+        var section = (NSStackView)Form.Section("This Computer",
+            Form.Row("Open something else on this computer", uses, "In place of the browser or command above, for example another browser profile. Saved on this computer only; rules and other computers are not affected."));
+        // The target's group follows the switch's as a continuation.
+        section.SetCustomSpacing((nfloat)Form.GroupSpacing, section.ArrangedSubviews[^1]);
+
+        var host = Ui.VStack(0);
+        section.AddArrangedSubview(host);
+        Ui.FillWidth(host, section);
+        Bindings? targetBindings = null;
+        bindings.Observe(profile, () =>
+        {
+            targetBindings?.Dispose();
+            foreach (var view in host.ArrangedSubviews)
+            {
+                host.RemoveArrangedSubview(view);
+                view.RemoveFromSuperview();
+            }
+            targetBindings = new Bindings();
+            if (profile.LocalTarget is { } target)
+            {
+                var group = LocalTargetGroup(target, targetBindings);
+                host.AddArrangedSubview(group);
+                Ui.FillWidth(group, host);
+            }
+            host.Hidden = profile.LocalTarget is null;
+        }, nameof(ProfileViewModel.LocalTarget));
+        bindings.Add(() => targetBindings?.Dispose());
+        return section;
+    }
+
+    private static NSBox LocalTargetGroup(LocalTargetViewModel target, Bindings bindings)
+    {
+        var kind = Ui.Popup();
+        bindings.Choice(kind, target, nameof(LocalTargetViewModel.TargetKind),
+            [(ProfileTargetKind.Browser, "Browser"), (ProfileTargetKind.Command, "Command")],
+            () => target.TargetKind, value => target.TargetKind = value);
+        var browser = Ui.Popup();
+        bindings.Popup(browser, target, nameof(LocalTargetViewModel.Browser), () => target.BrowserChoices, () => target.Browser, value => target.Browser = value, c => c.Title, c => Images.FromPng(c.IconPng));
+        var browserProfile = Ui.Popup();
+        bindings.Popup(browserProfile, target, nameof(LocalTargetViewModel.BrowserProfile), () => target.BrowserProfileChoices, () => target.BrowserProfile, value => target.BrowserProfile = value, c => c.Title);
+        var isPrivate = Ui.Switch();
+        bindings.Switch(isPrivate, target, nameof(LocalTargetViewModel.Private), () => target.Private, value => target.Private = value);
+        var args = Ui.LinesField("--new-window");
+        bindings.Text(args, target, nameof(LocalTargetViewModel.ExtraArgs), () => target.ExtraArgs, value => target.ExtraArgs = value);
+        var path = Ui.Field("/Applications/Foo.app/Contents/MacOS/Foo");
+        bindings.Text(path, target, nameof(LocalTargetViewModel.CommandPath), () => target.CommandPath, value => target.CommandPath = value);
+        var choose = Ui.Button("Choose…");
+        bindings.Command(choose, target.BrowseCommandCommand);
+        var commandArgs = Ui.LinesField("{url}");
+        bindings.Text(commandArgs, target, nameof(LocalTargetViewModel.CommandArgs), () => target.CommandArgs, value => target.CommandArgs = value);
+
+        var browserRow = Form.Row("Browser", browser);
+        var profileRow = Form.Row("Browser profile", browserProfile);
+        var privateRow = Form.Row("Private window", isPrivate);
+        var argsRow = Form.Row("Extra arguments", args, "One per line. Return starts a new one.");
+        var pathRow = Form.Row("Program", Ui.HStack(8, path, choose), "Choosing an app runs it through /usr/bin/open.");
+        var commandArgsRow = Form.Row("Arguments", commandArgs, "One per line. {url} is replaced with the URL; without it the URL is added at the end.");
+        var group = Form.Group(Form.Row("Opens with", kind), browserRow, profileRow, privateRow, argsRow, pathRow, commandArgsRow);
+        bindings.Observe(target, () =>
+        {
+            browserRow.Hidden = !target.IsBrowser;
+            profileRow.Hidden = !target.IsBrowser || !target.HasBrowserProfiles;
+            privateRow.Hidden = !target.IsBrowser;
+            argsRow.Hidden = !target.IsBrowser;
+            pathRow.Hidden = !target.IsCommand;
+            commandArgsRow.Hidden = !target.IsCommand;
+            Form.UpdateSeparators(group);
+        }, nameof(LocalTargetViewModel.TargetKind), nameof(LocalTargetViewModel.HasBrowserProfiles));
+        return group;
     }
 
     private static NSView FallbackSection(ProfileViewModel profile, Bindings bindings)

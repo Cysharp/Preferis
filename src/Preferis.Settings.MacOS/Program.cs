@@ -1,7 +1,6 @@
 using AppKit;
 using Foundation;
 using ObjCRuntime;
-using Preferis.Core.Configuration;
 using Preferis.Settings.Services;
 using Preferis.Settings.ViewModels;
 
@@ -53,7 +52,7 @@ internal sealed class AppDelegate : NSApplicationDelegate
 
     private void Start()
     {
-        var loader = ConfigLoader.ForCurrentMachine();
+        var loader = SettingsConfigLoader.Create();
         _settings = new SettingsViewModel(loader, new MacSettingsPlatform(loader.LoadLocal()), new AppKitDialogService(), new TimerSaveScheduler());
         _window = new SettingsWindow(_settings);
         NSApplication.SharedApplication.MainMenu = MainMenu.Build();

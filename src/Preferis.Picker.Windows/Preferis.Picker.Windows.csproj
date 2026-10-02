@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The Windows picker (docs/Design.md §9.2, docs/Platform.md §2.6): a WinUI 3 window that reads a PickerRequest from
+    stdin and writes a PickerResponse to stdout. Builds only on Windows. Unpackaged and self-contained, so it needs no
+    Windows App SDK runtime installed; NativeAOT for the startup time.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>Preferis.Picker.Windows</RootNamespace>
+    <AssemblyName>Preferis.Picker</AssemblyName>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!--
+      Despite the name, needed by unpackaged apps too: without it publish leaves out Preferis.Picker.pri, and the
+      controls lose their Fluent styles (microsoft/WindowsAppSDK#3451).
+    -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <SelfContained>true</SelfContained>
+    <PublishAot>true</PublishAot>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Main reads the request before any WinUI start-up cost, which the generated Main cannot do. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <Description>Preferis picker for Windows: asks which profile should open a URL.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The WinUI component alone: the Microsoft.WindowsAppSDK metapackage would add the AI, ML and Search runtimes to the self-contained output. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.9" />
+    <!-- WinUI 2.3.9 names InteractiveExperiences 2.1.8, which was never published; pin the next one (NU1603). -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Preferis.Core/Preferis.Core.csproj" />
+    <ProjectReference Include="../Preferis.Platform/Preferis.Platform.csproj" />
+  </ItemGroup>
+
+</Project>

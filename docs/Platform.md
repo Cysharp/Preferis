@@ -275,6 +275,10 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
   ルール / テスト)、28 px のページ見出しとその下に問題の件数、4 px 間隔のカード (左に名前と説明、右にコントロール)。
   Community Toolkit の `SettingsCard` は使わない (カードは Border と Grid で足り、外部の XAML コントロールを NativeAOT で検証する手間を避ける)。
   プロファイルとルールは左に一覧 (`ListPane`。ドラッグで並べ替え、下に + − ⋯)、右に選択中の項目の編集画面。
+- 狭いウィンドウでも編集画面に幅を残す: ナビゲーションは `PaneDisplayMode.Auto` で、幅が足りないとアイコンだけに畳み
+  (開くボタンはその時だけ出す)、一覧の幅は画面の 36 % (240〜320 DIP)。カードはコントロールの横に文字の幅が 200 DIP 残らない時、
+  コントロールを文字の下に回す (設定アプリの SettingsCard と同じ考え方)。既定のウィンドウ (1120 × 780 DIP) でも
+  プロファイルとルールの編集画面は幅 490 DIP ほどなので、入力欄のカードは折り返す。
 - 「+」のメニューは検出したブラウザーごとのサブメニュー (ブラウザー自体と各ブラウザープロファイル)。条件は
   `ConditionEditor` (Design.md §9.1)。幅が狭いときはパターンの入力欄を次の行に回す。
 - 自分と同じフォルダーに `Preferis.exe` があれば、それを登録先として状態を表示し、「既定にする」では
@@ -289,7 +293,8 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
   引数なしの起動は、新しいプロセスが前に出られるよう `AllowSetForegroundWindow(ASFW_ANY)` を呼んでから起動する。
 - `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で各ページ (とルール・プロファイル画面のいくつかの状態) を PNG に書き出して
   終了する。ウィンドウはアクティブにせず画面外に出し、`RenderTargetBitmap` で描く (Mica の代わりにテーマの背景色)。
-  `PREFERIS_SETTINGS_SNAPSHOT_URL`、`PREFERIS_SETTINGS_SNAPSHOT_APPEARANCE=dark` は macOS と同じ。チェックボックスの
+  大きさは通常の起動と同じ既定サイズ (DIP)。`PREFERIS_SETTINGS_SNAPSHOT_WIDTH=<DIP>` で幅を変えて狭いウィンドウを確かめられる
+  (最小幅は 900)。`PREFERIS_SETTINGS_SNAPSHOT_URL`、`PREFERIS_SETTINGS_SNAPSHOT_APPEARANCE=dark` は macOS と同じ。チェックボックスの
   チェックは `RenderTargetBitmap` では「−」に写る (実際の状態は UI Automation で確認した)。
 
 ## 3. macOS

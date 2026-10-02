@@ -52,7 +52,13 @@ internal static class Snapshots
             root.RequestedTheme = ElementTheme.Dark;
         }
         var appWindow = window.Window.AppWindow;
-        appWindow.MoveAndResize(new RectInt32(-32000, -32000, 1120, 780));
+        var size = window.PhysicalDefaultSize();
+        if (double.TryParse(Environment.GetEnvironmentVariable("PREFERIS_SETTINGS_SNAPSHOT_WIDTH"), System.Globalization.CultureInfo.InvariantCulture, out var width))
+        {
+            // Device independent pixels, like DefaultSize: for checking narrow windows.
+            size.Width = (int)(size.Width * width / SettingsWindow.DefaultSize.Width);
+        }
+        appWindow.MoveAndResize(new RectInt32(-32000, -32000, size.Width, size.Height));
         appWindow.Show(activateWindow: false);
 
         var index = 0;

@@ -45,15 +45,18 @@ internal sealed class SettingsWindow
         titleBar.Children.Add(new TextBlock { Text = Program.Title, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0) });
         Window.SetTitleBar(titleBar);
 
+        // Like the Settings app, the pane folds to its icons when the window is narrow, leaving the room to the page.
         _navigation = new NavigationView
         {
-            PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
+            PaneDisplayMode = NavigationViewPaneDisplayMode.Auto,
             IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
             IsSettingsVisible = false,
             IsPaneToggleButtonVisible = false,
             IsTitleBarAutoPaddingEnabled = false,
             OpenPaneLength = 260,
         };
+        // The button that opens a folded pane; an open pane has nothing to toggle.
+        _navigation.DisplayModeChanged += (_, e) => _navigation.IsPaneToggleButtonVisible = e.DisplayMode != NavigationViewDisplayMode.Expanded;
         _navigation.SelectionChanged += (_, e) =>
         {
             if (!_updatingNavigation && e.SelectedItem is NavigationViewItem { Tag: int index } && index < _settings.Pages.Count)
@@ -104,11 +107,20 @@ internal sealed class SettingsWindow
     /// <summary>The window's content, for snapshots.</summary>
     public Grid Root { get; }
 
+    /// <summary>The size the window opens with, in device independent pixels.</summary>
+    public static readonly (double Width, double Height) DefaultSize = (1120, 780);
+
     public void Show()
     {
-        var scale = Win32Scale();
-        Window.AppWindow.Resize(new SizeInt32((int)(1120 * scale), (int)(780 * scale)));
+        Window.AppWindow.Resize(PhysicalDefaultSize());
         Window.Activate();
+    }
+
+    /// <summary><see cref="DefaultSize"/> on the window's current display.</summary>
+    public SizeInt32 PhysicalDefaultSize()
+    {
+        var scale = Win32Scale();
+        return new SizeInt32((int)(DefaultSize.Width * scale), (int)(DefaultSize.Height * scale));
     }
 
     private double Win32Scale()

@@ -9,6 +9,7 @@ namespace Preferis.Settings.Windows.Pages;
 internal sealed class ProfilesPage : IPageView
 {
     private const double ListWidth = 320;
+    private const double MinListWidth = 240;
     private readonly ProfilesPageViewModel _page;
     private readonly Bindings _bindings = new();
     private readonly ListPane<ProfileViewModel> _list;
@@ -51,8 +52,11 @@ internal sealed class ProfilesPage : IPageView
     public static Grid Split(UIElement list, UIElement editor)
     {
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(ListWidth) });
+        var listColumn = new ColumnDefinition { Width = new GridLength(ListWidth) };
+        grid.ColumnDefinitions.Add(listColumn);
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = Ui.Star });
+        // A narrower list in a narrow window, so that the editor keeps room for its cards.
+        grid.SizeChanged += (_, e) => listColumn.Width = new GridLength(Math.Clamp(e.NewSize.Width * 0.36, MinListWidth, ListWidth));
         ((FrameworkElement)list).Margin = new Thickness(32, 0, 0, 24);
         grid.Children.Add(list);
         Grid.SetColumn((FrameworkElement)editor, 1);

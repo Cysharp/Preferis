@@ -86,7 +86,7 @@ internal static class Form
             title.TextWrapping = TextWrapping.Wrap;
             title.TextTrimming = TextTrimming.None;
         }
-        var texts = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center, MinWidth = 120 };
+        var texts = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
         texts.Children.Add(header);
         if (description is not null)
         {
@@ -101,13 +101,39 @@ internal static class Form
         columns.Add((texts, Ui.Star));
         if (control is not null)
         {
-            if (control is FrameworkElement element)
-            {
-                element.VerticalAlignment = VerticalAlignment.Center;
-            }
             columns.Add((control, Ui.Auto));
         }
-        return Box(Ui.Columns(16, [.. columns]));
+        var grid = Ui.Columns(16, [.. columns]);
+        if (control is FrameworkElement element)
+        {
+            element.VerticalAlignment = VerticalAlignment.Center;
+            WrapWhenNarrow(grid, texts, element);
+        }
+        return Box(grid);
+    }
+
+    /// <summary>
+    /// Like the Settings app in a narrow window: when the control would leave the text too little room (the buttons of the
+    /// default browser card squeezed its status to a sliver), the control moves below the text.
+    /// </summary>
+    private static void WrapWhenNarrow(Grid grid, FrameworkElement texts, FrameworkElement control)
+    {
+        const double MinTextWidth = 200;
+        var alignment = control.HorizontalAlignment;
+        var textColumn = Grid.GetColumn(texts);
+        var controlColumn = Grid.GetColumn(control);
+        grid.RowDefinitions.Add(new RowDefinition { Height = Ui.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = Ui.Auto });
+        grid.SizeChanged += (_, e) =>
+        {
+            // The text starts where its column does; everything right of it, the control and the spacing, is taken.
+            var left = texts.ActualOffset.X;
+            var below = e.NewSize.Width - left - control.DesiredSize.Width - grid.ColumnSpacing < MinTextWidth;
+            Grid.SetRow(control, below ? 1 : 0);
+            Grid.SetColumn(control, below ? textColumn : controlColumn);
+            control.HorizontalAlignment = below ? HorizontalAlignment.Left : alignment;
+            control.Margin = below ? new Thickness(0, 8, 0, 0) : new Thickness(0);
+        };
     }
 
     /// <summary>A card around content that takes the whole width (an editor, a list).</summary>

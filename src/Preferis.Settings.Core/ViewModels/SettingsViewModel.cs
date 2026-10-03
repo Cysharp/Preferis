@@ -217,7 +217,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>"Move to cloud storage": writes the configuration being edited (including edits still waiting) to <paramref name="target"/>.</summary>
-    /// <exception cref="IOException">Writing failed, or <c>config.json</c> changed elsewhere while edited here.</exception>
+    /// <exception cref="IOException">
+    /// Writing failed, or <c>config.json</c> changed elsewhere while edited here, or can no longer be read.
+    /// </exception>
     internal void Relocate(string target, bool overwrite)
     {
         // Under the lock, as saving is: a rule the Router remembered in between would otherwise stay in the old file, or
@@ -228,6 +230,12 @@ public sealed partial class SettingsViewModel : ObservableObject
             if (HasExternalChanges)
             {
                 throw new IOException(L("config.json changed on disk while it was being edited here. Reload or save first, then move it."));
+            }
+            // Read again, a file that became unreadable meanwhile shows as the default configuration: moving would write
+            // that in its place and delete it, which the page refuses for a file that was unreadable to begin with.
+            if (ConfigUnreadable)
+            {
+                throw new IOException(L("The current config.json cannot be read. Save a working configuration before moving it."));
             }
             _loader.RelocateConfig(Config, ConfigPath, target, overwrite);
         }
@@ -262,8 +270,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         try
         {
             // The Router remembers a choice by reading, changing and writing config.json under the same lock, so it
-            // cannot write between this comparison and the write below, which would replace its rule unseen.
-            using var exclusive = _loader.Lock();
+            // cannot write between this comparison and the write below, which would replace its rule unseen. Without
+            // edits of config.json there is no such write: local.json, this computer's own, is saved without waiting.
+            using var exclusive = configEdited ? _loader.Lock() : null;
             diskChanged = ReadDisk() != _diskText;
             // Only edits of config.json can conflict with the file on disk; local.json belongs to this machine alone and
             // is saved either way.

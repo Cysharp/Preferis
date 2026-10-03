@@ -103,6 +103,42 @@ public sealed class ConcurrentSaveTests : IDisposable
     }
 
     [Fact]
+    public void Moving_stops_when_the_file_can_no_longer_be_read()
+    {
+        var settings = _harness.WithSample().Create();
+        var cloud = Path.Combine(Directory.CreateDirectory(Path.Combine(_harness.Root, "Cloud")).FullName, "config.json");
+        // e.g. a sync client brought in a broken copy after the page checked, before the move took the lock: read again,
+        // it is an unreadable file shown as the default configuration, which must not replace it anywhere.
+        File.WriteAllText(_harness.Paths.DefaultConfigPath, "{ broken");
+
+        var failure = Assert.Throws<IOException>(() => settings.Relocate(cloud, overwrite: false));
+
+        Assert.Contains("cannot be read", failure.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(cloud));
+        Assert.Equal("{ broken", File.ReadAllText(_harness.Paths.DefaultConfigPath));
+        Assert.Equal(_harness.Paths.DefaultConfigPath, settings.ConfigPath);
+    }
+
+    [Fact]
+    public void Saving_only_local_json_does_not_wait_for_the_lock()
+    {
+        File.WriteAllText(_harness.Paths.DefaultConfigPath, SettingsHarness.SampleJson);
+        var settings = new SettingsViewModel(NewLoader(lockTimeout: TimeSpan.FromMilliseconds(100)), _harness.Platform, _harness.Dialogs, _harness.Saves);
+        settings.Profiles.Profiles.Single(p => p.Id == "edge").UsesLocalTarget = true;
+
+        // The lock orders writers of config.json; this computer's own file is no part of that.
+        using (NewLoader().Lock())
+        {
+            _harness.Saves.RunPending();
+        }
+
+        Assert.False(settings.IsDirty);
+        Assert.Null(settings.StatusMessage);
+        Assert.True(_harness.Loader.LoadLocal().ProfileTargets?.ContainsKey("edge"));
+        Assert.Equal(SettingsHarness.SampleJson, File.ReadAllText(_harness.Paths.DefaultConfigPath));
+    }
+
+    [Fact]
     public async Task A_save_that_cannot_take_the_lock_keeps_the_edits_and_says_why()
     {
         File.WriteAllText(_harness.Paths.DefaultConfigPath, SettingsHarness.SampleJson);

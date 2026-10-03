@@ -390,6 +390,7 @@ public static partial class SettingsText
         { "rewritten", "書き換え" },
         { "fell through", "次へ" },
         { "rerouted", "振り分け直し" },
+        { "re-evaluated", "再評価" },
         { "warning", "警告" },
         { "decision", "結果" },
         { "Launched", "起動" },

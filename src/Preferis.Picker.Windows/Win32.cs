@@ -6,10 +6,8 @@ namespace Preferis.Picker.Windows;
 internal static partial class Win32
 {
     private const int DwmwaTransitionsForceDisabled = 3;
+    private const int DwmwaCloak = 13;
     private const int DwmwaWindowCornerPreference = 33;
-    private const int GwlExStyle = -20;
-    private const nint WsExLayered = 0x80000;
-    private const uint LwaAlpha = 0x2;
     private const int DwmwcpRound = 2;
     private const uint WmNclButtonDown = 0xA1;
     private const int HtCaption = 2;
@@ -39,22 +37,15 @@ internal static partial class Win32
         DwmSetWindowAttribute(window, DwmwaWindowCornerPreference, ref preference, sizeof(int));
     }
 
-    /// <summary>Turns off the animations the system plays when the window is shown, moved into view and closed.</summary>
-    public static void DisableTransitions(IntPtr window)
+    /// <summary>
+    /// Keeps a shown window from being seen (DWM cloaking) and from being animated, or lets it be both again. For
+    /// laying the window out before it appears.
+    /// </summary>
+    public static void Conceal(IntPtr window, bool concealed)
     {
-        var disabled = 1;
-        DwmSetWindowAttribute(window, DwmwaTransitionsForceDisabled, ref disabled, sizeof(int));
-    }
-
-    /// <summary>The opacity of the whole window, 0 to 1 (a layered window's alpha).</summary>
-    public static void SetOpacity(IntPtr window, double opacity)
-    {
-        var style = GetWindowLongPtr(window, GwlExStyle);
-        if ((style & WsExLayered) == 0)
-        {
-            SetWindowLongPtr(window, GwlExStyle, style | WsExLayered);
-        }
-        SetLayeredWindowAttributes(window, 0, (byte)Math.Round(Math.Clamp(opacity, 0, 1) * 255), LwaAlpha);
+        var value = concealed ? 1 : 0;
+        DwmSetWindowAttribute(window, DwmwaCloak, ref value, sizeof(int));
+        DwmSetWindowAttribute(window, DwmwaTransitionsForceDisabled, ref value, sizeof(int));
     }
 
     /// <summary>Starts moving the window with the mouse, as if its title bar had been grabbed.</summary>
@@ -87,16 +78,6 @@ internal static partial class Win32
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool ReleaseCapture();
-
-    [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
-    private static partial nint GetWindowLongPtr(IntPtr window, int index);
-
-    [LibraryImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
-    private static partial nint SetWindowLongPtr(IntPtr window, int index, nint value);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool SetLayeredWindowAttributes(IntPtr window, uint key, byte alpha, uint flags);
 
     [LibraryImport("user32.dll", EntryPoint = "SendMessageW")]
     private static partial IntPtr SendMessage(IntPtr window, uint message, nint wParam, IntPtr lParam);

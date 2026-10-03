@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Preferis.Core.Hosting;
 using Preferis.Core.Profiles;
@@ -13,6 +14,8 @@ public sealed record ConfigLoadResult(PreferisConfig Config, LocalConfig Local, 
 /// <summary>Locates, reads and writes <c>local.json</c> and <c>config.json</c>.</summary>
 public sealed class ConfigLoader : IConfigStore
 {
+    private static readonly TimeSpan LockRetryInterval = TimeSpan.FromMilliseconds(20);
+
     private readonly ConfigPaths _paths;
     private readonly HostPlatform _platform;
     private readonly Func<string, string?> _getEnvironmentVariable;
@@ -34,7 +37,51 @@ public sealed class ConfigLoader : IConfigStore
 
     public ConfigPaths Paths => _paths;
 
+    /// <summary>
+    /// How long <see cref="Lock"/> waits for another process to release the lock. The holders read and write one small
+    /// file, so it is normally free within milliseconds; waiting longer would only hold up the URL being opened or the
+    /// settings window.
+    /// </summary>
+    public TimeSpan LockTimeout { get; init; } = TimeSpan.FromSeconds(3);
+
     public ConfigLoadResult Load() => Load(configPathOverride: null);
+
+    /// <summary>
+    /// Takes this machine's lock on the configuration, held until the result is disposed. Whoever reads
+    /// <c>config.json</c> to write it back changed (the Router remembering a choice, the settings UI saving its edits)
+    /// does both under it, so that nobody writes in between what the write would then replace. Writing atomically does
+    /// not prevent that: each writer replaces the whole file with what it read plus its own change.
+    /// </summary>
+    /// <remarks>
+    /// The lock is a file nobody else may open (<see cref="FileShare.None"/>). Windows refuses other opens with a
+    /// sharing violation; .NET on macOS takes <c>flock(LOCK_EX | LOCK_NB)</c>, which refuses other opens in this process
+    /// as well (the macOS Router routes the URLs of one Apple Event in parallel). The OS releases it with the process,
+    /// so a crash leaves no stale lock. It only orders the processes of this machine: a sync client, or Preferis on
+    /// another machine, may still replace <c>config.json</c> at any time (docs/Configuration.md §1.1).
+    /// </remarks>
+    /// <exception cref="IOException">The lock was not released within <see cref="LockTimeout"/>.</exception>
+    public IDisposable Lock()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(_paths.LockPath)!);
+        var waiting = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                return new FileStream(_paths.LockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            // Held elsewhere: a sharing violation (Windows) or EWOULDBLOCK (macOS), both a plain IOException. Its
+            // subclasses (a missing directory, a path too long) do not go away by waiting.
+            catch (IOException ex) when (ex.GetType() == typeof(IOException))
+            {
+                if (waiting.Elapsed >= LockTimeout)
+                {
+                    throw new IOException(L("The configuration is locked by another Preferis process ({0}).", _paths.LockPath), ex);
+                }
+                Thread.Sleep(LockRetryInterval);
+            }
+        }
+    }
 
     /// <summary>Reads <c>local.json</c> only (machine settings such as the log level). A broken or missing file yields defaults.</summary>
     public LocalConfig LoadLocal()

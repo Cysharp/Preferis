@@ -186,6 +186,14 @@ public sealed class RoutingService
 
     private void Remember(Context context, string profileId, string? ruleId)
     {
+        // Other Routers (on macOS also other URLs of this one) may be remembering, and the settings UI saving, right
+        // now: read, change and write under this machine's lock, or the last write would drop the others' changes.
+        using var exclusive = LockConfig(context);
+        if (exclusive is null)
+        {
+            return;
+        }
+
         // The picker may have been open for minutes: add the rule to the file as it is now, so that changes saved
         // meanwhile (settings UI, another picker) are kept rather than replaced by the copy loaded before.
         var current = _services.Config.Load();
@@ -204,6 +212,21 @@ public sealed class RoutingService
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Log(LogLevel.Error, $"Could not save the remembered rule: {ex.Message}");
+        }
+    }
+
+    /// <summary>The lock for <see cref="Remember"/>, or null (logged) when another process holds it too long.</summary>
+    private IDisposable? LockConfig(Context context)
+    {
+        try
+        {
+            return _services.Config.Lock();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The URL still opens: the picker asks again next time, while waiting longer would hold up the browser.
+            Log(LogLevel.Error, $"Not remembering '{context.Url.Host}': {ex.Message}");
+            return null;
         }
     }
 

@@ -217,9 +217,20 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>"Move to cloud storage": writes the configuration being edited (including edits still waiting) to <paramref name="target"/>.</summary>
+    /// <exception cref="IOException">Writing failed, or <c>config.json</c> changed elsewhere while edited here.</exception>
     internal void Relocate(string target, bool overwrite)
     {
-        _loader.RelocateConfig(Config, ConfigPath, target, overwrite);
+        // Under the lock, as saving is: a rule the Router remembered in between would otherwise stay in the old file, or
+        // bring it back after the move deleted it. The page checked for changes before asking, maybe a while ago.
+        using (_loader.Lock())
+        {
+            CheckForExternalChanges();
+            if (HasExternalChanges)
+            {
+                throw new IOException(L("config.json changed on disk while it was being edited here. Reload or save first, then move it."));
+            }
+            _loader.RelocateConfig(Config, ConfigPath, target, overwrite);
+        }
         var json = ConfigSerializer.Serialize(Config);
         _savedConfigJson = json;
         _diskText = json;
@@ -246,24 +257,28 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         var configJson = ConfigSerializer.Serialize(Config);
         var configEdited = configJson != _savedConfigJson;
-        var diskChanged = ReadDisk() != _diskText;
-        // Only edits of config.json can conflict with the file on disk; local.json belongs to this machine alone and
-        // is saved either way.
+        bool diskChanged;
         var holdConfig = false;
-        if (configEdited && !force)
-        {
-            if (diskChanged)
-            {
-                HasExternalChanges = holdConfig = true;
-            }
-            else if (ConfigUnreadable)
-            {
-                IsHoldingEditsForUnreadableFile = holdConfig = true;
-            }
-        }
-
         try
         {
+            // The Router remembers a choice by reading, changing and writing config.json under the same lock, so it
+            // cannot write between this comparison and the write below, which would replace its rule unseen.
+            using var exclusive = _loader.Lock();
+            diskChanged = ReadDisk() != _diskText;
+            // Only edits of config.json can conflict with the file on disk; local.json belongs to this machine alone and
+            // is saved either way.
+            if (configEdited && !force)
+            {
+                if (diskChanged)
+                {
+                    HasExternalChanges = holdConfig = true;
+                }
+                else if (ConfigUnreadable)
+                {
+                    IsHoldingEditsForUnreadableFile = holdConfig = true;
+                }
+            }
+
             if (configEdited && !holdConfig)
             {
                 _loader.Save(Config, ConfigPath);
@@ -283,6 +298,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // Also when another process held the lock too long. The edits stay waiting (IsDirty) and go with the next
+            // edit, or when the window closes.
             StatusMessage = L("Could not save: {0}", ex.Message);
             return false;
         }

@@ -11,6 +11,13 @@ public sealed record ConfigPaths(string LocalConfigPath, string DefaultConfigPat
     /// <summary>The opt-in routing history (contains URLs, so it stays in the local log directory).</summary>
     public string HistoryPath => Path.Combine(LogDirectory, "history.jsonl");
 
+    /// <summary>
+    /// The lock file of <see cref="ConfigLoader.Lock"/>. It sits with <c>local.json</c>, which is never synced, rather
+    /// than with <c>config.json</c>: in cloud storage the lock file would be uploaded and handed to other machines, to
+    /// which a lock on this one means nothing.
+    /// </summary>
+    public string LockPath => Path.Combine(Path.GetDirectoryName(LocalConfigPath)!, "config.lock");
+
     public static ConfigPaths ForWindows(string localAppData, string roamingAppData) => new(
         Path.Combine(localAppData, AppFolder, "local.json"),
         Path.Combine(roamingAppData, AppFolder, "config.json"),

@@ -264,8 +264,10 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.Equal("Theirs", settings.Profiles.Profiles[1].Name);
         Assert.Empty(checkedPatterns);
 
+        // Typing into the pattern of the rule's one row, as both condition editors report it.
         rule = settings.Rules.Rules.Single(r => r.Id == "ms-login");
-        Assert.IsType<LeafConditionViewModel>(rule.Condition).Pattern = @"^login\.(";
+        var row = Assert.IsType<ComparisonPredicate>(Assert.Single(ConditionPredicates.ToEditor(rule.Model.Condition)!.Children));
+        rule.SetCondition(ConditionPredicates.FromEditor(new CompoundPredicate(CompoundKind.All, [row with { Pattern = @"^login\.(" }]), rule.Model.Condition));
 
         Assert.Equal([@"^login\.("], checkedPatterns);
         Assert.Contains(@"^login\.(", Assert.Single(rule.Issues).Message, StringComparison.Ordinal);

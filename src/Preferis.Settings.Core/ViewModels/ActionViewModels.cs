@@ -109,9 +109,9 @@ public sealed partial class ActionListViewModel : ObservableObject
     {
         OpenAction open => new OpenActionViewModel(this, open),
         RewriteAction rewrite => new RewriteActionViewModel(this, rewrite),
-        SystemAction => new SimpleActionViewModel(this, ActionKind.System, L("Hand to the system default"), L("Lets the OS default handler open the URL (never Preferis itself).")),
-        NoneAction => new SimpleActionViewModel(this, ActionKind.None, L("Do nothing"), L("The URL is not opened.")),
-        RerouteAction => new SimpleActionViewModel(this, ActionKind.Reroute, L("Route again"), L("Starts over from the first rule with the current (rewritten) URL.")),
+        SystemAction => new SimpleActionViewModel(this, action, L("Hand to the system default"), L("Lets the OS default handler open the URL (never Preferis itself).")),
+        NoneAction => new SimpleActionViewModel(this, action, L("Do nothing"), L("The URL is not opened.")),
+        RerouteAction => new SimpleActionViewModel(this, action, L("Route again"), L("Starts over from the first rule with the current (rewritten) URL.")),
         UnknownAction unknown => new UnknownActionViewModel(this, unknown),
         _ => throw new ArgumentOutOfRangeException(nameof(action), action.Type, "Unsupported action."),
     };
@@ -119,12 +119,19 @@ public sealed partial class ActionListViewModel : ObservableObject
 
 public abstract partial class ActionViewModel : ObservableObject
 {
-    protected ActionViewModel(ActionListViewModel list)
+    protected ActionViewModel(ActionListViewModel list, RoutingAction model)
     {
         List = list;
+        ExtensionData = model.ExtensionData;
     }
 
     protected ActionListViewModel List { get; }
+
+    /// <summary>
+    /// What a newer Preferis added to the action (docs/Configuration.md §4). Every edit, even one elsewhere in the list,
+    /// rebuilds the list from <see cref="ToModel"/>, so a <see cref="ToModel"/> that builds a new action must hand these on.
+    /// </summary>
+    protected Dictionary<string, JsonElement>? ExtensionData { get; }
 
     public abstract string Title { get; }
 
@@ -199,7 +206,7 @@ public sealed class OpenActionViewModel : ActionViewModel
     private readonly bool _ready;
 
     public OpenActionViewModel(ActionListViewModel list, OpenAction model)
-        : base(list)
+        : base(list, model)
     {
         var stored = model.Profiles ?? [];
         var config = list.Settings.Config;
@@ -219,7 +226,7 @@ public sealed class OpenActionViewModel : ActionViewModel
     public override RoutingAction ToModel()
     {
         var ids = Profiles.Where(p => p.IsSelected).Select(p => p.Id).ToList();
-        return new OpenAction { Profiles = ids.Count == 0 ? null : ids };
+        return new OpenAction { Profiles = ids.Count == 0 ? null : ids, ExtensionData = ExtensionData };
     }
 
     internal void Toggled(ProfileToggleViewModel toggle)
@@ -238,7 +245,7 @@ public sealed partial class RewriteActionViewModel : ActionViewModel
     private readonly bool _ready;
 
     public RewriteActionViewModel(ActionListViewModel list, RewriteAction model)
-        : base(list)
+        : base(list, model)
     {
         Mode = model.Mode;
         Pattern = model.Pattern ?? "";
@@ -289,9 +296,10 @@ public sealed partial class RewriteActionViewModel : ActionViewModel
 
     partial void OnParameterChanged(string value) => Write();
 
+    // Switching the mode keeps ExtensionData: the action is still a rewrite.
     public override RoutingAction ToModel() => IsRegex
-        ? new RewriteAction { Mode = RewriteMode.Regex, Pattern = Pattern, Replacement = Replacement }
-        : new RewriteAction { Mode = RewriteMode.QueryParameter, Parameter = Parameter };
+        ? new RewriteAction { Mode = RewriteMode.Regex, Pattern = Pattern, Replacement = Replacement, ExtensionData = ExtensionData }
+        : new RewriteAction { Mode = RewriteMode.QueryParameter, Parameter = Parameter, ExtensionData = ExtensionData };
 
     private void Write()
     {
@@ -305,12 +313,12 @@ public sealed partial class RewriteActionViewModel : ActionViewModel
 /// <summary><c>system</c>, <c>none</c> and <c>reroute</c>: nothing to configure.</summary>
 public sealed class SimpleActionViewModel : ActionViewModel
 {
-    private readonly ActionKind _kind;
+    private readonly RoutingAction _model;
 
-    public SimpleActionViewModel(ActionListViewModel list, ActionKind kind, string title, string description)
-        : base(list)
+    public SimpleActionViewModel(ActionListViewModel list, RoutingAction model, string title, string description)
+        : base(list, model)
     {
-        _kind = kind;
+        _model = model;
         Title = title;
         Description = description;
     }
@@ -319,12 +327,8 @@ public sealed class SimpleActionViewModel : ActionViewModel
 
     public string Description { get; }
 
-    public override RoutingAction ToModel() => _kind switch
-    {
-        ActionKind.System => new SystemAction(),
-        ActionKind.None => new NoneAction(),
-        _ => new RerouteAction(),
-    };
+    // Nothing here changes the action, so it is stored again as it is, with whatever a newer Preferis added to it.
+    public override RoutingAction ToModel() => _model;
 }
 
 /// <summary>An action written by a newer Preferis. Shown read-only and saved back unchanged.</summary>
@@ -333,7 +337,7 @@ public sealed class UnknownActionViewModel : ActionViewModel
     private readonly UnknownAction _model;
 
     public UnknownActionViewModel(ActionListViewModel list, UnknownAction model)
-        : base(list)
+        : base(list, model)
     {
         _model = model;
     }

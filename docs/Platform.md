@@ -643,7 +643,7 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 | 項目 | 修正前 | 修正後 |
 | --- | --- | --- |
 | ルール名の変更 (1 回、10 回の平均) | 690〜870 ms、986.6〜986.9 MiB | 1.1〜1.4 ms (中央値 0.9〜1.1 ms)、0.31 MiB |
-| 条件のパターンの入力 (`LeafConditionViewModel`、1 文字) | 0.6〜1.0 秒、987 MiB | 1.2〜1.4 ms、0.38 MiB |
+| 条件のパターンの入力 (当時の `LeafConditionViewModel`。この ViewModel は #7 で削除、1 文字) | 0.6〜1.0 秒、987 MiB | 1.2〜1.4 ms、0.38 MiB |
 | 条件エディターの 1 行の入力 (`RuleViewModel.SetCondition`。WinUI の行と NSPredicateEditor の経路) | 0.75〜0.95 秒、987 MiB | 1.3〜2.1 ms、0.48 MiB |
 | `SettingsViewModel` の作成 (読み込みと最初の検証) | 1.0〜1.5 秒、990 MiB | 63〜87 ms、8.0 MiB |
 | 保存 (保存後の検証を含む) | 0.6〜1.1 秒、988〜989 MiB | 4.7〜7.6 ms、1.8 MiB |

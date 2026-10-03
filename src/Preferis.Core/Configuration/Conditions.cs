@@ -8,6 +8,13 @@ public abstract class Condition
 {
     [JsonPropertyOrder(-10)]
     public abstract string Type { get; }
+
+    /// <summary>
+    /// Properties a newer Preferis added to a known type, written back as they are (docs/Configuration.md §4).
+    /// Unused by <see cref="UnknownCondition"/>, whose <see cref="UnknownCondition.Raw"/> already holds the whole object.
+    /// </summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 public sealed class AndCondition : Condition

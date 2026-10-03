@@ -13,6 +13,13 @@ public abstract class RoutingAction
     /// <remarks>The source generator does not inherit <see cref="JsonIgnoreAttribute"/> from this declaration, so every override repeats it.</remarks>
     [JsonIgnore]
     public abstract bool IsTerminal { get; }
+
+    /// <summary>
+    /// Properties a newer Preferis added to a known type, written back as they are (docs/Configuration.md §4).
+    /// Unused by <see cref="UnknownAction"/>, whose <see cref="UnknownAction.Raw"/> already holds the whole object.
+    /// </summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 }
 
 /// <summary>Open with the listed profiles: one launches directly, several show the picker, none means the default profile.</summary>

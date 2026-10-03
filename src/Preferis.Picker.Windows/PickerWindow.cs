@@ -72,7 +72,8 @@ internal sealed class PickerWindow
 
         // No title bar, like Windows 11's own app chooser. Changing the frame costs about 65 ms however it is done (also
         // with ExtendsContentIntoTitleBar), a quarter of the start-up; docs/Platform.md §5.
-        _window = new Window { Title = "Preferis" };
+        // Mica behind everything, like the settings and other WinUI windows.
+        _window = new Window { Title = "Preferis", SystemBackdrop = new MicaBackdrop() };
         var presenter = OverlappedPresenter.CreateForDialog();
         presenter.IsResizable = false;
         presenter.IsAlwaysOnTop = true;
@@ -89,13 +90,14 @@ internal sealed class PickerWindow
         };
         Win32.RoundCorners(Handle);
 
-        // Laid out like a ContentDialog, with its colors: the content on the lighter top overlay, a separator, and the
-        // buttons on the dialog background below.
+        // Laid out like a ContentDialog: the content on a lighter layer, a separator, and the buttons below. The dialog's
+        // own colors are opaque and would hide the Mica, so the content lies on the translucent layer of Windows 11's
+        // Mica windows (as the settings' cards do) and the buttons on the Mica itself.
         var content = new Grid
         {
             Padding = new Thickness(DialogPadding, 20, DialogPadding, 16),
             RowSpacing = 12,
-            Background = Brush("ContentDialogTopOverlay"),
+            Background = Brush("LayerFillColorDefaultBrush"),
             BorderBrush = Brush("ContentDialogSeparatorBorderBrush"),
             BorderThickness = new Thickness(0, 0, 0, 1),
         };
@@ -148,7 +150,7 @@ internal sealed class PickerWindow
         var footer = Columns(8, (_open, new GridLength(1, GridUnitType.Star)), (cancel, new GridLength(1, GridUnitType.Star)));
         footer.Padding = new Thickness(DialogPadding);
 
-        _root = new Grid { Background = Brush("ContentDialogBackground") };
+        _root = new Grid();
         if (UiLanguages.Current == UiLanguage.Japanese)
         {
             // Text falls back to the fonts of this language: kanji in a Chinese font on an English Windows otherwise.
@@ -374,6 +376,9 @@ internal sealed class PickerWindow
     /// <summary>Developer aid: writes the window's content as PNG, for checking the layout without a screenshot.</summary>
     private async Task Snapshot(string path)
     {
+        // The compositor draws the Mica, which a render of the content does not include: the theme's plain background
+        // stands in for it, as in the settings' snapshots.
+        _root.Background = Brush("SolidBackgroundFillColorBaseBrush");
         var bitmap = new RenderTargetBitmap();
         await bitmap.RenderAsync(_root);
         var pixels = await bitmap.GetPixelsAsync();

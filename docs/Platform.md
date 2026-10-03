@@ -241,12 +241,14 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
   生成する。`CsWinRTRcwFactoryFallbackGeneratorForceOptIn` では直らなかった。デバッグビルド (JIT) では起きないので、
   WinUI のプログラムは AOT で publish したもので確認する。
 - 見た目: タイトルバーのない角丸のウィンドウ (`OverlappedPresenter.CreateForDialog` + `SetBorderAndTitleBar(true, false)`、
-  角は `DWMWA_WINDOW_CORNER_PREFERENCE`)、最前面。中身は ContentDialog と同じ構成と色: 内容は `ContentDialogTopOverlay` の
-  上に余白 24 px で置き、`ContentDialogSeparatorBorderBrush` の線で区切って、フッター (`ContentDialogBackground`) にボタンを
-  等幅で並べる。ボタンは Windows の慣習どおり主アクションが左で、Open (アクセント)、Cancel の順。内容はヘッダー (リンクの
+  角は `DWMWA_WINDOW_CORNER_PREFERENCE`)、最前面、背景は Mica (`MicaBackdrop`)。中身は ContentDialog と同じ構成: 内容は
+  明るいレイヤーの上に余白 24 px で置き、`ContentDialogSeparatorBorderBrush` の線で区切って、フッターにボタンを等幅で並べる。
+  ContentDialog の色 (`ContentDialogTopOverlay` / `ContentDialogBackground`) は不透明で Mica を隠すため、内容は Windows 11 の
+  Mica のウィンドウの半透明のレイヤー (`LayerFillColorDefaultBrush`。設定 UI のカードと同じ) に置き、フッターは Mica のまま
+  にする (上が明るく下が素材の、ダイアログと同じ階層)。ボタンは Windows の慣習どおり主アクションが左で、Open (アクセント)、Cancel の順。内容はヘッダー (リンクの
   アイコン、ホスト 20 px、URL 全体、コピーボタン。ドラッグすると移動、`WM_NCLBUTTONDOWN`)、警告 (`message`。警告の `InfoBar` と同じ見た目の枠)、
-  候補の `ListView` (アイコン、名前、2 行目、キーキャップ風の番号)、「記憶する」。ダイアログの配色は不透明なので、
-  背景のマテリアル (以前はアクリル) は敷かない。
+  候補の `ListView` (アイコン、名前、2 行目、キーキャップ風の番号)、「記憶する」。スナップショット
+  (`PREFERIS_PICKER_SNAPSHOT`) は Mica を描けないため、テーマの背景色で代える。
 - 普通のウィンドウと同じく、最終的な位置と大きさにしてから 1 回だけ `Activate` で表示し、表示と終了はシステムの
   アニメーションのまま。ポインターの近く (横はポインターの中央、上端はポインターの少し上) か画面中央の作業領域内に置く。
   倍率はその位置のモニターの DPI。
@@ -682,6 +684,7 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 | ピッカー単体、ContentDialog 形式に変えた後 (同じリクエスト、10 回) | shown 282〜302 ms、中央値 298 ms。初回 2.7 秒。設定 UI が起動したままなど負荷の違う時に測ったため、上の行との差 (約 40 ms) が変更によるものかは切り分けていない |
 | ピッカーの内訳 | ウィンドウ作成 25〜30 ms、タイトルバーを消すフレーム変更 (`SetBorderAndTitleBar` でも `ExtendsContentIntoTitleBar` でも) 65〜70 ms、コントロールの初回生成 55〜60 ms、配置まで 35〜40 ms。アイコンと Local State の読み取り約 60 ms はバックグラウンドで並行 |
 | ピッカー単体、最初から最終的な大きさで表示する形にした後 (2 候補、3 回、リモートデスクトップのセッション) | loaded 235〜241 ms、shown 236〜242 ms。画面外に表示して移す形 (shown 310〜330 ms) より速い: 配置のための 2 回目の表示が無い |
+| ピッカー単体、背景を Mica にした前後 (2 候補、4 回ずつ、同じセッションで続けて、2026-10-03) | shown: 前 300〜359 ms、後 298〜390 ms (後の 390 ms は 1 回目)。差は揺れの範囲。画面のキャプチャ (ダークテーマ) でフッターが `#202020` → `#1C2122` (壁紙の色の乗った Mica)、内容が `#2B2B2B` → `#262829` (Mica の上のレイヤー) |
 | Router → ピッカー (シェルから `Preferis.exe <url>`、3 候補、自動選択 1 秒) | Router 起動 → ピッカー表示 269〜273 ms。ピッカーは "not in front" (Router がバックグラウンドのターミナルから起動されたため) |
 | 設定 UI のテストページ「Open」(UI Automation で操作) | Router → ピッカー → 自動選択 → 起動まで 1.65 秒 (うち 1 秒が自動選択の待ち) |
 | Router が起動したプログラムが標準出力を継承した時の読み終わり | 修正前 8.15 秒 (起動したプログラムの終了まで)、修正後 0.14 秒 |

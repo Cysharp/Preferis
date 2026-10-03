@@ -61,8 +61,29 @@ public sealed class Router
     /// <summary>Runs through the rules once. Returns a decision, or a reroute request (Decision == null).</summary>
     private (RoutingDecision? Decision, string? RuleId) EvaluateOnce(ref RoutingUrl current, List<TraceEntry> trace)
     {
-        foreach (var rule in _config.Rules)
+        var (outcome, ruleId) = EvaluateRules(_config.Rules.Count, ref current, trace);
+        if (outcome is ActionOutcome.FallThrough)
         {
+            trace.Add(new TraceEntry(TraceKind.CatchAll, null, L("No rule matched; applying the catch-all rule")));
+            var arrived = current;
+            outcome = ExecuteActions(_config.CatchAll.Actions, null, ref current, trace) switch
+            {
+                // A catch-all that does not terminate has nowhere to fall through to: open the default profile.
+                ActionOutcome.FallThrough => new ActionOutcome.Decided(Open(null, null, current, trace)),
+                var terminal => terminal,
+            };
+            (outcome, ruleId) = BeforeThePicker(outcome, null, _config.Rules.Count, arrived, ref current, trace);
+        }
+
+        return outcome is ActionOutcome.Decided(var decision) ? (decision, ruleId) : (null, ruleId);
+    }
+
+    /// <summary>Evaluates the first <paramref name="count"/> rules in order. FallThrough when none of them decided.</summary>
+    private (ActionOutcome Outcome, string? RuleId) EvaluateRules(int count, ref RoutingUrl current, List<TraceEntry> trace)
+    {
+        for (var index = 0; index < count; index++)
+        {
+            var rule = _config.Rules[index];
             if (!rule.Enabled)
             {
                 trace.Add(new TraceEntry(TraceKind.RuleDisabled, rule.Id, L("Disabled")));
@@ -76,27 +97,49 @@ public sealed class Router
             }
 
             trace.Add(new TraceEntry(TraceKind.RuleMatched, rule.Id, L("Matched {0}", current.AbsoluteUri)));
-            var outcome = ExecuteActions(rule.Actions, rule.Id, ref current, trace);
-            switch (outcome)
+            var matched = current;
+            var (outcome, ruleId) = BeforeThePicker(ExecuteActions(rule.Actions, rule.Id, ref current, trace), rule.Id, index, matched, ref current, trace);
+            if (outcome is not ActionOutcome.FallThrough)
             {
-                case ActionOutcome.Decided(var decision):
-                    return (decision, rule.Id);
-                case ActionOutcome.Reroute:
-                    return (null, rule.Id);
-                case ActionOutcome.FallThrough:
-                    trace.Add(new TraceEntry(TraceKind.FellThrough, rule.Id, L("No terminal action; continuing with {0}", current.AbsoluteUri)));
-                    continue;
+                return (outcome, ruleId);
             }
+            trace.Add(new TraceEntry(TraceKind.FellThrough, rule.Id, L("No terminal action; continuing with {0}", current.AbsoluteUri)));
         }
 
-        trace.Add(new TraceEntry(TraceKind.CatchAll, null, L("No rule matched; applying the catch-all rule")));
-        return ExecuteActions(_config.CatchAll.Actions, null, ref current, trace) switch
+        return (ActionOutcome.FallThrough.Instance, null);
+    }
+
+    /// <summary>
+    /// When an open would show the picker for a URL that its own rule rewrote, the rules above that rule first decide with
+    /// the rewritten URL, as they would have had it come in rewritten; the picker shows only when none of them does.
+    /// A choice remembered in the picker becomes a rule just above the one that showed it (docs/Design.md §9.2), and
+    /// without this it would only ever be evaluated with the URL before the rewrite, so the picker would show every time.
+    /// </summary>
+    /// <param name="above">How many rules come before the one that opened: all of them for the catch-all.</param>
+    /// <param name="matched">The URL the rule's actions started with.</param>
+    private (ActionOutcome Outcome, string? RuleId) BeforeThePicker(ActionOutcome outcome, string? ruleId, int above, RoutingUrl matched, ref RoutingUrl current, List<TraceEntry> trace)
+    {
+        // Without a rewrite of its own, a choice remembered just above this rule is already evaluated with this very URL.
+        // One profile, or none, shows no picker.
+        if (outcome is not ActionOutcome.Decided { Decision: RoutingDecision.Open { ProfileIds.Count: > 1 } } || current.AbsoluteUri == matched.AbsoluteUri)
         {
-            ActionOutcome.Decided(var decision) => (decision, null),
-            ActionOutcome.Reroute => (null, null),
-            // A catch-all that does not terminate has nowhere to fall through to: open the default profile.
-            _ => (Open(null, null, current, trace), null),
-        };
+            return (outcome, ruleId);
+        }
+
+        trace.Add(new TraceEntry(TraceKind.Reevaluated, ruleId, L("Evaluating the rules above with {0} before showing the picker", current.AbsoluteUri)));
+        // On a copy: when none of them decides, the picker shows the URL as this rule left it, not as a rule above that
+        // only rewrote left it.
+        var url = current;
+        var (decided, decidedBy) = EvaluateRules(above, ref url, trace);
+        if (decided is ActionOutcome.FallThrough)
+        {
+            trace.Add(new TraceEntry(TraceKind.Reevaluated, ruleId, L("No rule above decided; showing the picker")));
+            return (outcome, ruleId);
+        }
+
+        // A reroute from above starts over with the URL it was given, within the same hop and loop limits.
+        current = url;
+        return (decided, decidedBy);
     }
 
     private ActionOutcome ExecuteActions(List<RoutingAction> actions, string? ruleId, ref RoutingUrl current, List<TraceEntry> trace)

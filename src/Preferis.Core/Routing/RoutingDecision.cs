@@ -38,6 +38,9 @@ public enum TraceKind
     Rewritten,
     FellThrough,
     Rerouted,
+
+    /// <summary>Before the picker for a URL its own rule rewrote, the rules above are evaluated with it (docs/Design.md §6.1).</summary>
+    Reevaluated,
     CatchAll,
     Warning,
     Decision,

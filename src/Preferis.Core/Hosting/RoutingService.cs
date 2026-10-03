@@ -195,11 +195,19 @@ public sealed class RoutingService
             return;
         }
 
+        // The picker answers with the id the profile had when it was shown. If it was renamed meanwhile, the rule must use
+        // the id it has now; if it was deleted, a rule would name no profile and quietly send this host elsewhere.
+        if (ProfileIds.Current(current.Config, profileId) is not { } currentId)
+        {
+            Log(LogLevel.Warning, $"Not remembering '{context.Url.Host}': the profile '{profileId}' no longer exists, or which profile has that id now cannot be told.");
+            return;
+        }
+
         try
         {
-            RememberedRule.Insert(current.Config, RememberedRule.Create(context.Url, profileId), ruleId);
+            RememberedRule.Insert(current.Config, RememberedRule.Create(context.Url, currentId), ruleId);
             _services.Config.Save(current.Config, current.ConfigPath);
-            Log(LogLevel.Info, $"Remembered '{context.Url.Host}' -> {Describe(context, profileId)}.");
+            Log(LogLevel.Info, $"Remembered '{context.Url.Host}' -> {ProfileNames.Describe(current.Config, currentId)}.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

@@ -175,6 +175,54 @@ public class ConfigSerializerTests
         Assert.Equal(5, reparsed.GetProperty("rules")[0].GetProperty("priority").GetInt32());
     }
 
+    [Theory]
+    [InlineData("""{ "type": "and", "conditions": [ { "type": "host", "match": "equals", "pattern": "a" } ], "futureSetting": { "level": 2 } }""")]
+    [InlineData("""{ "type": "or", "conditions": [ { "type": "host", "match": "equals", "pattern": "a" } ], "futureSetting": { "level": 2 } }""")]
+    [InlineData("""{ "type": "not", "condition": { "type": "host", "match": "equals", "pattern": "a" }, "futureSetting": { "level": 2 } }""")]
+    [InlineData("""{ "futureSetting": { "level": 2 }, "type": "host", "match": "equals", "pattern": "a" }""")]
+    [InlineData("""{ "type": "url", "match": "startsWith", "pattern": "https://a/", "ignoreCase": false, "futureSetting": { "level": 2 } }""")]
+    public void Unknown_properties_of_known_conditions_survive_a_round_trip(string condition)
+    {
+        var json = $$"""
+            { "version": 1, "profiles": [], "catchAll": { "actions": [ { "type": "none" } ] },
+              "rules": [ { "id": "r", "name": "r", "condition": {{condition}}, "actions": [ { "type": "none" } ] } ] }
+            """;
+        using var original = JsonDocument.Parse(condition);
+
+        var config = ConfigSerializer.Deserialize(json);
+        using var reparsed = JsonDocument.Parse(ConfigSerializer.Serialize(config));
+        var written = reparsed.RootElement.GetProperty("rules")[0].GetProperty("condition");
+
+        Assert.Equal(["futureSetting"], config.Rules[0].Condition!.ExtensionData?.Keys);
+        Assert.Equal(2, written.GetProperty("futureSetting").GetProperty("level").GetInt32());
+        Assert.Equal(original.RootElement.GetProperty("type").GetString(), Assert.Single(written.EnumerateObject(), p => p.Name == "type").Value.GetString());
+    }
+
+    [Theory]
+    [InlineData("""{ "type": "open", "profiles": ["edge"], "futureSetting": { "level": 2 } }""")]
+    [InlineData("""{ "type": "system", "futureSetting": { "level": 2 } }""")]
+    [InlineData("""{ "type": "none", "futureSetting": { "level": 2 } }""")]
+    [InlineData("""{ "type": "rewrite", "mode": "queryParameter", "parameter": "url", "futureSetting": { "level": 2 } }""")]
+    [InlineData("""{ "futureSetting": { "level": 2 }, "type": "reroute" }""")]
+    public void Unknown_properties_of_known_actions_survive_a_round_trip(string action)
+    {
+        var json = $$"""
+            { "version": 1, "profiles": [], "catchAll": { "actions": [ {{action}} ] },
+              "rules": [ { "id": "r", "name": "r", "condition": { "type": "host", "match": "equals", "pattern": "a" }, "actions": [ {{action}} ] } ] }
+            """;
+        using var original = JsonDocument.Parse(action);
+
+        var config = ConfigSerializer.Deserialize(json);
+        using var reparsed = JsonDocument.Parse(ConfigSerializer.Serialize(config));
+
+        Assert.Equal(["futureSetting"], config.CatchAll.Actions[0].ExtensionData?.Keys);
+        foreach (var written in new[] { reparsed.RootElement.GetProperty("catchAll").GetProperty("actions")[0], reparsed.RootElement.GetProperty("rules")[0].GetProperty("actions")[0] })
+        {
+            Assert.Equal(2, written.GetProperty("futureSetting").GetProperty("level").GetInt32());
+            Assert.Equal(original.RootElement.GetProperty("type").GetString(), Assert.Single(written.EnumerateObject(), p => p.Name == "type").Value.GetString());
+        }
+    }
+
     [Fact]
     public void Serialization_is_stable_after_one_normalization()
     {

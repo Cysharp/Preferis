@@ -231,9 +231,28 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>"Move to cloud storage": writes the configuration being edited (including edits still waiting) to <paramref name="target"/>.</summary>
+    /// <exception cref="IOException">
+    /// Writing failed, or <c>config.json</c> changed elsewhere while edited here, or can no longer be read.
+    /// </exception>
     internal void Relocate(string target, bool overwrite)
     {
-        _loader.RelocateConfig(Config, ConfigPath, target, overwrite);
+        // Under the lock, as saving is: a rule the Router remembered in between would otherwise stay in the old file, or
+        // bring it back after the move deleted it. The page checked for changes before asking, maybe a while ago.
+        using (_loader.Lock())
+        {
+            CheckForExternalChanges();
+            if (HasExternalChanges)
+            {
+                throw new IOException(L("config.json changed on disk while it was being edited here. Reload or save first, then move it."));
+            }
+            // Read again, a file that became unreadable meanwhile shows as the default configuration: moving would write
+            // that in its place and delete it, which the page refuses for a file that was unreadable to begin with.
+            if (ConfigUnreadable)
+            {
+                throw new IOException(L("The current config.json cannot be read. Save a working configuration before moving it."));
+            }
+            _loader.RelocateConfig(Config, ConfigPath, target, overwrite);
+        }
         var json = ConfigSerializer.Serialize(Config);
         _savedConfigJson = json;
         _diskText = json;
@@ -260,24 +279,29 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         var configJson = ConfigSerializer.Serialize(Config);
         var configEdited = configJson != _savedConfigJson;
-        var diskChanged = ReadDisk() != _diskText;
-        // Only edits of config.json can conflict with the file on disk; local.json belongs to this machine alone and
-        // is saved either way.
+        bool diskChanged;
         var holdConfig = false;
-        if (configEdited && !force)
-        {
-            if (diskChanged)
-            {
-                HasExternalChanges = holdConfig = true;
-            }
-            else if (ConfigUnreadable)
-            {
-                IsHoldingEditsForUnreadableFile = holdConfig = true;
-            }
-        }
-
         try
         {
+            // The Router remembers a choice by reading, changing and writing config.json under the same lock, so it
+            // cannot write between this comparison and the write below, which would replace its rule unseen. Without
+            // edits of config.json there is no such write: local.json, this computer's own, is saved without waiting.
+            using var exclusive = configEdited ? _loader.Lock() : null;
+            diskChanged = ReadDisk() != _diskText;
+            // Only edits of config.json can conflict with the file on disk; local.json belongs to this machine alone and
+            // is saved either way.
+            if (configEdited && !force)
+            {
+                if (diskChanged)
+                {
+                    HasExternalChanges = holdConfig = true;
+                }
+                else if (ConfigUnreadable)
+                {
+                    IsHoldingEditsForUnreadableFile = holdConfig = true;
+                }
+            }
+
             if (configEdited && !holdConfig)
             {
                 _loader.Save(Config, ConfigPath);
@@ -297,6 +321,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // Also when another process held the lock too long. The edits stay waiting (IsDirty) and go with the next
+            // edit, or when the window closes.
             StatusMessage = L("Could not save: {0}", ex.Message);
             return false;
         }

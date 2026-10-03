@@ -12,6 +12,13 @@ public interface IConfigStore
     ConfigLoadResult Load();
 
     void Save(PreferisConfig config, string configPath);
+
+    /// <summary>
+    /// Holds this machine's configuration lock until disposed. Reading the file and writing it back changed happen under
+    /// it, so that no other process writes in between (see <see cref="ConfigLoader.Lock"/>).
+    /// </summary>
+    /// <exception cref="IOException">Another process held the lock for too long.</exception>
+    IDisposable Lock();
 }
 
 /// <summary>Finds installed browsers. <see cref="DetectBrowsers"/> is for the settings UI and fallbacks; the fast path uses <see cref="IBrowserLocator.TryResolve"/>.</summary>

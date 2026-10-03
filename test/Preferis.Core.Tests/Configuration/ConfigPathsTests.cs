@@ -16,6 +16,7 @@ public class ConfigPathsTests
         Assert.Equal(Path.Combine(local, "Preferis", "local.json"), paths.LocalConfigPath);
         Assert.Equal(Path.Combine(roaming, "Preferis", "config.json"), paths.DefaultConfigPath);
         Assert.Equal(Path.Combine(local, "Preferis", "Logs"), paths.LogDirectory);
+        Assert.Equal(Path.Combine(local, "Preferis", "config.lock"), paths.LockPath);
     }
 
     [Fact]
@@ -28,6 +29,7 @@ public class ConfigPathsTests
         Assert.Equal("/Users/me/Library/Application Support/Preferis/config.json", Unix(paths.DefaultConfigPath));
         Assert.Equal("/Users/me/Library/Logs/Preferis", Unix(paths.LogDirectory));
         Assert.Equal("/Users/me/Library/Logs/Preferis/history.jsonl", Unix(paths.HistoryPath));
+        Assert.Equal("/Users/me/Library/Application Support/Preferis/config.lock", Unix(paths.LockPath));
 
         static string Unix(string path) => path.Replace('\\', '/');
     }

@@ -17,7 +17,7 @@ internal sealed class FakeHost
     public bool ConfigExists { get; set; } = true;
     public PreferisConfig? SavedConfig { get; private set; }
 
-    /// <summary>Reads the configuration from files instead (a <see cref="ConfigLoader"/>), in place of the properties above.</summary>
+    /// <summary>Real files (e.g. a <see cref="ConfigLoader"/> in a temporary directory) in place of the properties above.</summary>
     public IConfigStore? ConfigStore { get; set; }
 
     public Dictionary<string, DetectedBrowser> Browsers { get; } = new(StringComparer.Ordinal);
@@ -73,6 +73,16 @@ internal sealed class FakeHost
         }
 
         public void Save(PreferisConfig config, string configPath) => host.SavedConfig = config;
+
+        // Nothing else writes this configuration; ConcurrentRememberTests covers the lock with real files.
+        public IDisposable Lock() => new NoLock();
+
+        private sealed class NoLock : IDisposable
+        {
+            public void Dispose()
+            {
+            }
+        }
     }
 
     private sealed class Detector(FakeHost host) : IBrowserDetector

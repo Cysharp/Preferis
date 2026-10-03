@@ -13,6 +13,7 @@ Router のオーケストレーション (`RoutingService`) もフェイクで�
 Preferis.Core.Configuration.ConfigPaths / ConfigLoader (IConfigStore)
     local.json / 既定 config.json / ログの場所。読み込みは決して例外を投げず、壊れていれば (値が必要な場所の null を
     含む。Configuration.md §4.1) 既定 + エラー文字列
+    Lock() で config.json を読んで書き戻す間、このマシンのロック (config.lock) を持つ
 Preferis.Core.Browsers.IBrowserLocator        TryResolve(browserId) -> DetectedBrowser?   高速経路用 (1 件だけ)
 Preferis.Core.Hosting.IBrowserDetector        : IBrowserLocator + DetectBrowsers()         設定 UI とフォールバック用
 Preferis.Core.Browsers.IBrowserProfileEnumerator  Enumerate(browser) -> list | null (読めない)
@@ -48,6 +49,19 @@ Preferis.Core.Hosting.IRoutingLog             Write(level, message)
 Router 実行ファイル (`Preferis.Router`) は `RouterHost` でこれらを配線し、`FileLog` でログを書きます。
 設定 UI は `Preferis.Settings.Services.ISettingsPlatform` を通して同じ実装を使います (macOS は `MacSettingsPlatform`、§3.8、
 Windows は `WindowsSettingsPlatform`、§2.8)。
+
+設定ファイルのロック (Configuration.md §1.1) は OS ごとの実装を持たず、Core の `ConfigLoader.Lock` が `config.lock` を
+`FileShare.None` の `FileStream` で開いて取ります。排他の仕組みは .NET が OS ごとに選びます。
+
+- Windows: 共有モードなしで開いたファイルは、閉じるまで他のハンドルから開けない (共有違反。同じプロセスでも同じ)。
+- macOS: .NET が開いた直後に `flock(LOCK_EX | LOCK_NB)` を掛け、掛からなければ `EWOULDBLOCK` の `IOException` になる。
+  アドバイザリロックなので Preferis 以外がファイルを開くことは止めないが、ロックを取るのは Preferis だけなので足りる。
+  `flock` は開いたファイルごとのロックなので、同じプロセスの別の `FileStream` とも排他になる (Router は 1 つの Apple Event
+  の URL を並行に処理するため、これが要る)。.NET の `DOTNET_SYSTEM_IO_DISABLEFILELOCKING` を設定した環境や、`flock` に
+  対応しないファイルシステムでは .NET がロックを掛けずに開くため、排他にならない (`~/Library` は APFS なので通常は問題ない)。
+
+どちらもプロセスの終了で解放されます。取れない間は 20 ms ごとに開き直します。テストは同じプロセスの 2 つの `ConfigLoader`
+で排他を確かめており、Windows では実行済み、macOS では未実行 (2026-10-03)。
 
 ## 2. Windows
 

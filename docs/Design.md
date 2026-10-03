@@ -500,7 +500,9 @@ M3 での実装の要点:
   エディター (macOS は NSPredicateEditor) で、根は常に「All / Any / None of the following are true」の行になる。
   `ConditionPredicates` が条件木とエディターの木を相互変換する: `not` は「None of」(`not (a or b)`) で表し、
   行が 1 つだけの All / Any は保存時にその行に畳む (単純なルールは単純なまま)。`url` の `ignoreCase: false` は
-  「URL (case-sensitive)」という別の対象として表す。空にした条件は「条件なし」(決してマッチしない)。`open` は全プロファイルのチェックリストで、
+  「URL (case-sensitive)」という別の対象として表す。空にした条件は「条件なし」(決してマッチしない)。条件には ViewModel を
+  持たせず、両 OS のエディターは変更のたびに条件全体を `RuleViewModel.SetCondition` で置き換える (編集の経路を 1 つにし、
+  テストも画面と同じ経路を通すため)。`open` は全プロファイルのチェックリストで、
   プロファイル一覧の順に並べ、チェックしたものもその順で保存する。ピッカーの並びもプロファイル一覧の順で、プロファイル画面の
   ドラッグで変える。存在しない ID は「(missing)」として外すまで残す。未知の条件・アクションは
   読み取り専用で表示し、そのまま書き戻す。

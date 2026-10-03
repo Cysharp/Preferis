@@ -237,6 +237,29 @@ public class RouterTests
     }
 
     [Fact]
+    public void Properties_of_a_newer_preferis_on_known_conditions_and_actions_do_not_change_routing()
+    {
+        const string json = """
+            { "version": 1, "defaultProfile": "edge",
+              "profiles": [ { "id": "edge", "name": "Edge", "browser": "edge" }, { "id": "chrome", "name": "Chrome", "browser": "chrome" } ],
+              "rules": [
+                { "id": "upgrade", "name": "upgrade", "condition": { "type": "url", "match": "startsWith", "pattern": "http://", "futureSetting": true },
+                  "actions": [ { "type": "rewrite", "mode": "regex", "pattern": "^http://", "replacement": "https://", "futureSetting": true } ] },
+                { "id": "intranet", "name": "intranet",
+                  "condition": { "type": "and", "futureSetting": true, "conditions": [ { "type": "not", "futureSetting": true, "condition": { "type": "host", "match": "equals", "pattern": "www.example.com", "futureSetting": true } } ] },
+                  "actions": [ { "type": "open", "profiles": ["chrome"], "futureSetting": true } ] }
+              ],
+              "catchAll": { "actions": [ { "type": "none", "futureSetting": true } ] } }
+            """;
+
+        var open = Assert.IsType<RoutingDecision.Open>(Route(ConfigSerializer.Deserialize(json), "http://intranet.example.com/wiki").Decision);
+
+        Assert.Equal("https://intranet.example.com/wiki", open.Url.AbsoluteUri);
+        Assert.Equal(["chrome"], open.ProfileIds);
+        Assert.IsType<RoutingDecision.None>(Route(ConfigSerializer.Deserialize(json), "https://www.example.com/").Decision);
+    }
+
+    [Fact]
     public void A_catch_all_without_a_terminal_action_opens_the_default_profile()
     {
         var config = Config("chrome");

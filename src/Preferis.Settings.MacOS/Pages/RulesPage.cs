@@ -244,7 +244,7 @@ internal sealed class RulesPage : IPageView
                 Form.Wide(json));
         }
 
-        var editor = new ConditionEditor(tree, edited => rule.SetCondition(ConditionPredicates.FromEditor(edited)));
+        var editor = new ConditionEditor(tree, edited => rule.SetCondition(ConditionPredicates.FromEditor(edited, rule.Model.Condition)));
         bindings.Add(editor.Dispose);
         return Form.Section(L("If"), footer, Form.Wide(editor.View));
     }

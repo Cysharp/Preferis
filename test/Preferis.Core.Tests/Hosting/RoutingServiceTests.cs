@@ -22,6 +22,17 @@ public class RoutingServiceTests
 
     private static PickerResponse Select(string profileId, bool remember = false) => new() { Result = PickerResult.Selected, ProfileId = profileId, Remember = remember };
 
+    // The settings UI saves an edit while the picker is open. The Router keeps the copy it loaded before.
+    private static void SaveMeanwhile(FakeHost host, Action<PreferisConfig> edit)
+    {
+        var edited = ConfigSerializer.Deserialize(ConfigSerializer.Serialize(host.Config));
+        edit(edited);
+        host.Config = edited;
+    }
+
+    private static List<string>? RememberedProfiles(PreferisConfig saved)
+        => saved.Rules.Single(r => r.Id.StartsWith("remember-", StringComparison.Ordinal)).Actions.OfType<OpenAction>().Single().Profiles;
+
     [Fact]
     public void A_single_candidate_is_resolved_and_launched()
     {
@@ -134,6 +145,76 @@ public class RoutingServiceTests
     }
 
     [Fact]
+    public void Remembering_uses_the_id_the_profile_was_given_while_the_picker_was_open()
+    {
+        var host = FullHost();
+        host.PickerAnswer = _ =>
+        {
+            SaveMeanwhile(host, config => ProfileIds.Rename(config, new LocalConfig(), "chrome-work", "work"));
+            return Select("chrome-work", remember: true);
+        };
+
+        var result = Handle(host, "https://login.microsoftonline.com/common");
+
+        Assert.Equal(HandleOutcome.Launched, result.Outcome);
+        Assert.Equal(["work"], RememberedProfiles(host.SavedConfig!));
+        Assert.Empty(ConfigValidator.Validate(host.SavedConfig!));
+
+        host.Config = host.SavedConfig!;
+        host.PickerRequests.Clear();
+        Assert.Equal("work", Handle(host, "https://login.microsoftonline.com/other").ProfileId);
+        Assert.Empty(host.PickerRequests);
+    }
+
+    [Fact]
+    public void Remembering_follows_several_renames_made_while_the_picker_was_open()
+    {
+        var host = FullHost();
+        host.PickerAnswer = _ =>
+        {
+            SaveMeanwhile(host, config => ProfileIds.Rename(config, new LocalConfig(), "chrome-work", "work"));
+            SaveMeanwhile(host, config => ProfileIds.Rename(config, new LocalConfig(), "work", "office"));
+            return Select("chrome-work", remember: true);
+        };
+
+        Handle(host, "https://login.microsoftonline.com/common");
+
+        Assert.Equal(["office"], RememberedProfiles(host.SavedConfig!));
+    }
+
+    [Fact]
+    public void A_profile_deleted_while_the_picker_was_open_is_not_remembered_but_still_opens_the_url()
+    {
+        var host = FullHost();
+        host.PickerAnswer = _ =>
+        {
+            SaveMeanwhile(host, config => config.Profiles.RemoveAll(p => p.Id == "chrome-work"));
+            return Select("chrome-work", remember: true);
+        };
+
+        var result = Handle(host, "https://login.microsoftonline.com/common");
+
+        Assert.Equal(HandleOutcome.Launched, result.Outcome);
+        Assert.Equal("chrome-work", result.ProfileId);
+        Assert.Equal(["--profile-directory=Profile 1", "https://login.microsoftonline.com/common"], Assert.Single(host.Launched).Arguments);
+        Assert.Null(host.SavedConfig);
+        Assert.Contains(host.Log, l => l.Level == LogLevel.Warning && l.Message.StartsWith("Not remembering 'login.microsoftonline.com'", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Remembering_keeps_an_id_that_another_profile_had_before()
+    {
+        // A hand-written file: chrome-work claims edge's id as one it had. The id is edge's now.
+        var host = FullHost();
+        host.Config.Profiles.Single(p => p.Id == "chrome-work").PreviousIds = ["edge"];
+        host.PickerAnswer = _ => Select("edge", remember: true);
+
+        Handle(host, "https://login.microsoftonline.com/common");
+
+        Assert.Equal(["edge"], RememberedProfiles(host.SavedConfig!));
+    }
+
+    [Fact]
     public void Remembering_a_choice_saves_a_rule_that_bypasses_the_picker_next_time()
     {
         var host = FullHost();
@@ -151,6 +232,80 @@ public class RoutingServiceTests
         var again = Handle(host, "https://login.microsoftonline.com/other");
         Assert.Equal("chrome-work", again.ProfileId);
         Assert.Empty(host.PickerRequests);
+    }
+
+    /// <summary>Opens <paramref name="url"/>, remembers <paramref name="profileId"/> in the picker, and opens it again with the configuration as saved.</summary>
+    private static HandleResult OpenAgainAfterRemembering(FakeHost host, string url, string profileId)
+    {
+        host.PickerAnswer = _ => Select(profileId, remember: true);
+        Assert.Equal(HandleOutcome.Launched, Handle(host, url).Outcome);
+        Assert.Single(host.PickerRequests);
+
+        host.Config = host.SavedConfig!;
+        host.PickerRequests.Clear();
+        host.Launched.Clear();
+        return Handle(host, url);
+    }
+
+    private static Rule Unwrap(params RoutingAction[] then) => new()
+    {
+        Id = "unwrap",
+        Name = "Unwrap",
+        Condition = new HostCondition { Match = MatchKind.Exact, Pattern = "wrapper.example" },
+        Actions = [new RewriteAction { Mode = RewriteMode.QueryParameter, Parameter = "url" }, .. then],
+    };
+
+    [Fact]
+    public void A_choice_remembered_after_its_rules_own_rewrite_skips_the_picker_next_time()
+    {
+        var host = FullHost();
+        host.Config.Rules.Insert(0, Unwrap(new OpenAction { Profiles = ["edge", "chrome-work"] }));
+
+        var again = OpenAgainAfterRemembering(host, "https://wrapper.example/?url=https%3A%2F%2Ftarget.example%2Fpage", "chrome-work");
+
+        Assert.Empty(host.PickerRequests);
+        Assert.Equal("chrome-work", again.ProfileId);
+        Assert.Equal(["--profile-directory=Profile 1", "https://target.example/page"], Assert.Single(host.Launched).Arguments);
+    }
+
+    [Fact]
+    public void A_choice_remembered_after_several_rewrites_in_one_rule_skips_the_picker_next_time()
+    {
+        var host = FullHost();
+        host.Config.Rules.Insert(0, Unwrap(
+            new RewriteAction { Mode = RewriteMode.Regex, Pattern = "^http://", Replacement = "https://" },
+            new OpenAction { Profiles = ["edge", "chrome-work"] }));
+
+        var again = OpenAgainAfterRemembering(host, "https://wrapper.example/?url=http%3A%2F%2Ftarget.example%2Fpage", "chrome-work");
+
+        Assert.Empty(host.PickerRequests);
+        Assert.Equal("chrome-work", again.ProfileId);
+        Assert.Equal("https://target.example/page", Assert.Single(host.Launched).Arguments[^1]);
+    }
+
+    [Fact]
+    public void A_choice_remembered_after_the_catch_alls_rewrite_skips_the_picker_next_time()
+    {
+        var host = FullHost();
+        host.Config.CatchAll.Actions = [new RewriteAction { Mode = RewriteMode.QueryParameter, Parameter = "url" }, new OpenAction { Profiles = ["edge", "chrome-work"] }];
+
+        var again = OpenAgainAfterRemembering(host, "https://wrapper.example/?url=https%3A%2F%2Ftarget.example%2Fpage", "chrome-work");
+
+        Assert.Empty(host.PickerRequests);
+        Assert.Equal("chrome-work", again.ProfileId);
+        Assert.Equal("https://target.example/page", Assert.Single(host.Launched).Arguments[^1]);
+    }
+
+    [Fact]
+    public void A_choice_remembered_after_a_rewrite_and_reroute_skips_the_picker_next_time()
+    {
+        var host = FullHost();
+
+        var again = OpenAgainAfterRemembering(host, "https://nl.safelinks.protection.outlook.com/?url=https%3A%2F%2Flogin.microsoftonline.com%2Fcommon", "chrome-work");
+
+        Assert.Empty(host.PickerRequests);
+        Assert.Equal("chrome-work", again.ProfileId);
+        Assert.Equal("https://login.microsoftonline.com/common", Assert.Single(host.Launched).Arguments[^1]);
     }
 
     [Fact]

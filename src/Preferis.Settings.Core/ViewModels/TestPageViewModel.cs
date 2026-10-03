@@ -283,6 +283,7 @@ public sealed partial class TestPageViewModel : PageViewModel
         TraceKind.Rewritten => L("rewritten"),
         TraceKind.FellThrough => L("fell through"),
         TraceKind.Rerouted => L("rerouted"),
+        TraceKind.Reevaluated => L("re-evaluated"),
         TraceKind.CatchAll => L("catch-all"),
         TraceKind.Warning => L("warning"),
         _ => L("decision"),

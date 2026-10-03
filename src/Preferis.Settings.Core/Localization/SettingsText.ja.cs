@@ -306,8 +306,6 @@ public static partial class SettingsText
         { "From a newer version of Preferis; saved unchanged.", "新しいバージョンの Preferis のものです。変更せずに保存されます。" },
 
         // ---- rules: conditions ----
-        { "All of", "すべて" },
-        { "Any of", "いずれか" },
         { "All of the following are true", "次のすべてを満たす" },
         { "Any of the following are true", "次のいずれかを満たす" },
         { "None of the following are true", "次のいずれも満たさない" },
@@ -319,7 +317,6 @@ public static partial class SettingsText
         { "ends with", "が次で終わる" },
         { "contains", "が次を含む" },
         { "matches", "が次のパターンに一致" },
-        { "matches (wildcard)", "が次のパターンに一致 (ワイルドカード)" },
         { "matches regex", "が次の正規表現に一致" },
         { "Pattern", "パターン" },
         { "No conditions: the rule never matches. Add one with +.", "条件が未設定のため、このルールは一致しません。+ で条件を追加してください。" },
@@ -393,6 +390,7 @@ public static partial class SettingsText
         { "rewritten", "書き換え" },
         { "fell through", "次へ" },
         { "rerouted", "振り分け直し" },
+        { "re-evaluated", "再評価" },
         { "warning", "警告" },
         { "decision", "結果" },
         { "Launched", "起動" },

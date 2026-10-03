@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Preferis.Core.Configuration;
 using Preferis.Core.Routing;
 
@@ -103,6 +105,85 @@ public class ConditionEvaluatorTests
 
         Assert.True(Matches(condition, "https://www.example.com/"));
         Assert.False(Matches(condition, "http://www.example.com/"));
+    }
+
+    [Theory]
+    [InlineData("*.example.com", "www.example.com")]
+    [InlineData("*.example.com", "example.com")]
+    [InlineData("*.EXAMPLE.com", "www.example.COM")]
+    [InlineData("app?.example.com", "app1.example.com")]
+    [InlineData("app?.example.com", "app.example.com")]
+    [InlineData("", "")]
+    [InlineData("", "a")]
+    [InlineData("*", "")]
+    [InlineData("**", "anything")]
+    [InlineData("?", "")]
+    [InlineData("?*?", "ab")]
+    [InlineData("?*?", "a")]
+    [InlineData("a*", "abc")]
+    [InlineData("*c", "abc")]
+    [InlineData("*a", "aaa")]
+    [InlineData("a*b*c", "aXbYc")]
+    [InlineData("a*b*c", "aXbYcZ")]
+    [InlineData("a*b*c", "abcbc")]
+    [InlineData("*ab*ab", "abab_ab")]
+    [InlineData("*aab", "aaaab")]
+    [InlineData("a.b", "a.b")]
+    [InlineData("a.b", "axb")]
+    [InlineData("(x)+[y]^$|\\d", "(x)+[y]^$|\\d")]
+    [InlineData("(x)+", "xx")]
+    [InlineData("https://example.com/signin/*", "https://example.com/signin/foo?x=1")]
+    [InlineData("https://example.com/signin/*", "HTTPS://EXAMPLE.COM/SIGNIN/")]
+    [InlineData("日本語.*", "日本語.jp")]
+    public void Wildcards_match_as_the_regular_expression_they_stand_for(string pattern, string input)
+    {
+        foreach (var ignoreCase in new[] { true, false })
+        {
+            var options = RegexOptions.CultureInvariant | (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None);
+            var expected = Regex.IsMatch(input, PatternMatcher.WildcardToRegex(pattern), options);
+
+            Assert.Equal(expected, PatternMatcher.Create(MatchKind.Wildcard, pattern, ignoreCase).IsMatch(input));
+        }
+    }
+
+    [Fact]
+    public void A_thousand_wildcards_are_evaluated_without_building_automata()
+    {
+        // As imported from a list of sites (RuleCsvImport); a URL that is none of them is checked against every one.
+        var sites = new OrCondition { Conditions = [.. Enumerable.Range(0, 1000).Select(i => Host(MatchKind.Wildcard, $"*.site{i}.example"))] };
+
+        // A non-backtracking automaton takes about 0.7 MiB to build: these took about 1 GB per URL.
+        Assert.True(AllocatedBy(() => Assert.False(Matches(sites, "https://www.example.com/path"))) < 1024 * 1024);
+    }
+
+    [Fact]
+    public void Regular_expressions_are_cheap_to_build_when_they_need_no_linear_engine()
+    {
+        var rules = new OrCondition { Conditions = [.. Enumerable.Range(0, 100).Select(i => Url(MatchKind.Regex, $@"^https?://[^/]+\.site{i}\.example/"))] };
+
+        Assert.True(AllocatedBy(() => Assert.False(Matches(rules, "https://www.example.com/path"))) < 4 * 1024 * 1024);
+    }
+
+    [Fact]
+    public void Regular_expressions_that_backtrack_catastrophically_still_get_their_answer()
+    {
+        // The backtracking engine tries every way of splitting the a's for the first alternative; the answer is the
+        // second one, which only an engine without backtracking reaches in time.
+        var condition = Url(MatchKind.Regex, "^https://x/(?:(a+)+b|a*c)$");
+        var stopwatch = Stopwatch.StartNew();
+
+        Assert.True(Matches(condition, "https://x/" + new string('a', 40) + "c"));
+        Assert.False(Matches(condition, "https://x/" + new string('a', 40) + "d"));
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5), $"{stopwatch.Elapsed}");
+    }
+
+    private static long AllocatedBy(Action action)
+    {
+        // Once first, for what the first use of the regex and globalization code allocates.
+        action();
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        action();
+        return GC.GetAllocatedBytesForCurrentThread() - before;
     }
 
     [Fact]

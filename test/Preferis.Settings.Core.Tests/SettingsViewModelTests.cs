@@ -1,4 +1,6 @@
 using Preferis.Core.Configuration;
+using Preferis.Core.Routing;
+using Preferis.Settings.ViewModels;
 
 namespace Preferis.Settings.Core.Tests;
 
@@ -294,6 +296,39 @@ public sealed class SettingsViewModelTests : IDisposable
         var issue = Assert.Single(settings.Issues);
         Assert.Equal("custom-tool", issue.Id);
         Assert.Equal("1 error", settings.IssueSummary);
+    }
+
+    [Fact]
+    public void Patterns_are_checked_again_only_when_an_edit_changes_them()
+    {
+        var checkedPatterns = new List<string>();
+        var settings = _harness.WithSample().Create(new PatternErrorCache((kind, pattern, ignoreCase) =>
+        {
+            checkedPatterns.Add(pattern);
+            return PatternMatcher.ErrorOf(kind, pattern, ignoreCase);
+        }));
+        var rule = settings.Rules.Rules.Single(r => r.Id == "ms-login");
+        checkedPatterns.Clear();
+
+        // Typing a name, saving and reading the file again leave every pattern as it was.
+        rule.Name = "Sign-in";
+        settings.Profiles.Profiles[0].Name = "Edge";
+        _harness.Saves.RunPending();
+        var theirs = _harness.SavedConfig();
+        theirs.Profiles[1].Name = "Theirs";
+        _harness.Loader.Save(theirs, _harness.Paths.DefaultConfigPath);
+        settings.CheckForExternalChanges();
+
+        Assert.Equal("Theirs", settings.Profiles.Profiles[1].Name);
+        Assert.Empty(checkedPatterns);
+
+        // Typing into the pattern of the rule's one row, as both condition editors report it.
+        rule = settings.Rules.Rules.Single(r => r.Id == "ms-login");
+        var row = Assert.IsType<ComparisonPredicate>(Assert.Single(ConditionPredicates.ToEditor(rule.Model.Condition)!.Children));
+        rule.SetCondition(ConditionPredicates.FromEditor(new CompoundPredicate(CompoundKind.All, [row with { Pattern = @"^login\.(" }]), rule.Model.Condition));
+
+        Assert.Equal([@"^login\.("], checkedPatterns);
+        Assert.Contains(@"^login\.(", Assert.Single(rule.Issues).Message, StringComparison.Ordinal);
     }
 
     [Fact]

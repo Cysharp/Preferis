@@ -19,6 +19,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ConfigLoader _loader;
     private readonly ISaveScheduler _saves;
 
+    // Every edit validates the whole configuration; most leave the patterns as they were (and reloading the file
+    // usually does too), so their errors are looked up rather than checked again.
+    private readonly PatternErrorCache _patterns;
+
     // config.json as it was on disk when we last read or wrote it (null: no file), to notice outside changes.
     private string? _diskText;
     private string _savedConfigJson = "";
@@ -26,9 +30,16 @@ public sealed partial class SettingsViewModel : ObservableObject
     private bool _loading;
 
     public SettingsViewModel(ConfigLoader loader, ISettingsPlatform platform, IDialogService dialogs, ISaveScheduler saves)
+        : this(loader, platform, dialogs, saves, new PatternErrorCache())
+    {
+    }
+
+    /// <param name="patterns">Where validation looks up the pattern errors (the tests count what it checks).</param>
+    internal SettingsViewModel(ConfigLoader loader, ISettingsPlatform platform, IDialogService dialogs, ISaveScheduler saves, PatternErrorCache patterns)
     {
         _loader = loader;
         _saves = saves;
+        _patterns = patterns;
         Platform = platform;
         Dialogs = dialogs;
         Browsers = platform.DetectBrowsers();
@@ -140,7 +151,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         var configEdited = ConfigEdited;
         var localEdited = ConfigSerializer.SerializeLocal(Local) != _savedLocalJson;
         IsDirty = configEdited || localEdited;
-        Issues = [.. ConfigValidator.Validate(Config), .. ProfileAvailability.Check(Config, Local, Browsers, Platform.Platform)];
+        Issues = [.. ConfigValidator.Validate(Config, _patterns), .. ProfileAvailability.Check(Config, Local, Browsers, Platform.Platform)];
         Profiles.UpdateIssues(Issues);
         Rules.UpdateIssues(Issues);
         // Held config.json edits wait for a decision; asking for a save again would only hold them again.

@@ -7,13 +7,19 @@ namespace Preferis.Core.Routing;
 
 /// <summary>
 /// Compiles one (match kind, pattern, case sensitivity) triple into a predicate over strings.
-/// Regular expressions use the non-backtracking engine so that user supplied patterns run in linear time;
-/// constructs that engine does not support fall back to the backtracking engine with a timeout.
+/// The Router builds one for every condition it evaluates, once per URL (docs/Design.md §5.2), so building is kept cheap:
+/// wildcards are matched without a regular expression, and regular expressions start on the backtracking engine, which
+/// takes microseconds to build where the non-backtracking one takes about a millisecond and 0.7 MiB. A user supplied
+/// pattern still runs in bounded time: when the backtracking engine takes too long, the non-backtracking engine, linear in
+/// the input, answers instead. Constructs that engine does not support stay on the backtracking engine with a timeout.
 /// An invalid pattern yields a matcher that never matches instead of throwing at routing time.
 /// </summary>
 public sealed class PatternMatcher
 {
     private static readonly TimeSpan BacktrackingTimeout = TimeSpan.FromMilliseconds(100);
+
+    // Matching a URL takes microseconds; only a pattern that backtracks catastrophically gets anywhere near this.
+    private static readonly TimeSpan QuickTimeout = TimeSpan.FromMilliseconds(10);
 
     private readonly Func<string, bool> _predicate;
 
@@ -39,11 +45,18 @@ public sealed class PatternMatcher
             MatchKind.StartsWith => new(s => s.StartsWith(pattern, comparison), null),
             MatchKind.EndsWith => new(s => s.EndsWith(pattern, comparison), null),
             MatchKind.Contains => new(s => s.Contains(pattern, comparison), null),
-            MatchKind.Wildcard => FromRegex(WildcardToRegex(pattern), ignoreCase),
+            MatchKind.Wildcard => new(s => WildcardMatches(pattern, s, ignoreCase), null),
             MatchKind.Regex => FromRegex(pattern, ignoreCase),
-            _ => new(_ => false, L("Unsupported match kind: {0}", kind)),
+            _ => new(_ => false, UnsupportedKind(kind)),
         };
     }
+
+    /// <summary>
+    /// The <see cref="Error"/> of the matcher <see cref="Create"/> builds, for the settings, which check every pattern of
+    /// the configuration. Building one is cheap: the non-backtracking automaton (about a millisecond and 0.7 MiB) is only
+    /// built when a match takes too long, which checking never does.
+    /// </summary>
+    public static string? ErrorOf(MatchKind kind, string pattern, bool ignoreCase) => Create(kind, pattern, ignoreCase).Error;
 
     /// <summary><c>*</c> matches any run of characters (including none), <c>?</c> exactly one; everything else is literal.</summary>
     public static string WildcardToRegex(string wildcard)
@@ -61,41 +74,100 @@ public sealed class PatternMatcher
         return builder.Append('$').ToString();
     }
 
+    private static string UnsupportedKind(MatchKind kind) => L("Unsupported match kind: {0}", kind);
+
+    /// <summary>
+    /// Whether <paramref name="input"/> matches <paramref name="pattern"/> as <see cref="WildcardToRegex"/> would, without
+    /// building a regular expression. URLs and hosts have no line breaks, which the regex's <c>.</c> would not match.
+    /// </summary>
+    internal static bool WildcardMatches(string pattern, string input, bool ignoreCase)
+    {
+        // The usual greedy match: a star first takes nothing and, when what follows fails, one more character. Only the
+        // last star ever needs to take more (an earlier one could only give what the last one can), so this takes at
+        // most pattern × input steps, and allocates nothing.
+        int p = 0, i = 0, star = -1, starInput = 0;
+        while (i < input.Length)
+        {
+            if (p < pattern.Length && pattern[p] == '*')
+            {
+                star = p++;
+                starInput = i;
+            }
+            else if (p < pattern.Length && (pattern[p] == '?' || Same(pattern[p], input[i], ignoreCase)))
+            {
+                p++;
+                i++;
+            }
+            else if (star >= 0)
+            {
+                p = star + 1;
+                i = ++starInput;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        while (p < pattern.Length && pattern[p] == '*')
+        {
+            p++;
+        }
+        return p == pattern.Length;
+    }
+
+    // Ordinal, like the other match kinds; the regex's invariant case table differs only for a few letters that no host
+    // or (percent-encoded) URL contains.
+    private static bool Same(char a, char b, bool ignoreCase) => a == b || (ignoreCase && char.ToUpperInvariant(a) == char.ToUpperInvariant(b));
+
     private static PatternMatcher FromRegex(string pattern, bool ignoreCase)
     {
         var options = RegexOptions.CultureInvariant | (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None);
-        Regex regex;
+        Regex quick;
         try
         {
-            regex = new Regex(pattern, options | RegexOptions.NonBacktracking);
-        }
-        catch (NotSupportedException)
-        {
-            // Lookarounds, backreferences etc.: use the classic engine, bounded by a timeout.
-            try
-            {
-                regex = new Regex(pattern, options, BacktrackingTimeout);
-            }
-            catch (ArgumentException ex)
-            {
-                return new(_ => false, ex.Message);
-            }
+            quick = new Regex(pattern, options, QuickTimeout);
         }
         catch (ArgumentException ex)
         {
             return new(_ => false, ex.Message);
         }
 
+        // Built only for a pattern the quick one gives up on. Either engine finds a match exactly when the other does.
+        Regex? linear = null;
         return new(s =>
         {
             try
             {
-                return regex.IsMatch(s);
+                return quick.IsMatch(s);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+            }
+            linear ??= Linear(pattern, options);
+            try
+            {
+                return linear.IsMatch(s);
             }
             catch (RegexMatchTimeoutException)
             {
                 return false;
             }
         }, null);
+    }
+
+    /// <summary>
+    /// The non-backtracking engine, which takes time linear in the input whatever the pattern. Lookarounds,
+    /// backreferences and the like it does not support: those get the backtracking engine again, with a longer timeout.
+    /// </summary>
+    private static Regex Linear(string pattern, RegexOptions options)
+    {
+        try
+        {
+            return new Regex(pattern, options | RegexOptions.NonBacktracking);
+        }
+        catch (NotSupportedException)
+        {
+            return new Regex(pattern, options, BacktrackingTimeout);
+        }
     }
 }

@@ -632,6 +632,27 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 
 ## 5. 計測記録
 
+### 2026-10-03 設定 UI: 1,000 条件のルールの編集 (Design.md §9.1)
+
+環境: Windows 11 Pro (10.0.26200), x64, .NET 10.0.12, Release ビルドの `Preferis.Settings.Core` を UI なしで動かす
+(描画は含まない)。Chrome のプロファイル `A` を作り、`*.site0.example,A` 〜 `*.site999.example,A` の 1,000 行を
+`RuleCsvImport.Import` で取り込んで保存 (1 つのルールの `or` の下に 1,000 条件) し、`SettingsViewModel` を作り、ルール名を
+1 回変えてウォームアップしてから 10 回変える。時間は Stopwatch、割り当ては `GC.GetAllocatedBytesForCurrentThread`。
+範囲は修正前 2〜4 回、修正後 6 回の実行の違い (時間はマシンの負荷で揺れる)。修正前は 27af9a1。
+
+| 項目 | 修正前 | 修正後 |
+| --- | --- | --- |
+| ルール名の変更 (1 回、10 回の平均) | 690〜870 ms、986.6〜986.9 MiB | 1.1〜1.4 ms (中央値 0.9〜1.1 ms)、0.31 MiB |
+| 条件のパターンの入力 (当時の `LeafConditionViewModel`。この ViewModel は #7 で削除、1 文字) | 0.6〜1.0 秒、987 MiB | 1.2〜1.4 ms、0.38 MiB |
+| 条件エディターの 1 行の入力 (`RuleViewModel.SetCondition`。WinUI の行と NSPredicateEditor の経路) | 0.75〜0.95 秒、987 MiB | 1.3〜2.1 ms、0.48 MiB |
+| `SettingsViewModel` の作成 (読み込みと最初の検証) | 1.0〜1.5 秒、990 MiB | 63〜87 ms、8.0 MiB |
+| 保存 (保存後の検証を含む) | 0.6〜1.1 秒、988〜989 MiB | 4.7〜7.6 ms、1.8 MiB |
+| WinUI の条件エディターがこのルールの 1,000 行に出すパターンの誤りの検査 | 0.7〜1.4 秒、986 MiB | 6〜16 ms、4.5 MiB |
+| (別の形) 1 条件のルール 1,000 個で、1 つのルール名の変更 | 1.2 秒、989 MiB | 4.2 ms (中央値 2.9 ms)、1.8 MiB |
+
+修正後の編集 1 回の残りの大半は `config.json` の直列化 (保存した内容と比べて書き込み待ちかを決める。1,000 条件で
+0.7〜1.1 ms、0.3 MiB) で、入力の妨げにはならないためそのままにした。
+
 ### 2026-10-02 M4: Windows 一式 (`artifacts/win-x64/Preferis/` 82 MB)
 
 環境: Windows 11 Pro (10.0.26200), x64, .NET 10.0.401, Windows App SDK WinUI 2.3.9, NativeAOT。時間は `PREFERIS_TRACE=1` の

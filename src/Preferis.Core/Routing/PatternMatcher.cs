@@ -47,9 +47,16 @@ public sealed class PatternMatcher
             MatchKind.Contains => new(s => s.Contains(pattern, comparison), null),
             MatchKind.Wildcard => new(s => WildcardMatches(pattern, s, ignoreCase), null),
             MatchKind.Regex => FromRegex(pattern, ignoreCase),
-            _ => new(_ => false, L("Unsupported match kind: {0}", kind)),
+            _ => new(_ => false, UnsupportedKind(kind)),
         };
     }
+
+    /// <summary>
+    /// The <see cref="Error"/> of the matcher <see cref="Create"/> builds, for the settings, which check every pattern of
+    /// the configuration. Building one is cheap: the non-backtracking automaton (about a millisecond and 0.7 MiB) is only
+    /// built when a match takes too long, which checking never does.
+    /// </summary>
+    public static string? ErrorOf(MatchKind kind, string pattern, bool ignoreCase) => Create(kind, pattern, ignoreCase).Error;
 
     /// <summary><c>*</c> matches any run of characters (including none), <c>?</c> exactly one; everything else is literal.</summary>
     public static string WildcardToRegex(string wildcard)
@@ -66,6 +73,8 @@ public sealed class PatternMatcher
         }
         return builder.Append('$').ToString();
     }
+
+    private static string UnsupportedKind(MatchKind kind) => L("Unsupported match kind: {0}", kind);
 
     /// <summary>
     /// Whether <paramref name="input"/> matches <paramref name="pattern"/> as <see cref="WildcardToRegex"/> would, without

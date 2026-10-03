@@ -1,5 +1,4 @@
 using Preferis.Core.Browsers;
-using Preferis.Core.Routing;
 using static Preferis.Core.Localization.CoreText;
 
 namespace Preferis.Core.Configuration;
@@ -31,8 +30,13 @@ public sealed record ConfigIssue(IssueSeverity Severity, IssueScope Scope, strin
 /// </summary>
 public static class ConfigValidator
 {
-    public static IReadOnlyList<ConfigIssue> Validate(PreferisConfig config)
+    /// <param name="patterns">
+    /// The pattern errors of the previous validation of this configuration, for validating it again after an edit;
+    /// updated with the patterns it has now. Without it every pattern is checked.
+    /// </param>
+    public static IReadOnlyList<ConfigIssue> Validate(PreferisConfig config, PatternErrorCache? patterns = null)
     {
+        patterns ??= new PatternErrorCache();
         var issues = new List<ConfigIssue>();
         var profileIds = config.Profiles.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
 
@@ -73,17 +77,18 @@ public static class ConfigValidator
             }
             else
             {
-                ValidateCondition(rule.Condition, Add);
+                ValidateCondition(rule.Condition, patterns, Add);
             }
 
             if (rule.Actions.Count == 0)
             {
                 Add(IssueSeverity.Error, L("The rule has no action."));
             }
-            ValidateActions(rule.Actions, profileIds, Add);
+            ValidateActions(rule.Actions, profileIds, patterns, Add);
         }
 
-        ValidateActions(config.CatchAll.Actions, profileIds, (severity, message) => issues.Add(new(severity, IssueScope.CatchAll, null, message)));
+        ValidateActions(config.CatchAll.Actions, profileIds, patterns, (severity, message) => issues.Add(new(severity, IssueScope.CatchAll, null, message)));
+        patterns.EndValidation();
         return issues;
     }
 
@@ -132,7 +137,7 @@ public static class ConfigValidator
         }
     }
 
-    private static void ValidateCondition(Condition condition, Action<IssueSeverity, string> add)
+    private static void ValidateCondition(Condition condition, PatternErrorCache patterns, Action<IssueSeverity, string> add)
     {
         switch (condition)
         {
@@ -143,21 +148,22 @@ public static class ConfigValidator
                 add(IssueSeverity.Warning, L("An empty \"any of\" group never matches."));
                 break;
             case AndCondition and:
-                and.Conditions.ForEach(c => ValidateCondition(c, add));
+                and.Conditions.ForEach(c => ValidateCondition(c, patterns, add));
                 break;
             case OrCondition or:
-                or.Conditions.ForEach(c => ValidateCondition(c, add));
+                or.Conditions.ForEach(c => ValidateCondition(c, patterns, add));
                 break;
             case NotCondition { Condition: null }:
                 add(IssueSeverity.Warning, L("A \"not\" group without a condition never matches."));
                 break;
             case NotCondition not:
-                ValidateCondition(not.Condition, add);
+                ValidateCondition(not.Condition, patterns, add);
                 break;
             case PatternCondition leaf when leaf.Pattern.Length == 0:
                 add(IssueSeverity.Warning, (leaf is UrlCondition ? L("The URL pattern is empty.") : L("The host pattern is empty.")));
                 break;
-            case PatternCondition leaf when PatternMatcher.Create(leaf.Match, leaf.Pattern, ignoreCase: true).Error is { } error:
+            // With the case sensitivity the Router compiles it with (ConditionEvaluator): hosts always ignore case.
+            case PatternCondition leaf when patterns.ErrorOf(leaf.Match, leaf.Pattern, ignoreCase: leaf is not UrlCondition { IgnoreCase: false }) is { } error:
                 add(IssueSeverity.Error, (leaf is UrlCondition ? L("The URL pattern '{0}' is invalid: {1}", leaf.Pattern, error) : L("The host pattern '{0}' is invalid: {1}", leaf.Pattern, error)));
                 break;
             case UnknownCondition unknown:
@@ -166,7 +172,7 @@ public static class ConfigValidator
         }
     }
 
-    private static void ValidateActions(List<RoutingAction> actions, HashSet<string> profileIds, Action<IssueSeverity, string> add)
+    private static void ValidateActions(List<RoutingAction> actions, HashSet<string> profileIds, PatternErrorCache patterns, Action<IssueSeverity, string> add)
     {
         var rewritten = false;
         for (var i = 0; i < actions.Count; i++)
@@ -184,7 +190,7 @@ public static class ConfigValidator
                     {
                         add(IssueSeverity.Error, L("The rewrite has no pattern."));
                     }
-                    else if (PatternMatcher.Create(MatchKind.Regex, rewrite.Pattern, ignoreCase: false).Error is { } error)
+                    else if (patterns.ErrorOf(MatchKind.Regex, rewrite.Pattern, ignoreCase: false) is { } error)
                     {
                         add(IssueSeverity.Error, L("The rewrite pattern '{0}' is invalid: {1}", rewrite.Pattern, error));
                     }

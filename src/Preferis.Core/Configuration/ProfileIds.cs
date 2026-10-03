@@ -14,6 +14,24 @@ public static class ProfileIds
     public static IEnumerable<string> Taken(PreferisConfig config)
         => config.Profiles.SelectMany(p => (p.PreviousIds ?? []).Prepend(p.Id));
 
+    /// <summary>
+    /// The id that the profile known as <paramref name="id"/> has now: <paramref name="id"/> while a profile has it,
+    /// otherwise that of the profile with it in its previous ids. Null when no profile has had it (it was deleted).
+    /// </summary>
+    /// <remarks>
+    /// As for local targets (<see cref="LocalProfileTargets.Find"/>), an id that is some profile's now is that profile's,
+    /// even if another one had it before. Only a hand-written file has an id in the previous ids of several profiles;
+    /// which of them is meant cannot be told, so it is none of them rather than a guess.
+    /// </remarks>
+    public static string? Current(PreferisConfig config, string id)
+    {
+        if (config.Profiles.Any(p => p.Id == id))
+        {
+            return id;
+        }
+        return config.Profiles.Where(p => p.PreviousIds?.Contains(id) == true).Take(2).ToList() is [var former] ? former.Id : null;
+    }
+
     /// <summary>Why <paramref name="newId"/> cannot replace <paramref name="currentId"/>, or null when it can (or nothing changes).</summary>
     public static string? Validate(PreferisConfig config, string currentId, string newId)
     {

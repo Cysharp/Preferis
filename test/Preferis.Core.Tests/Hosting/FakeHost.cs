@@ -17,7 +17,7 @@ internal sealed class FakeHost
     public bool ConfigExists { get; set; } = true;
     public PreferisConfig? SavedConfig { get; private set; }
 
-    /// <summary>Real files (e.g. a <see cref="ConfigLoader"/> in a temporary directory) in place of the above.</summary>
+    /// <summary>Real files (e.g. a <see cref="ConfigLoader"/> in a temporary directory) in place of the properties above.</summary>
     public IConfigStore? ConfigStore { get; set; }
 
     public Dictionary<string, DetectedBrowser> Browsers { get; } = new(StringComparer.Ordinal);

@@ -326,4 +326,124 @@ public class ConfigSerializerTests
     {
         Assert.ThrowsAny<JsonException>(() => ConfigSerializer.Deserialize("{ not json"));
     }
+
+    // Valid JSON, but not a configuration that can be routed with: null where the model has no value to fall back on.
+    [Theory]
+    [InlineData("""{ "profiles": null }""")]
+    [InlineData("""{ "rules": null }""")]
+    [InlineData("""{ "catchAll": null }""")]
+    [InlineData("""{ "catchAll": { "actions": null } }""")]
+    [InlineData("""{ "version": null }""")]
+    [InlineData("""{ "profiles": [ { "id": null, "name": "Edge", "browser": "edge" } ] }""")]
+    [InlineData("""{ "profiles": [ { "id": "edge", "name": null, "browser": "edge" } ] }""")]
+    [InlineData("""{ "profiles": [ { "id": "tool", "name": "Tool", "command": { "windows": { "path": null, "args": [] } } } ] }""")]
+    [InlineData("""{ "profiles": [ { "id": "tool", "name": "Tool", "command": { "macos": { "path": "/bin/tool", "args": null } } } ] }""")]
+    [InlineData("""{ "rules": [ { "id": null, "name": "r", "actions": [ { "type": "none" } ] } ] }""")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": null, "actions": [ { "type": "none" } ] } ] }""")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "enabled": null, "actions": [ { "type": "none" } ] } ] }""")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "actions": null } ] }""")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "condition": { "type": "and", "conditions": null }, "actions": [ { "type": "none" } ] } ] }""")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "condition": { "type": "not", "condition": { "type": "or", "conditions": null } }, "actions": [ { "type": "none" } ] } ] }""")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "condition": { "type": "host", "match": "equals", "pattern": null }, "actions": [ { "type": "none" } ] } ] }""")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "condition": { "type": "url", "match": null, "pattern": "https://a/" }, "actions": [ { "type": "none" } ] } ] }""")]
+    [InlineData("""{ "settings": { "picker": { "position": null } } }""")]
+    public void Null_where_a_value_is_needed_is_rejected(string json)
+    {
+        Assert.ThrowsAny<JsonException>(() => ConfigSerializer.Deserialize(json));
+    }
+
+    // The serializer's own check covers properties only; the items of a list need ours.
+    [Theory]
+    [InlineData("""{ "profiles": [ null ] }""", "$.profiles[0]")]
+    [InlineData("""{ "profiles": [ { "id": "a", "name": "A", "previousIds": [ "b", null ] } ] }""", "$.profiles[0].previousIds[1]")]
+    [InlineData("""{ "profiles": [ { "id": "a", "name": "A", "browser": "edge", "extraArgs": [ null ] } ] }""", "$.profiles[0].extraArgs[0]")]
+    [InlineData("""{ "profiles": [ { "id": "a", "name": "A", "command": { "macos": { "path": "/bin/a", "args": [ "{url}", null ] } } } ] }""", "$.profiles[0].command.macos.args[1]")]
+    [InlineData("""{ "rules": [ null ] }""", "$.rules[0]")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "actions": [ { "type": "none" }, null ] } ] }""", "$.rules[0].actions[1]")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "actions": [ { "type": "open", "profiles": [ null ] } ] } ] }""", "$.rules[0].actions[0].profiles[0]")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "condition": { "type": "or", "conditions": [ { "type": "host", "match": "equals", "pattern": "a" }, null ] }, "actions": [ { "type": "none" } ] } ] }""", "$.rules[0].condition.conditions[1]")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "condition": { "type": "not", "condition": { "type": "and", "conditions": [ { "type": "or", "conditions": [ null ] } ] } }, "actions": [ { "type": "none" } ] } ] }""", "$.rules[0].condition.condition.conditions[0].conditions[0]")]
+    [InlineData("""{ "catchAll": { "actions": [ null ] } }""", "$.catchAll.actions[0]")]
+    // A null type is no type, not one this version does not know yet.
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "condition": { "type": null, "pattern": "a" }, "actions": [ { "type": "none" } ] } ] }""", "$.rules[0].condition.type")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "condition": { "type": "or", "conditions": [ { "type": null } ] }, "actions": [ { "type": "none" } ] } ] }""", "$.rules[0].condition.conditions[0].type")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "actions": [ { "profiles": [ "a" ], "type": null } ] } ] }""", "$.rules[0].actions[0].type")]
+    [InlineData("""{ "catchAll": { "actions": [ { "type": null } ] } }""", "$.catchAll.actions[0].type")]
+    public void Null_items_are_rejected_with_where_they_are(string json, string path)
+    {
+        var error = Assert.ThrowsAny<JsonException>(() => ConfigSerializer.Deserialize(json));
+
+        Assert.Contains(path, error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Reading_a_stream_rejects_null_items_too()
+    {
+        using var json = new MemoryStream("""{ "rules": [ null ] }"""u8.ToArray());
+
+        Assert.ThrowsAny<JsonException>(() => ConfigSerializer.Deserialize(json));
+    }
+
+    // Optional properties (docs/Configuration.md §2): null means the same as leaving them out.
+    [Theory]
+    [InlineData("""{ "defaultProfile": null, "settings": null }""")]
+    [InlineData("""{ "settings": { "picker": null, "language": null } }""")]
+    [InlineData("""{ "profiles": [ { "id": "a", "name": "A", "previousIds": null, "browser": null, "browserProfile": null, "extraArgs": null, "command": null, "fallback": null } ] }""")]
+    [InlineData("""{ "profiles": [ { "id": "a", "name": "A", "browser": { "windows": "edge", "macos": null }, "browserProfile": { "directory": null, "name": "Work", "email": null } } ] }""")]
+    [InlineData("""{ "profiles": [ { "id": "a", "name": "A", "command": { "windows": null, "macos": { "path": "/bin/a", "args": [] } } } ] }""")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "condition": null, "actions": [ { "type": "open", "profiles": null } ] } ] }""")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "condition": { "type": "not", "condition": null }, "actions": [ { "type": "rewrite", "mode": "regex", "pattern": null, "replacement": null, "parameter": null } ] } ] }""")]
+    public void Null_is_accepted_where_a_value_is_optional(string json)
+    {
+        var config = ConfigSerializer.Deserialize(json);
+
+        Assert.NotNull(config.CatchAll.Actions);
+    }
+
+    [Fact]
+    public void Nulls_inside_what_this_version_does_not_know_are_kept()
+    {
+        const string json = """
+            { "x-future": null, "profiles": [ { "id": "a", "name": "A", "browser": "edge", "color": null } ],
+              "rules": [ { "id": "r", "name": "r", "condition": { "type": "geo", "countries": [ null ] }, "actions": [ { "type": "notify", "channel": null }, { "type": "none" } ] } ],
+              "catchAll": { "actions": [ { "type": "none" } ] } }
+            """;
+
+        var reparsed = JsonDocument.Parse(ConfigSerializer.Serialize(ConfigSerializer.Deserialize(json))).RootElement;
+
+        Assert.Equal(JsonValueKind.Null, reparsed.GetProperty("x-future").ValueKind);
+        Assert.Equal(JsonValueKind.Null, reparsed.GetProperty("profiles")[0].GetProperty("color").ValueKind);
+        Assert.Equal(JsonValueKind.Null, reparsed.GetProperty("rules")[0].GetProperty("condition").GetProperty("countries")[0].ValueKind);
+        Assert.Equal(JsonValueKind.Null, reparsed.GetProperty("rules")[0].GetProperty("actions")[0].GetProperty("channel").ValueKind);
+    }
+
+    [Theory]
+    [InlineData("""{ "browserOverrides": { "chrome": null } }""", "$.browserOverrides['chrome']")]
+    [InlineData("""{ "profileTargets": { "work": null } }""", "$.profileTargets['work']")]
+    [InlineData("""{ "profileTargets": { "work": { "browser": "edge", "extraArgs": [ null ] } } }""", "$.profileTargets['work'].extraArgs[0]")]
+    [InlineData("""{ "profileTargets": { "tool": { "command": { "path": "/bin/tool", "args": [ null ] } } } }""", "$.profileTargets['tool'].command.args[0]")]
+    public void Null_items_of_the_local_config_are_rejected_with_where_they_are(string json, string path)
+    {
+        var error = Assert.ThrowsAny<JsonException>(() => ConfigSerializer.DeserializeLocal(json));
+
+        Assert.Contains(path, error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{ "logging": { "level": null } }""")]
+    [InlineData("""{ "profileTargets": { "tool": { "command": { "path": null, "args": [] } } } }""")]
+    [InlineData("""{ "profileTargets": { "tool": { "command": { "path": "/bin/tool", "args": null } } } }""")]
+    public void Null_where_the_local_config_needs_a_value_is_rejected(string json)
+    {
+        Assert.ThrowsAny<JsonException>(() => ConfigSerializer.DeserializeLocal(json));
+    }
+
+    [Theory]
+    [InlineData("""{ "configPath": null, "browserOverrides": null, "profileTargets": null, "logging": null }""")]
+    [InlineData("""{ "browserOverrides": { "chrome": { "path": null, "userDataDir": null } } }""")]
+    [InlineData("""{ "profileTargets": { "work": { "browser": null, "browserProfile": null, "extraArgs": null, "command": null } } }""")]
+    public void Null_is_accepted_where_the_local_config_has_it_optional(string json)
+    {
+        Assert.NotNull(ConfigSerializer.DeserializeLocal(json));
+    }
 }

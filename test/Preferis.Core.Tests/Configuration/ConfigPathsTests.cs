@@ -98,6 +98,46 @@ public class ConfigLoaderTests : IDisposable
     }
 
     [Fact]
+    public void A_config_with_null_where_a_value_is_needed_is_reported_like_a_corrupt_one()
+    {
+        File.WriteAllText(Paths.DefaultConfigPath, """{ "version": 1, "profiles": [ { "id": "edge", "name": "Edge", "browser": "edge" } ], "rules": null }""");
+
+        var result = Loader().Load();
+
+        Assert.NotNull(result.Error);
+        Assert.Contains("config.json", result.Error, StringComparison.Ordinal);
+        Assert.True(result.Exists);
+        Assert.Empty(result.Config.Profiles);
+        Assert.Empty(result.Config.Rules);
+    }
+
+    [Fact]
+    public void A_local_config_with_null_where_a_value_is_needed_is_reported_like_a_corrupt_one()
+    {
+        File.WriteAllText(Paths.LocalConfigPath, """{ "profileTargets": { "work": null } }""");
+        File.WriteAllText(Paths.DefaultConfigPath, Fixtures.ConfigSample);
+
+        var result = Loader().Load();
+
+        Assert.NotNull(result.Error);
+        Assert.Contains("local.json", result.Error, StringComparison.Ordinal);
+        Assert.Null(result.Local.ProfileTargets);
+        Assert.Equal(6, result.Config.Profiles.Count);
+        Assert.Null(Loader().LoadLocal().ProfileTargets);
+    }
+
+    [Fact]
+    public void An_existing_config_with_null_where_a_value_is_needed_is_not_adopted()
+    {
+        var synced = Path.Combine(_root, "cloud", "config.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(synced)!);
+        File.WriteAllText(synced, """{ "profiles": [ null ] }""");
+
+        Assert.Throws<InvalidDataException>(() => Loader().UseExistingConfig(synced));
+        Assert.False(File.Exists(Paths.LocalConfigPath));
+    }
+
+    [Fact]
     public void A_corrupt_local_config_is_reported_but_the_default_config_location_is_still_used()
     {
         File.WriteAllText(Paths.LocalConfigPath, "nope");

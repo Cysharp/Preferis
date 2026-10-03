@@ -41,9 +41,23 @@ public sealed class PatternMatcher
             MatchKind.Contains => new(s => s.Contains(pattern, comparison), null),
             MatchKind.Wildcard => FromRegex(WildcardToRegex(pattern), ignoreCase),
             MatchKind.Regex => FromRegex(pattern, ignoreCase),
-            _ => new(_ => false, L("Unsupported match kind: {0}", kind)),
+            _ => new(_ => false, UnsupportedKind(kind)),
         };
     }
+
+    /// <summary>
+    /// The <see cref="Error"/> <see cref="Create"/> would report, without building the matcher: the settings check every
+    /// pattern of the configuration, and the non-backtracking engine takes about a millisecond and a megabyte to build
+    /// one where the parser alone takes microseconds. Both engines parse alike; the non-backtracking one only adds
+    /// <see cref="NotSupportedException"/>, which <see cref="Create"/> answers with the backtracking engine.
+    /// </summary>
+    public static string? ErrorOf(MatchKind kind, string pattern, bool ignoreCase) => kind switch
+    {
+        MatchKind.Exact or MatchKind.StartsWith or MatchKind.EndsWith or MatchKind.Contains => null,
+        MatchKind.Wildcard => ParseError(WildcardToRegex(pattern), ignoreCase),
+        MatchKind.Regex => ParseError(pattern, ignoreCase),
+        _ => UnsupportedKind(kind),
+    };
 
     /// <summary><c>*</c> matches any run of characters (including none), <c>?</c> exactly one; everything else is literal.</summary>
     public static string WildcardToRegex(string wildcard)
@@ -61,9 +75,27 @@ public sealed class PatternMatcher
         return builder.Append('$').ToString();
     }
 
+    private static RegexOptions Options(bool ignoreCase) => RegexOptions.CultureInvariant | (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None);
+
+    private static string UnsupportedKind(MatchKind kind) => L("Unsupported match kind: {0}", kind);
+
+    private static string? ParseError(string pattern, bool ignoreCase)
+    {
+        try
+        {
+            // The backtracking engine is the cheap one to build; this one is never run.
+            _ = new Regex(pattern, Options(ignoreCase));
+            return null;
+        }
+        catch (ArgumentException ex)
+        {
+            return ex.Message;
+        }
+    }
+
     private static PatternMatcher FromRegex(string pattern, bool ignoreCase)
     {
-        var options = RegexOptions.CultureInvariant | (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None);
+        var options = Options(ignoreCase);
         Regex regex;
         try
         {

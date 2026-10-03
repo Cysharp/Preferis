@@ -246,7 +246,7 @@ public sealed partial class LeafConditionViewModel : ConditionNodeViewModel
     /// <summary>Hosts are always compared ignoring case (docs/Design.md §6.2).</summary>
     public bool IsIgnoreCaseAvailable => Target == ConditionTarget.Url;
 
-    public string? PatternError => Pattern.Length == 0 ? null : PatternMatcher.Create(Match, Pattern, ignoreCase: true).Error;
+    public string? PatternError => Pattern.Length == 0 ? null : PatternMatcher.ErrorOf(Match, Pattern, ignoreCase: true);
 
     /// <summary>An example for the empty pattern box.</summary>
     public string Placeholder => (Target, Match) switch

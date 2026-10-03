@@ -146,7 +146,7 @@ internal sealed class ConditionEditor
         var error = Ui.Wrapping("", 12, Ui.Brush("SystemFillColorCriticalBrush"));
         void ShowError()
         {
-            var message = node.Pattern.Length == 0 ? null : PatternMatcher.Create(node.Match, node.Pattern, ignoreCase: true).Error;
+            var message = node.Pattern.Length == 0 ? null : PatternMatcher.ErrorOf(node.Match, node.Pattern, ignoreCase: true);
             error.Text = message ?? "";
             Ui.Show(error, message is not null);
         }

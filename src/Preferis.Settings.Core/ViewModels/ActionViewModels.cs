@@ -279,7 +279,7 @@ public sealed partial class RewriteActionViewModel : ActionViewModel
 
     public bool IsQueryParameter => Mode == RewriteMode.QueryParameter;
 
-    public string? PatternError => Pattern.Length == 0 ? null : PatternMatcher.Create(MatchKind.Regex, Pattern, ignoreCase: false).Error;
+    public string? PatternError => Pattern.Length == 0 ? null : PatternMatcher.ErrorOf(MatchKind.Regex, Pattern, ignoreCase: false);
 
     partial void OnModeChanged(RewriteMode value) => Write();
 

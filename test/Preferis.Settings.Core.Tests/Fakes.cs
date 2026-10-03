@@ -192,6 +192,9 @@ internal sealed class SettingsHarness : IDisposable
 
     public SettingsViewModel Create() => new(Loader, Platform, Dialogs, Saves);
 
+    /// <summary>A session whose validation looks the pattern errors up in <paramref name="patterns"/>.</summary>
+    public SettingsViewModel Create(PatternErrorCache patterns) => new(Loader, Platform, Dialogs, Saves, patterns);
+
     public PreferisConfig SavedConfig() => ConfigSerializer.Deserialize(File.ReadAllText(Loader.Load().ConfigPath));
 
     public void Dispose() => Directory.Delete(Root, recursive: true);

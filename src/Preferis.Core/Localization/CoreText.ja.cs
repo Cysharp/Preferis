@@ -12,6 +12,7 @@ public static partial class CoreText
         { "A file already exists at {0}.", "{0} には既にファイルが存在します。" },
         { "There is no file at {0}.", "{0} にファイルが存在しません。" },
         { "{0} is not a Preferis configuration: {1}", "{0} は Preferis の設定ファイルではありません: {1}" },
+        { "{0} must not be null.", "{0} に null は指定できません。" },
 
         // ---- configuration issues ----
         { "The default profile '{0}' does not exist.", "既定のプロファイル「{0}」は存在しません。" },

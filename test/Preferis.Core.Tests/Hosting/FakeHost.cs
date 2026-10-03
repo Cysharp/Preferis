@@ -17,6 +17,9 @@ internal sealed class FakeHost
     public bool ConfigExists { get; set; } = true;
     public PreferisConfig? SavedConfig { get; private set; }
 
+    /// <summary>Reads the configuration from files instead (a <see cref="ConfigLoader"/>), in place of the properties above.</summary>
+    public IConfigStore? ConfigStore { get; set; }
+
     public Dictionary<string, DetectedBrowser> Browsers { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, IReadOnlyList<BrowserProfileInfo>?> BrowserProfiles { get; } = new(StringComparer.Ordinal);
 
@@ -58,7 +61,7 @@ internal sealed class FakeHost
     public Func<IEnumerable<string>>? SystemLanguages { get; set; }
 
     public RoutingService CreateService() => new(new RoutingServices(
-        new Store(this), HostPlatform.MacOS, new Detector(this), new Profiles(this), new Launcher(this),
+        ConfigStore ?? new Store(this), HostPlatform.MacOS, new Detector(this), new Profiles(this), new Launcher(this),
         new SystemOpener(this), new Picker(this), new Notifier(this), new Logger(this), _ => null, "/Users/me", SystemLanguages));
 
     private sealed class Store(FakeHost host) : IConfigStore

@@ -225,8 +225,11 @@ public sealed partial class RulesPageViewModel : PageViewModel
     private void Move(int delta) => MoveRule(SelectedRule!, Rules.IndexOf(SelectedRule!) + delta);
 }
 
-/// <summary>Editor of one rule. Condition and action edits rebuild the corresponding part of <see cref="Model"/>.</summary>
-public sealed partial class RuleViewModel : ObservableObject, IConditionOwner
+/// <summary>
+/// Editor of one rule. Condition and action edits rebuild the corresponding part of <see cref="Model"/>. The condition
+/// has no view model of its own: the condition editors of both UIs work on <see cref="ConditionPredicates"/> trees.
+/// </summary>
+public sealed partial class RuleViewModel : ObservableObject
 {
     private readonly SettingsViewModel _settings;
     private readonly bool _ready;
@@ -237,7 +240,6 @@ public sealed partial class RuleViewModel : ObservableObject, IConditionOwner
         Model = model;
         Name = model.Name;
         Enabled = model.Enabled;
-        Condition = model.Condition is null ? null : ConditionNodeViewModel.FromModel(model.Condition, this, null);
         Actions = new ActionListViewModel(settings, model.Actions, Changed);
         _ready = true;
     }
@@ -251,12 +253,6 @@ public sealed partial class RuleViewModel : ObservableObject, IConditionOwner
 
     [ObservableProperty]
     public partial bool Enabled { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasCondition))]
-    public partial ConditionNodeViewModel? Condition { get; private set; }
-
-    public bool HasCondition => Condition is not null;
 
     public ActionListViewModel Actions { get; }
 
@@ -286,40 +282,14 @@ public sealed partial class RuleViewModel : ObservableObject, IConditionOwner
         }
     }
 
-    [RelayCommand]
-    private void AddCondition()
-    {
-        var leaf = new LeafConditionViewModel(this, null, new HostCondition { Match = MatchKind.Exact, Pattern = "" });
-        leaf.MarkReady();
-        Condition = leaf;
-        ConditionChanged();
-    }
-
-    /// <summary>Replaces the whole condition, for editors that produce a condition tree at once (NSPredicateEditor).</summary>
+    /// <summary>
+    /// Replaces the whole condition (null: none, the rule never matches). The condition editors report the whole tree
+    /// after every change, and a condition from a newer Preferis can only be replaced as a whole.
+    /// </summary>
     public void SetCondition(Condition? condition)
     {
-        Condition = condition is null ? null : ConditionNodeViewModel.FromModel(condition, this, null);
         Model.Condition = condition;
         Changed();
-    }
-
-    public void ConditionChanged()
-    {
-        if (_ready)
-        {
-            Model.Condition = Condition?.ToModel();
-            Changed();
-        }
-    }
-
-    public void ReplaceRoot(ConditionNodeViewModel? node)
-    {
-        if (node is not null)
-        {
-            node.Parent = null;
-        }
-        Condition = node;
-        ConditionChanged();
     }
 
     /// <summary>Profile names in the actions and the summary may have changed elsewhere.</summary>

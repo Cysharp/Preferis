@@ -51,6 +51,7 @@ internal sealed class PickerWindow
     private readonly ListView _list;
     private readonly Button _open;
     private readonly FontIcon _copyIcon;
+    private readonly (FrameworkElement Header, FrameworkElement Url, FrameworkElement Copy) _header;
     private DispatcherQueueTimer? _timer;
     private DispatcherQueueTimer? _closer;
     private readonly string _position;
@@ -104,7 +105,8 @@ internal sealed class PickerWindow
         var rows = new List<UIElement>();
 
         _copyIcon = new FontIcon { Glyph = Glyphs.Copy, FontSize = 16 };
-        rows.Add(BuildHeader(request.Url));
+        _header = BuildHeader(request.Url);
+        rows.Add(_header.Header);
         if (request.Message is { Length: > 0 } message)
         {
             rows.Add(BuildMessage(message));
@@ -195,6 +197,12 @@ internal sealed class PickerWindow
             _placedHeight = _root.DesiredSize.Height;
             ResizeClient((int)Math.Ceiling(ContentWidth * _scale), (int)Math.Ceiling(_placedHeight * _scale));
         }
+        UpdateCaption();
+        _header.Header.SizeChanged += (_, _) => UpdateCaption();
+        _root.XamlRoot.Changed += (_, _) => UpdateCaption();
+        var nonClient = InputNonClientPointerSource.GetForWindowId(_window.AppWindow.Id);
+        nonClient.PointerMoved += (_, _) => _session.NoteActivity();
+        nonClient.EnteredMoveSize += (_, _) => _session.NoteActivity();
         Win32.SetForegroundWindow(Handle);
         if (_session.SelectedIndex >= 0)
         {
@@ -219,6 +227,31 @@ internal sealed class PickerWindow
             delay.Tick += async (_, _) => await Snapshot(snapshot);
             delay.Start();
         }
+    }
+
+    /// <summary>
+    /// The header is the title bar the window otherwise has none of: the system moves the window when it is dragged, as
+    /// it does by any title bar, and activates it first when the click comes from another window. Moving it by hand from
+    /// PointerPressed (<c>WM_NCLBUTTONDOWN</c>) lost the button's release, which WinUI's input takes, and the window then
+    /// followed the pointer after a mere click until the next one. The copy button and the URL, whose tooltip shows it
+    /// whole, stay the content's. In physical pixels of the client area.
+    /// </summary>
+    private void UpdateCaption()
+    {
+        if (_root.XamlRoot is not { } xamlRoot)
+        {
+            return;
+        }
+        var scale = xamlRoot.RasterizationScale;
+        var nonClient = InputNonClientPointerSource.GetForWindowId(_window.AppWindow.Id);
+        nonClient.SetRegionRects(NonClientRegionKind.Caption, [Bounds(_header.Header, scale)]);
+        nonClient.SetRegionRects(NonClientRegionKind.Passthrough, [Bounds(_header.Url, scale), Bounds(_header.Copy, scale)]);
+    }
+
+    private static RectInt32 Bounds(FrameworkElement element, double scale)
+    {
+        var bounds = element.TransformToVisual(null).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
+        return new RectInt32((int)Math.Round(bounds.X * scale), (int)Math.Round(bounds.Y * scale), (int)Math.Round(bounds.Width * scale), (int)Math.Round(bounds.Height * scale));
     }
 
     // Near the pointer (centered on it horizontally, the top just above it) or in the middle of the pointer's screen,
@@ -392,8 +425,8 @@ internal sealed class PickerWindow
     }
 
     // Like the AppKit picker: the host large, the whole URL small below it, the copy button at the end. Dragging the
-    // header moves the window, which has no title bar.
-    private FrameworkElement BuildHeader(string url)
+    // header moves the window, which has no title bar (UpdateCaption).
+    private (FrameworkElement Header, FrameworkElement Url, FrameworkElement Copy) BuildHeader(string url)
     {
         var parts = PickerDisplay.SplitUrl(url);
         var icon = new FontIcon { Glyph = parts.Host.Length > 0 ? Glyphs.Link : Glyphs.Page, FontSize = 22, Foreground = Brush("TextFillColorSecondaryBrush") };
@@ -411,6 +444,8 @@ internal sealed class PickerWindow
             FontSize = 12,
             Foreground = Brush("TextFillColorSecondaryBrush"),
             TextTrimming = TextTrimming.CharacterEllipsis,
+            // As wide as the text: the rest of the line is the title bar's.
+            HorizontalAlignment = HorizontalAlignment.Left,
         };
         ToolTipService.SetToolTip(full, url);
         var texts = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center, Children = { host, full } };
@@ -429,15 +464,7 @@ internal sealed class PickerWindow
         copy.Click += (_, _) => CopyUrl();
 
         var header = Columns(12, (icon, GridLength.Auto), (texts, new GridLength(1, GridUnitType.Star)), (copy, GridLength.Auto));
-        header.Background = new SolidColorBrush(Colors.Transparent);
-        header.PointerPressed += (_, e) =>
-        {
-            if (e.GetCurrentPoint(header).Properties.IsLeftButtonPressed)
-            {
-                Win32.BeginDrag(Handle);
-            }
-        };
-        return header;
+        return (header, full, copy);
     }
 
     // Part of the content rather than the footer, which holds only the dialog's buttons.

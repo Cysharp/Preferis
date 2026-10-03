@@ -2,13 +2,11 @@ using System.Runtime.InteropServices;
 
 namespace Preferis.Picker.Windows;
 
-/// <summary>Window management WinUI does not offer: foreground, rounded corners, dragging, the monitor's scale.</summary>
+/// <summary>Window management WinUI does not offer: foreground, rounded corners, the monitor's scale.</summary>
 internal static partial class Win32
 {
     private const int DwmwaWindowCornerPreference = 33;
     private const int DwmwcpRound = 2;
-    private const uint WmNclButtonDown = 0xA1;
-    private const int HtCaption = 2;
     private const uint MonitorDefaultToNearest = 2;
     private const int MdtEffectiveDpi = 0;
 
@@ -35,13 +33,6 @@ internal static partial class Win32
         DwmSetWindowAttribute(window, DwmwaWindowCornerPreference, ref preference, sizeof(int));
     }
 
-    /// <summary>Starts moving the window with the mouse, as if its title bar had been grabbed.</summary>
-    public static void BeginDrag(IntPtr window)
-    {
-        ReleaseCapture();
-        SendMessage(window, WmNclButtonDown, HtCaption, IntPtr.Zero);
-    }
-
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetForegroundWindow(IntPtr window);
@@ -61,11 +52,4 @@ internal static partial class Win32
 
     [LibraryImport("dwmapi.dll")]
     private static partial int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool ReleaseCapture();
-
-    [LibraryImport("user32.dll", EntryPoint = "SendMessageW")]
-    private static partial IntPtr SendMessage(IntPtr window, uint message, nint wParam, IntPtr lParam);
 }

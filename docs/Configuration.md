@@ -399,7 +399,7 @@ JSON として正しいことと、Preferis が処理できる設定であるこ
   - `local.json`: `configPath`、`browserOverrides`、`profileTargets`、`logging`、`browserOverrides` の値の `path`・
     `userDataDir`、`profileTargets` の値の `browser`・`browserProfile`・`extraArgs`・`command`
 - それ以外の `null` は値が必要な場所にあり、構造の誤りとする。`profiles`・`rules`・`catchAll` とその `actions`、`id`・
-  `name`・`pattern`・`path`・`picker.position`・`logging.level` などの文字列、`and` / `or` の `conditions`、`args`、数値・
+  `name`・`pattern`・`path`・`picker.position`・`logging.level` などの文字列、条件・アクションの `type`、`and` / `or` の `conditions`、`args`、数値・
   真偽値・`match` / `mode` の値、配列の要素 (`"actions": [null]`)、`browserOverrides`・`profileTargets` の値がこれに当たる。
 - 構造の誤りは JSON の構文エラーと同じく、ファイル全体の読み込みエラーにする。Router は読めない設定として扱い
   (Design.md §8 の 1)、設定 UI は読めないファイルと同じく、利用者が選ぶまで上書きしない (Design.md §9.1)。誤りの箇所を

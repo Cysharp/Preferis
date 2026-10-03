@@ -7,7 +7,8 @@ namespace Preferis.Core.Configuration;
 /// What the serializer leaves to check after reading (see <see cref="PreferisJsonContext"/>): <c>null</c> items of lists and
 /// values of dictionaries (<c>"actions": [null]</c>). The model has no meaning for them and routing and the settings would
 /// dereference them, so they fail the read like malformed JSON. The content of conditions and actions of an unknown type
-/// is not looked into: it is for the newer Preferis that wrote it to judge.
+/// is not looked into: it is for the newer Preferis that wrote it to judge. Their <c>type</c> being null is no type at
+/// all, though, and fails the read too.
 /// </summary>
 internal static class ConfigStructure
 {
@@ -71,16 +72,34 @@ internal static class ConfigStructure
             case NotCondition { Condition: { } negated }:
                 Condition(negated, path + ".condition");
                 break;
+            case UnknownCondition unknown:
+                Type(unknown.Raw, path);
+                break;
         }
     }
 
     private static void Actions(List<RoutingAction> actions, string path) => Each(actions, path, static (action, at) =>
     {
-        if (action is OpenAction open)
+        switch (action)
         {
-            Each(open.Profiles, at + ".profiles");
+            case OpenAction open:
+                Each(open.Profiles, at + ".profiles");
+                break;
+            case UnknownAction unknown:
+                Type(unknown.Raw, at);
+                break;
         }
     });
+
+    // The serializer reads a null type as one it does not know, which never matches (a condition) or fails only when
+    // reached (an action): a mistake in the file that would otherwise go unnoticed.
+    private static void Type(JsonElement node, string path)
+    {
+        if (node.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.Null)
+        {
+            throw Null(path + ".type");
+        }
+    }
 
     private static void Each<T>(List<T>? items, string path, Action<T, string>? check = null)
         where T : class
@@ -114,8 +133,10 @@ internal static class ConfigStructure
     {
         if (item is null)
         {
-            throw new JsonException(L("{0} must not be null.", path), path, lineNumber: null, bytePositionInLine: null);
+            throw Null(path);
         }
         check?.Invoke(item, path);
     }
+
+    private static JsonException Null(string path) => new(L("{0} must not be null.", path), path, lineNumber: null, bytePositionInLine: null);
 }

@@ -364,6 +364,11 @@ public class ConfigSerializerTests
     [InlineData("""{ "rules": [ { "id": "r", "name": "r", "condition": { "type": "or", "conditions": [ { "type": "host", "match": "equals", "pattern": "a" }, null ] }, "actions": [ { "type": "none" } ] } ] }""", "$.rules[0].condition.conditions[1]")]
     [InlineData("""{ "rules": [ { "id": "r", "name": "r", "condition": { "type": "not", "condition": { "type": "and", "conditions": [ { "type": "or", "conditions": [ null ] } ] } }, "actions": [ { "type": "none" } ] } ] }""", "$.rules[0].condition.condition.conditions[0].conditions[0]")]
     [InlineData("""{ "catchAll": { "actions": [ null ] } }""", "$.catchAll.actions[0]")]
+    // A null type is no type, not one this version does not know yet.
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "condition": { "type": null, "pattern": "a" }, "actions": [ { "type": "none" } ] } ] }""", "$.rules[0].condition.type")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "condition": { "type": "or", "conditions": [ { "type": null } ] }, "actions": [ { "type": "none" } ] } ] }""", "$.rules[0].condition.conditions[0].type")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "actions": [ { "profiles": [ "a" ], "type": null } ] } ] }""", "$.rules[0].actions[0].type")]
+    [InlineData("""{ "catchAll": { "actions": [ { "type": null } ] } }""", "$.catchAll.actions[0].type")]
     public void Null_items_are_rejected_with_where_they_are(string json, string path)
     {
         var error = Assert.ThrowsAny<JsonException>(() => ConfigSerializer.Deserialize(json));

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Preferis.Core.Configuration;
+using Preferis.Core.Routing;
 
 namespace Preferis.Core.Tests.Configuration;
 
@@ -172,6 +173,83 @@ public class ConfigValidatorTests
 
         Assert.Equal(severity, issue.Severity);
         Assert.Equal("r", issue.Id);
+    }
+
+    [Fact]
+    public void Patterns_are_checked_with_the_case_sensitivity_the_router_compiles_them_with()
+    {
+        var config = WithProfiles(Browser("edge"));
+        var url = new UrlCondition { Match = MatchKind.Regex, Pattern = "a" };
+        config.Rules = [RuleWith("r", new AndCondition { Conditions = [Host("b", MatchKind.Regex), url] }, new OpenAction())];
+        // Only case-sensitive patterns fail here; hosts always ignore case.
+        var patterns = new PatternErrorCache((_, _, ignoreCase) => ignoreCase ? null : "case-sensitive");
+
+        Assert.Empty(ConfigValidator.Validate(config, patterns));
+
+        url.IgnoreCase = false;
+
+        Assert.Contains("case-sensitive", Assert.Single(ConfigValidator.Validate(config, patterns)).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Patterns_are_checked_again_only_when_they_change()
+    {
+        var checkedPatterns = new List<(MatchKind, string, bool)>();
+        var patterns = new PatternErrorCache((kind, pattern, ignoreCase) =>
+        {
+            checkedPatterns.Add((kind, pattern, ignoreCase));
+            return PatternMatcher.ErrorOf(kind, pattern, ignoreCase);
+        });
+        var leaf = new UrlCondition { Match = MatchKind.Regex, Pattern = "(" };
+        var config = WithProfiles(Browser("edge"));
+        config.Rules =
+        [
+            RuleWith("r", new OrCondition { Conditions = [Host("*.example.com", MatchKind.Wildcard), leaf] }, new OpenAction()),
+            RuleWith("s", Host("*.example.com", MatchKind.Wildcard), new RewriteAction { Mode = RewriteMode.Regex, Pattern = "x", Replacement = "y" }, new OpenAction()),
+        ];
+        Assert.Single(ConfigValidator.Validate(config, patterns), i => i.Severity == IssueSeverity.Error);
+        Assert.Equal([(MatchKind.Wildcard, "*.example.com", true), (MatchKind.Regex, "(", true), (MatchKind.Regex, "x", false)], checkedPatterns);
+
+        void Expect(int errors, params (MatchKind, string, bool)[] checkedAgain)
+        {
+            checkedPatterns.Clear();
+            Assert.Equal(errors, ConfigValidator.Validate(config, patterns).Count(i => i.Severity == IssueSeverity.Error));
+            Assert.Equal(checkedAgain, checkedPatterns);
+        }
+
+        config.Rules[0].Name = "renamed";
+        Expect(1);
+        leaf.Pattern = "(a)";
+        Expect(0, (MatchKind.Regex, "(a)", true));
+        leaf.Match = MatchKind.Contains;
+        Expect(0, (MatchKind.Contains, "(a)", true));
+        leaf.Match = MatchKind.Regex;
+        leaf.IgnoreCase = false;
+        Expect(0, (MatchKind.Regex, "(a)", false));
+        Expect(0);
+    }
+
+    [Fact]
+    public void Patterns_no_longer_in_the_configuration_are_forgotten()
+    {
+        var checkedPatterns = new List<string>();
+        var patterns = new PatternErrorCache((kind, pattern, ignoreCase) =>
+        {
+            checkedPatterns.Add(pattern);
+            return null;
+        });
+        var leaf = Host("a", MatchKind.Regex);
+        var config = WithProfiles(Browser("edge"));
+        config.Rules = [RuleWith("r", leaf, new OpenAction())];
+
+        // Typing "ab" and deleting the "b" again: only what the last validation looked at is kept.
+        ConfigValidator.Validate(config, patterns);
+        leaf.Pattern = "ab";
+        ConfigValidator.Validate(config, patterns);
+        leaf.Pattern = "a";
+        ConfigValidator.Validate(config, patterns);
+
+        Assert.Equal(["a", "ab", "a"], checkedPatterns);
     }
 
     [Fact]

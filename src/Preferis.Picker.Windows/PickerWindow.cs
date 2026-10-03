@@ -39,6 +39,9 @@ internal sealed class PickerWindow
     private const double RowHeight = 56;
     private const int MaxVisibleRows = 6;
 
+    // The height of WinUI's buttons and check boxes with one line of text.
+    private const double ControlHeight = 32;
+
     private readonly PickerSession _session;
     private readonly Action<PickerResponse> _answer;
     private readonly Action _quit;
@@ -50,8 +53,10 @@ internal sealed class PickerWindow
     private readonly FontIcon _copyIcon;
     private DispatcherQueueTimer? _timer;
     private DispatcherQueueTimer? _closer;
+    private readonly string _position;
+    private double _placedHeight;
+    private double _scale;
     private bool _answered;
-    private bool _placed;
     private bool _closed;
 
     /// <param name="images">The candidates' icons, loading since the process started.</param>
@@ -63,12 +68,11 @@ internal sealed class PickerWindow
         _images = images;
         _answer = answer;
         _quit = quit;
+        _position = request.Options.Position;
 
         // No title bar, like Windows 11's own app chooser. Changing the frame costs about 65 ms however it is done (also
         // with ExtendsContentIntoTitleBar), a quarter of the start-up; docs/Platform.md §5.
-        // Mica behind the content, like other WinUI apps: the window, shown again in place (OnLoaded), is drawn before its
-        // content is, and shows the material rather than white meanwhile.
-        _window = new Window { Title = "Preferis", SystemBackdrop = new MicaBackdrop() };
+        _window = new Window { Title = "Preferis" };
         var presenter = OverlappedPresenter.CreateForDialog();
         presenter.IsResizable = false;
         presenter.IsAlwaysOnTop = true;
@@ -101,13 +105,14 @@ internal sealed class PickerWindow
         rows.Add(BuildHeader(request.Url));
         if (request.Message is { Length: > 0 } message)
         {
-            rows.Add(new InfoBar { Severity = InfoBarSeverity.Warning, IsOpen = true, IsClosable = false, Message = message });
+            rows.Add(BuildMessage(message));
         }
 
+        // As high as its rows (up to MaxVisibleRows) from the start: the window is sized before the list has made them.
         _list = new ListView
         {
             SelectionMode = ListViewSelectionMode.Single,
-            MaxHeight = MaxVisibleRows * RowHeight,
+            Height = Math.Clamp(request.Candidates.Count, 1, MaxVisibleRows) * RowHeight,
             Margin = new Thickness(-12, 0, -12, 0),
         };
         for (var i = 0; i < request.Candidates.Count; i++)
@@ -133,10 +138,11 @@ internal sealed class PickerWindow
             Content = L("Open"),
             Style = Resource<Style>("AccentButtonStyle"),
             HorizontalAlignment = HorizontalAlignment.Stretch,
+            MinHeight = ControlHeight,
             IsEnabled = request.Candidates.Count > 0,
         };
         _open.Click += (_, _) => Answer(_session.Confirm());
-        var cancel = new Button { Content = L("Cancel"), HorizontalAlignment = HorizontalAlignment.Stretch };
+        var cancel = new Button { Content = L("Cancel"), HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = ControlHeight };
         cancel.Click += (_, _) => Answer(_session.Cancel());
         // Windows puts the primary action first, and a dialog's buttons share the width equally.
         var footer = Columns(8, (_open, new GridLength(1, GridUnitType.Star)), (cancel, new GridLength(1, GridUnitType.Star)));
@@ -157,7 +163,7 @@ internal sealed class PickerWindow
         _root.PreviewKeyDown += OnKeyDown;
         _root.PointerMoved += (_, _) => _session.NoteActivity();
         _root.PointerWheelChanged += (_, _) => _session.NoteActivity();
-        _root.Loaded += (_, _) => OnLoaded(request.Options.Position);
+        _root.Loaded += (_, _) => OnLoaded();
 
         _window.Content = _root;
         Program.Mark("built");
@@ -167,36 +173,31 @@ internal sealed class PickerWindow
 
     public void Show()
     {
-        // Laid out unseen first: the window can only be sized to its content once that content has loaded. Off screen
-        // alone was not enough: at -32000, where minimized windows are, the move into place was animated like a window
-        // restored from the taskbar, growing from the bottom right. Cloaked, it is not animated or seen at all. Not
-        // activated yet either: hiding the active window gives the foreground away, and it could not be had back.
-        Win32.Conceal(Handle, true);
-        _window.AppWindow.Move(new PointInt32(-32000, -32000));
-        _window.AppWindow.Show(activateWindow: false);
+        // Sized and placed before it is shown, then shown once, like any window: it opens in place with the system's
+        // animation and its first frame drawn. Its content measures true before it is shown: the controls whose templates
+        // are not applied yet have fixed heights (ControlHeight, the list), and the message has no template.
+        Place(_position);
+        _window.Activate();
     }
 
-    private void OnLoaded(string position)
+    private void OnLoaded()
     {
-        // Showing the window again must not lay it out again.
-        if (_placed)
-        {
-            return;
-        }
-        _placed = true;
         Program.Mark("loaded");
-        Place(position);
-        // In place now: hidden and shown again, so that it appears there the way every window opens.
-        _window.AppWindow.Hide();
-        Win32.Conceal(Handle, false);
-        _window.Activate();
+        // Laid out for real now: a height that came out different (text scaled up in the accessibility settings, say)
+        // is corrected, as quickly as that can be.
+        _root.Measure(new Size(ContentWidth, double.PositiveInfinity));
+        if (Math.Abs(_root.DesiredSize.Height - _placedHeight) > 0.5)
+        {
+            Console.Error.WriteLine($"picker: height {_placedHeight:F1} before loading, {_root.DesiredSize.Height:F1} after; resizing");
+            // Where it opened, even if the pointer has moved since: only the height changes.
+            _placedHeight = _root.DesiredSize.Height;
+            ResizeClient((int)Math.Ceiling(ContentWidth * _scale), (int)Math.Ceiling(_placedHeight * _scale));
+        }
         Win32.SetForegroundWindow(Handle);
         if (_session.SelectedIndex >= 0)
         {
             _list.SelectedIndex = _session.SelectedIndex;
-            // Activating the loaded window focuses it as if by keyboard, and a programmatic focus keeps the rectangle that
-            // goes with it around the selection. As pointer focus there is none until the keys are used, as before.
-            (_list.ContainerFromIndex(_session.SelectedIndex) as ListViewItem)?.Focus(FocusState.Pointer);
+            (_list.ContainerFromIndex(_session.SelectedIndex) as ListViewItem)?.Focus(FocusState.Programmatic);
         }
         Program.Mark(Win32.GetForegroundWindow() == Handle ? "shown" : "shown (not in front)");
 
@@ -223,10 +224,11 @@ internal sealed class PickerWindow
     private void Place(string position)
     {
         var cursor = Win32.CursorPosition();
-        var scale = Win32.ScaleAt(cursor);
+        var scale = _scale = Win32.ScaleAt(cursor);
         _root.Measure(new Size(ContentWidth, double.PositiveInfinity));
         var width = (int)Math.Ceiling(ContentWidth * scale);
-        var height = (int)Math.Ceiling(_root.DesiredSize.Height * scale);
+        _placedHeight = _root.DesiredSize.Height;
+        var height = (int)Math.Ceiling(_placedHeight * scale);
         var area = DisplayArea.GetFromPoint(new PointInt32(cursor.X, cursor.Y), DisplayAreaFallback.Nearest).WorkArea;
 
         var (x, y) = position == "center"
@@ -235,6 +237,12 @@ internal sealed class PickerWindow
         x = Math.Clamp(x, area.X, Math.Max(area.X, area.X + area.Width - width));
         y = Math.Clamp(y, area.Y, Math.Max(area.Y, area.Y + area.Height - height));
 
+        ResizeClient(width, height);
+        _window.AppWindow.Move(new PointInt32(x, y));
+    }
+
+    private void ResizeClient(int width, int height)
+    {
         _window.AppWindow.ResizeClient(new SizeInt32(width, height));
         // Without a title bar ResizeClient still converts as if there were one, and the window came out a title bar's
         // height too tall (45 px at 150 %), all of it below the buttons. Take off whatever it added.
@@ -243,7 +251,6 @@ internal sealed class PickerWindow
         {
             _window.AppWindow.ResizeClient(new SizeInt32(2 * width - client.Width, 2 * height - client.Height));
         }
-        _window.AppWindow.Move(new PointInt32(x, y));
     }
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
@@ -405,6 +412,8 @@ internal sealed class PickerWindow
 
         var copy = new Button
         {
+            Width = ControlHeight,
+            Height = ControlHeight,
             Content = _copyIcon,
             Background = new SolidColorBrush(Colors.Transparent),
             BorderThickness = new Thickness(0),
@@ -436,6 +445,7 @@ internal sealed class PickerWindow
         var remember = new CheckBox
         {
             Content = new TextBlock { Text = L("Always open {0} with this choice", PickerDisplay.SplitUrl(request.Url).Host), TextTrimming = TextTrimming.CharacterEllipsis },
+            MinHeight = ControlHeight,
             IsChecked = _session.Remember,
         };
         remember.Checked += (_, _) => _session.Remember = true;
@@ -465,7 +475,7 @@ internal sealed class PickerWindow
         var item = new ListViewItem
         {
             Content = Columns(12, [.. columns]),
-            MinHeight = RowHeight,
+            Height = RowHeight,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             Padding = new Thickness(12, 0, 12, 0),
         };
@@ -480,6 +490,35 @@ internal sealed class PickerWindow
 
     private static void AutomationProperties(ListViewItem item, PickerCandidate candidate)
         => Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(item, PickerDisplay.DetailLine(candidate) is { Length: > 0 } detail ? $"{candidate.Name}, {detail}" : candidate.Name);
+
+    // Looks like a warning InfoBar, but without a template: its height is known before the window is shown.
+    private static Border BuildMessage(string message)
+    {
+        var icon = new Grid
+        {
+            Width = 16,
+            Height = 16,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 2, 0, 0),
+            Children =
+            {
+                new FontIcon { Glyph = Glyphs.StatusCircle, FontSize = 16, Foreground = Brush("SystemFillColorCautionBrush") },
+                new FontIcon { Glyph = Glyphs.StatusWarning, FontSize = 16, Foreground = Brush("TextFillColorInverseBrush") },
+            },
+        };
+        var text = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+        return new Border
+        {
+            Background = Brush("SystemFillColorCautionBackgroundBrush"),
+            BorderBrush = Brush("CardStrokeColorDefaultBrush"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(15, 13, 15, 13),
+            // InfoBar's own minimum.
+            MinHeight = 48,
+            Child = Columns(12, (icon, GridLength.Auto), (text, new GridLength(1, GridUnitType.Star))),
+        };
+    }
 
     // The browser's icon with the browser profile's picture as a small badge in the corner, like the browsers' own profile menus.
     private FrameworkElement BuildIcon(PickerCandidate candidate, int index)
@@ -564,5 +603,9 @@ internal sealed class PickerWindow
         public const string CheckMark = "\uE73E";
         public const string Command = "\uE756";
         public const string Globe = "\uE774";
+
+        // The circle and the mark of InfoBar's warning icon.
+        public const string StatusCircle = "\uF136";
+        public const string StatusWarning = "\uF13C";
     }
 }

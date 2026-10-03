@@ -90,6 +90,33 @@ public sealed class TestPageTests : IDisposable
     }
 
     [Fact]
+    public void The_rules_evaluated_again_before_the_picker_are_shown()
+    {
+        File.WriteAllText(_harness.Paths.DefaultConfigPath, """
+            {
+              "version": 1,
+              "profiles": [ { "id": "a", "name": "A", "browser": "safari" }, { "id": "b", "name": "B", "browser": "safari" } ],
+              "rules": [
+                { "id": "pinned", "name": "Pinned", "enabled": true,
+                  "condition": { "type": "host", "match": "equals", "pattern": "target.example" },
+                  "actions": [ { "type": "open", "profiles": ["a"] } ] },
+                { "id": "unwrap", "name": "Unwrap", "enabled": true,
+                  "condition": { "type": "host", "match": "equals", "pattern": "wrapper.example" },
+                  "actions": [ { "type": "rewrite", "mode": "queryParameter", "parameter": "url" }, { "type": "open", "profiles": ["a", "b"] } ] }
+              ],
+              "catchAll": { "actions": [ { "type": "open" } ] }
+            }
+            """);
+        var page = _harness.Create().Test;
+
+        page.Url = "https://wrapper.example/?url=https%3A%2F%2Ftarget.example%2F";
+        page.RunCommand.Execute(null);
+
+        Assert.Contains(page.Trace, t => t.Kind == "re-evaluated" && t.Rule == "Unwrap");
+        Assert.Equal("Open with A (rule \"Pinned\")", page.Decision);
+    }
+
+    [Fact]
     public void The_configuration_being_edited_is_tested_before_it_is_saved()
     {
         var settings = _harness.WithSample().Create();

@@ -17,6 +17,15 @@ public sealed class RulesPageTests : IDisposable
 
     private static RuleViewModel Rule(RulesPageViewModel page, string id) => page.Rules.Single(r => r.Id == id);
 
+    /// <summary>
+    /// An edit in the condition editor, as both UIs make it: the editor shows the rule's condition as an editor tree
+    /// and hands every change back as a whole condition.
+    /// </summary>
+    private static void EditCondition(RuleViewModel rule, Func<CompoundPredicate, CompoundPredicate> edit)
+        => rule.SetCondition(ConditionPredicates.FromEditor(edit(ConditionPredicates.ToEditor(rule.Model.Condition)!)));
+
+    private static ComparisonPredicate HostRow(string pattern, MatchKind match = MatchKind.Exact) => new(PredicateField.Host, match, pattern);
+
     [Fact]
     public void Rules_are_listed_in_order_with_a_summary()
     {
@@ -42,9 +51,9 @@ public sealed class RulesPageTests : IDisposable
         Assert.Same(rule, page.CurrentEditor);
         Assert.Equal("new-rule", rule.Id);
         Assert.Same(rule.Model, settings.Config.Rules[1]);
-        var leaf = Assert.IsType<LeafConditionViewModel>(rule.Condition);
-        Assert.Equal(ConditionTarget.Host, leaf.Target);
-        Assert.Equal(MatchKind.Exact, leaf.Match);
+        var root = ConditionPredicates.ToEditor(rule.Model.Condition)!;
+        Assert.Equal(CompoundKind.All, root.Kind);
+        Assert.Equal(HostRow(""), Assert.Single(root.Children));
         Assert.IsType<OpenActionViewModel>(Assert.Single(rule.Actions.Items));
     }
 
@@ -125,89 +134,110 @@ public sealed class RulesPageTests : IDisposable
     }
 
     [Fact]
-    public void Editing_a_leaf_updates_the_rule()
+    public void Editing_a_row_updates_the_rule_and_is_saved()
     {
         var page = Page(out var settings);
-        var leaf = Assert.IsType<LeafConditionViewModel>(Rule(page, "google-admin").Condition);
+        var rule = Rule(page, "google-admin");
 
-        leaf.Target = ConditionTarget.Host;
-        leaf.Match = MatchKind.EndsWith;
-        leaf.Pattern = ".google.com";
+        EditCondition(rule, root => root with { Children = [HostRow(".google.com", MatchKind.EndsWith)] });
 
         var condition = Assert.IsType<HostCondition>(settings.Config.Rules[1].Condition);
         Assert.Equal(MatchKind.EndsWith, condition.Match);
         Assert.Equal(".google.com", condition.Pattern);
-        Assert.False(leaf.IsIgnoreCaseAvailable);
+        Assert.Equal("host ends with .google.com → open Chrome (Work)", rule.Summary);
+        Assert.True(settings.IsDirty);
+
+        _harness.Saves.RunPending();
+        Assert.Equal(".google.com", Assert.IsType<HostCondition>(_harness.SavedConfig().Rules[1].Condition).Pattern);
     }
 
     [Fact]
-    public void Url_leaves_can_be_case_sensitive()
+    public void Url_rows_can_be_case_sensitive()
     {
         var page = Page(out var settings);
-        var leaf = Assert.IsType<LeafConditionViewModel>(Rule(page, "google-admin").Condition);
-        Assert.True(leaf.IsIgnoreCaseAvailable);
+        var rule = Rule(page, "google-admin");
+        var row = Assert.IsType<ComparisonPredicate>(Assert.Single(ConditionPredicates.ToEditor(rule.Model.Condition)!.Children));
+        Assert.Equal(PredicateField.Url, row.Field);
 
-        leaf.IgnoreCase = false;
+        EditCondition(rule, root => root with { Children = [row with { Field = PredicateField.UrlCaseSensitive }] });
 
-        Assert.False(Assert.IsType<UrlCondition>(settings.Config.Rules[1].Condition).IgnoreCase);
+        var url = Assert.IsType<UrlCondition>(settings.Config.Rules[1].Condition);
+        Assert.False(url.IgnoreCase);
+        Assert.Equal("https://admin.google.com/", url.Pattern);
     }
 
     [Fact]
-    public void Invalid_patterns_are_explained_on_the_leaf()
+    public void Invalid_patterns_are_reported_on_the_rule()
     {
         var page = Page(out _);
-        var leaf = Assert.IsType<LeafConditionViewModel>(Rule(page, "ms-login").Condition);
-        Assert.Null(leaf.PatternError);
+        var rule = Rule(page, "ms-login");
+        Assert.Empty(rule.Issues);
 
-        leaf.Pattern = "^login\\.(";
+        EditCondition(rule, root => root with { Children = [HostRow(@"^login\.(", MatchKind.Regex)] });
 
-        Assert.NotNull(leaf.PatternError);
-        Assert.NotEmpty(Rule(page, "ms-login").Issues);
+        Assert.NotEmpty(rule.Issues);
     }
 
     [Fact]
-    public void Groups_can_be_built_and_negated()
-    {
-        var page = Page(out var settings);
-        var rule = Rule(page, "google-admin");
-        var leaf = Assert.IsType<LeafConditionViewModel>(rule.Condition);
-
-        leaf.WrapInGroupCommand.Execute(null);
-        var group = Assert.IsType<GroupConditionViewModel>(rule.Condition);
-        Assert.Equal(GroupKind.All, group.Kind);
-        Assert.Same(leaf, Assert.Single(group.Children));
-
-        group.AddConditionCommand.Execute(null);
-        var added = Assert.IsType<LeafConditionViewModel>(group.Children[1]);
-        added.Pattern = "admin.google.com";
-        added.IsNegated = true;
-        group.Kind = GroupKind.Any;
-
-        var model = Assert.IsType<OrCondition>(settings.Config.Rules[1].Condition);
-        Assert.IsType<UrlCondition>(model.Conditions[0]);
-        var not = Assert.IsType<NotCondition>(model.Conditions[1]);
-        Assert.Equal("admin.google.com", Assert.IsType<HostCondition>(not.Condition).Pattern);
-
-        leaf.RemoveCommand.Execute(null);
-        Assert.Single(Assert.IsType<OrCondition>(settings.Config.Rules[1].Condition).Conditions);
-    }
-
-    [Fact]
-    public void Removing_the_root_leaves_the_rule_without_a_condition()
+    public void Conditions_can_be_added_and_removed()
     {
         var page = Page(out var settings);
         var rule = Rule(page, "google-admin");
 
-        rule.Condition!.RemoveCommand.Execute(null);
+        EditCondition(rule, root => root with { Children = [.. root.Children, HostRow("admin.google.com")] });
 
-        Assert.Null(rule.Condition);
+        var and = Assert.IsType<AndCondition>(settings.Config.Rules[1].Condition);
+        Assert.IsType<UrlCondition>(and.Conditions[0]);
+        Assert.Equal("admin.google.com", Assert.IsType<HostCondition>(and.Conditions[1]).Pattern);
+        Assert.Equal("all of 2 conditions → open Chrome (Work)", rule.Summary);
+
+        // A root with one row left is stored as that row.
+        EditCondition(rule, root => root with { Children = root.Children.Skip(1).ToList() });
+
+        Assert.Equal("admin.google.com", Assert.IsType<HostCondition>(settings.Config.Rules[1].Condition).Pattern);
+        _harness.Saves.RunPending();
+        Assert.Equal("admin.google.com", Assert.IsType<HostCondition>(_harness.SavedConfig().Rules[1].Condition).Pattern);
+    }
+
+    [Fact]
+    public void Removing_every_row_leaves_the_rule_without_a_condition()
+    {
+        var page = Page(out var settings);
+        var rule = Rule(page, "google-admin");
+
+        EditCondition(rule, root => root with { Children = [] });
+
         Assert.Null(settings.Config.Rules[1].Condition);
-        rule.AddConditionCommand.Execute(null);
+        Assert.Equal("no condition → open Chrome (Work)", rule.Summary);
+        var empty = ConditionPredicates.ToEditor(rule.Model.Condition)!;
+        Assert.Equal(CompoundKind.All, empty.Kind);
+        Assert.Empty(empty.Children);
+
+        EditCondition(rule, root => root with { Children = [HostRow("")] });
         Assert.IsType<HostCondition>(settings.Config.Rules[1].Condition);
     }
 
     [Fact]
-    public void Negations_load_as_a_flag_on_the_negated_node()
+    public void Groups_can_be_nested_and_negated()
+    {
+        var page = Page(out var settings);
+        var rule = Rule(page, "google-admin");
+
+        EditCondition(rule, root => new CompoundPredicate(CompoundKind.Any,
+        [
+            .. root.Children,
+            new CompoundPredicate(CompoundKind.None, [HostRow("admin.google.com"), HostRow("accounts.google.com")]),
+        ]));
+
+        var or = Assert.IsType<OrCondition>(settings.Config.Rules[1].Condition);
+        Assert.IsType<UrlCondition>(or.Conditions[0]);
+        var none = Assert.IsType<OrCondition>(Assert.IsType<NotCondition>(or.Conditions[1]).Condition);
+        Assert.Equal(["admin.google.com", "accounts.google.com"], none.Conditions.Cast<HostCondition>().Select(c => c.Pattern));
+        Assert.Equal("any of 2 conditions → open Chrome (Work)", rule.Summary);
+    }
+
+    [Fact]
+    public void Negations_load_as_none_of()
     {
         File.WriteAllText(_harness.Paths.DefaultConfigPath, """
             {
@@ -221,12 +251,17 @@ public sealed class RulesPageTests : IDisposable
               "catchAll": { "actions": [ { "type": "open" } ] }
             }
             """);
-        var rule = _harness.Create().Rules.Rules[0];
+        var settings = _harness.Create();
+        var rule = settings.Rules.Rules[0];
 
-        var group = Assert.IsType<GroupConditionViewModel>(rule.Condition);
-        Assert.True(group.IsNegated);
-        Assert.Equal(GroupKind.Any, group.Kind);
-        Assert.False(Assert.Single(group.Children).IsNegated);
+        var shown = ConditionPredicates.ToEditor(rule.Model.Condition)!;
+        Assert.Equal(CompoundKind.None, shown.Kind);
+        Assert.Equal(HostRow("a"), Assert.Single(shown.Children));
+
+        EditCondition(rule, root => root with { Children = [HostRow("a"), HostRow("b")] });
+
+        var or = Assert.IsType<OrCondition>(Assert.IsType<NotCondition>(settings.Config.Rules[0].Condition).Condition);
+        Assert.Equal(["a", "b"], or.Conditions.Cast<HostCondition>().Select(c => c.Pattern));
     }
 
     [Fact]
@@ -322,8 +357,7 @@ public sealed class RulesPageTests : IDisposable
         Assert.Equal("hand to the system default", page.CatchAll.Summary);
     }
 
-    [Fact]
-    public void Unknown_conditions_and_actions_are_kept_as_they_are()
+    private RuleViewModel RuleFromANewerPreferis()
     {
         File.WriteAllText(_harness.Paths.DefaultConfigPath, """
             {
@@ -337,19 +371,37 @@ public sealed class RulesPageTests : IDisposable
               "catchAll": { "actions": [ { "type": "open" } ] }
             }
             """);
-        var settings = _harness.Create();
-        var rule = settings.Rules.Rules[0];
-        var group = Assert.IsType<GroupConditionViewModel>(rule.Condition);
-        Assert.Equal("sourceApp", Assert.IsType<UnknownConditionViewModel>(group.Children[0]).Type);
+        return _harness.Create().Rules.Rules[0];
+    }
+
+    [Fact]
+    public void Unknown_conditions_and_actions_are_kept_as_they_are()
+    {
+        var rule = RuleFromANewerPreferis();
+        // The condition editor cannot show it; the UIs show its JSON instead.
+        Assert.Null(ConditionPredicates.ToEditor(rule.Model.Condition));
         Assert.Equal("teleport", Assert.IsType<UnknownActionViewModel>(rule.Actions.Items[0]).Type);
 
-        group.AddConditionCommand.Execute(null);
-        ((LeafConditionViewModel)group.Children[1]).Pattern = "example.com";
+        rule.Name = "Slack";
         _harness.Saves.RunPending();
 
         var saved = File.ReadAllText(_harness.Paths.DefaultConfigPath);
+        Assert.Contains("Slack", saved, StringComparison.Ordinal);
         Assert.Contains("com.tinyspeck.slackmacgap", saved, StringComparison.Ordinal);
         Assert.Contains("moon", saved, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_unknown_condition_can_be_replaced_with_a_new_one()
+    {
+        var rule = RuleFromANewerPreferis();
+
+        // "Replace with a New Condition".
+        rule.SetCondition(new HostCondition { Match = MatchKind.Exact, Pattern = "" });
+
+        Assert.Equal(HostRow(""), Assert.Single(ConditionPredicates.ToEditor(rule.Model.Condition)!.Children));
+        _harness.Saves.RunPending();
+        Assert.DoesNotContain("sourceApp", File.ReadAllText(_harness.Paths.DefaultConfigPath), StringComparison.Ordinal);
     }
 
     [Fact]

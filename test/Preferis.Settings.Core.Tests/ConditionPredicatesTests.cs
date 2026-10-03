@@ -127,7 +127,6 @@ public sealed class ConditionPredicatesTests
         rule.SetCondition(new OrCondition { Conditions = [Host("admin.google.com"), Host("accounts.google.com")] });
 
         Assert.IsType<OrCondition>(settings.Config.Rules[1].Condition);
-        Assert.IsType<GroupConditionViewModel>(rule.Condition);
         Assert.Equal("any of 2 conditions → open Chrome (Work)", rule.Summary);
         Assert.True(settings.IsDirty);
     }

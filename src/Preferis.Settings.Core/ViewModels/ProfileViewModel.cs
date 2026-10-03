@@ -15,6 +15,9 @@ public enum ProfileTargetKind
 {
     Browser,
     Command,
+
+    /// <summary>No shared target: each computer sets its own (docs/Design.md §7.4). Not a kind of this computer's target.</summary>
+    EachComputer,
 }
 
 /// <param name="Title">What the list shows, e.g. "Brave (not installed)".</param>
@@ -70,17 +73,23 @@ public sealed partial class ProfileViewModel : ObservableObject
 
     /// <summary>What the shared target is; <see cref="OpensCommand"/> says what this machine opens.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsBrowser), nameof(IsCommand), nameof(OpensCommand))]
+    [NotifyPropertyChangedFor(nameof(IsBrowser), nameof(IsCommand), nameof(IsEachComputer), nameof(OpensCommand))]
     public partial ProfileTargetKind TargetKind { get; set; }
 
     public bool IsBrowser => TargetKind == ProfileTargetKind.Browser;
 
     public bool IsCommand => TargetKind == ProfileTargetKind.Command;
 
+    /// <summary>
+    /// No shared target: <see cref="LocalTarget"/> is what this computer opens, and is there to choose from even before
+    /// this computer has a target in <c>local.json</c>; the first choice adds it.
+    /// </summary>
+    public bool IsEachComputer => TargetKind == ProfileTargetKind.EachComputer;
+
     /// <summary>This machine runs a command for the profile (its own target or the shared one), for the icon.</summary>
     public bool OpensCommand => LocalTarget is { } local ? local.IsCommand : IsCommand;
 
-    public IReadOnlyList<ProfileTargetKind> TargetKinds { get; } = [ProfileTargetKind.Browser, ProfileTargetKind.Command];
+    public IReadOnlyList<ProfileTargetKind> TargetKinds { get; } = [ProfileTargetKind.Browser, ProfileTargetKind.Command, ProfileTargetKind.EachComputer];
 
     /// <summary>Browsers for this machine's OS: detected ones first, then the rest of the catalog.</summary>
     public IReadOnlyList<BrowserChoice> BrowserChoices { get; }
@@ -166,7 +175,7 @@ public sealed partial class ProfileViewModel : ObservableObject
         {
             if (LocalTarget is { } local)
             {
-                return L("This computer: {0}", local.Summary);
+                return IsEachComputer && !local.IsSet ? L("Not set on this computer") : L("This computer: {0}", local.Summary);
             }
             if (IsCommand)
             {
@@ -192,7 +201,9 @@ public sealed partial class ProfileViewModel : ObservableObject
         {
             var model = Model;
             Name = model.Name;
-            TargetKind = model.Command is not null ? ProfileTargetKind.Command : ProfileTargetKind.Browser;
+            TargetKind = model.Command is not null ? ProfileTargetKind.Command
+                : model.Browser is not null ? ProfileTargetKind.Browser
+                : ProfileTargetKind.EachComputer;
 
             var reference = model.Browser;
             PerOs = reference is not null && !reference.IsPlain;
@@ -209,7 +220,7 @@ public sealed partial class ProfileViewModel : ObservableObject
 
             BuildBrowserProfileChoices();
 
-            var local = LocalProfileTargets.Find(_settings.Local, model, _settings.Config);
+            var local = LocalProfileTargets.Find(_settings.Local, model, _settings.Config) ?? (IsEachComputer ? new ProfileTarget() : null);
             UsesLocalTarget = local is not null;
             LocalTarget = local is null ? null : new LocalTargetViewModel(this, _settings, local);
 
@@ -290,11 +301,18 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// <summary>Called by <see cref="LocalTarget"/> after every edit.</summary>
     internal void OnLocalTargetChanged()
     {
+        if (LocalTarget is { } target && !HasStoredLocalTarget)
+        {
+            // Set on each computer, and chosen on this one for the first time.
+            (_settings.Local.ProfileTargets ??= [])[Id] = target.Model;
+        }
         OnPropertyChanged(nameof(Summary));
         OnPropertyChanged(nameof(IconPng));
         OnPropertyChanged(nameof(OpensCommand));
         _settings.MarkChanged();
     }
+
+    private bool HasStoredLocalTarget => LocalProfileTargets.Find(_settings.Local, Model, _settings.Config) is not null;
 
     /// <summary>Removes the local target of <paramref name="profile"/>, under its id or one of its previous ids.</summary>
     internal static void ForgetLocalTarget(SettingsViewModel settings, Profile profile)
@@ -327,7 +345,42 @@ public sealed partial class ProfileViewModel : ObservableObject
         OnPropertyChanged(nameof(Summary));
     }
 
-    partial void OnTargetKindChanged(ProfileTargetKind value) => WriteTarget();
+    partial void OnTargetKindChanged(ProfileTargetKind value)
+    {
+        if (_syncing)
+        {
+            return;
+        }
+        _syncing = true;
+        try
+        {
+            if (value == ProfileTargetKind.EachComputer && LocalTarget is null)
+            {
+                // This computer goes on opening what it opened; the others set their own.
+                var target = LocalProfileTargets.FromShared(Model, Platform);
+                (_settings.Local.ProfileTargets ??= [])[Id] = target;
+                UsesLocalTarget = true;
+                LocalTarget = new LocalTargetViewModel(this, _settings, target);
+            }
+            else if (value != ProfileTargetKind.EachComputer && LocalTarget is not null && !HasStoredLocalTarget)
+            {
+                // Nothing was chosen for this computer: the shared target is all there is.
+                UsesLocalTarget = false;
+                LocalTarget = null;
+            }
+            if (value == ProfileTargetKind.Browser && !PerOs && Browser is null)
+            {
+                // A shared target without a browser would be read back as set on each computer.
+                Browser = BrowserChoices.FirstOrDefault();
+                BuildBrowserProfileChoices();
+            }
+        }
+        finally
+        {
+            _syncing = false;
+        }
+        WriteTarget();
+    }
 
     partial void OnBrowserChanged(BrowserChoice? value)
     {
@@ -468,6 +521,15 @@ public sealed partial class ProfileViewModel : ObservableObject
                 Windows = Spec(WindowsCommandPath, WindowsCommandArgs, model.Command?.Windows),
                 ExtensionData = model.Command?.ExtensionData,
             };
+        }
+        else if (IsEachComputer)
+        {
+            // This computer's target is in local.json (LocalTarget), and every other computer's in its own.
+            model.Command = null;
+            model.Browser = null;
+            model.BrowserProfile = null;
+            model.Private = false;
+            model.ExtraArgs = null;
         }
         else
         {

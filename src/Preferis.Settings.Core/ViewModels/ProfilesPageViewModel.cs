@@ -70,6 +70,10 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
         });
     }
 
+    /// <summary>A profile without a shared target: each computer sets what it opens (docs/Design.md §7.4).</summary>
+    [RelayCommand]
+    private void AddEmptyProfile() => AddProfile(new Profile { Id = NewId(), Name = UniqueName(L("New Profile")) });
+
     [RelayCommand(CanExecute = nameof(HasSelection))]
     private void Duplicate()
     {

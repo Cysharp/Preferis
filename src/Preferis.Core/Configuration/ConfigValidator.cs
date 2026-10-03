@@ -112,10 +112,7 @@ public static class ConfigValidator
                 Add(IssueSeverity.Error, L("The command has no executable path for any OS."));
             }
         }
-        else if (browserIds.Count == 0)
-        {
-            Add(IssueSeverity.Error, L("The profile has neither a browser nor a command."));
-        }
+        // Neither a browser nor a command: each computer sets the target in its local.json (docs/Configuration.md §3.1).
 
         foreach (var id in browserIds.Where(id => BrowserCatalog.Find(id) is null && !BrowserCatalog.IsPlatformSpecificId(id)))
         {

@@ -99,6 +99,91 @@ public sealed class LocalTargetTests : IDisposable
     }
 
     [Fact]
+    public void An_empty_profile_is_set_on_each_computer()
+    {
+        var settings = _harness.WithSample().Create();
+        var page = settings.Profiles;
+
+        page.AddEmptyProfileCommand.Execute(null);
+        _harness.Saves.RunPending();
+
+        var profile = page.SelectedProfile!;
+        Assert.Equal("New Profile", profile.Name);
+        Assert.Equal(ProfileTargetKind.EachComputer, profile.TargetKind);
+        var saved = _harness.SavedConfig().Profiles.Single(p => p.Id == profile.Id);
+        Assert.Null(saved.Browser);
+        Assert.Null(saved.Command);
+        // Its editor is there to choose from, but nothing is written to local.json until something is chosen.
+        Assert.NotNull(profile.LocalTarget);
+        Assert.False(_harness.Loader.LoadLocal().ProfileTargets?.ContainsKey(profile.Id) ?? false);
+        Assert.Equal("Not set on this computer", profile.Summary);
+        var issue = Assert.Single(profile.Issues);
+        Assert.Equal(IssueSeverity.Warning, issue.Severity);
+        Assert.Equal("Not set on this computer; the default profile or the picker is used instead.", issue.Message);
+    }
+
+    [Fact]
+    public void What_a_profile_set_on_each_computer_opens_here_is_saved_in_local_json()
+    {
+        var settings = _harness.WithSample().Create();
+        settings.Profiles.AddEmptyProfileCommand.Execute(null);
+        var profile = settings.Profiles.SelectedProfile!;
+
+        profile.LocalTarget!.Browser = profile.LocalTarget.BrowserChoices.Single(c => c.Id == "safari");
+        _harness.Saves.RunPending();
+
+        Assert.Equal("safari", _harness.Loader.LoadLocal().ProfileTargets?[profile.Id].Browser);
+        Assert.Null(_harness.SavedConfig().Profiles.Single(p => p.Id == profile.Id).Browser);
+        Assert.Equal("This computer: Safari", profile.Summary);
+        Assert.Empty(profile.Issues);
+
+        var reopened = Profile(_harness.Create(), profile.Id);
+        Assert.Equal(ProfileTargetKind.EachComputer, reopened.TargetKind);
+        Assert.Equal("safari", reopened.LocalTarget?.Browser?.Id);
+    }
+
+    [Fact]
+    public void Setting_a_profile_on_each_computer_keeps_what_this_computer_opens()
+    {
+        var settings = _harness.WithSample().Create();
+        var profile = Profile(settings, "chrome-work");
+
+        profile.TargetKind = ProfileTargetKind.EachComputer;
+        _harness.Saves.RunPending();
+
+        var saved = _harness.SavedConfig().Profiles.Single(p => p.Id == "chrome-work");
+        Assert.Null(saved.Browser);
+        Assert.Null(saved.BrowserProfile);
+        var target = _harness.Loader.LoadLocal().ProfileTargets?["chrome-work"];
+        Assert.Equal("chrome", target?.Browser);
+        Assert.Equal("me@work.example.com", target?.BrowserProfile?.Email);
+        Assert.Empty(profile.Issues);
+
+        // Back to a shared browser: the one it had, and this computer keeps its own.
+        profile.TargetKind = ProfileTargetKind.Browser;
+
+        Assert.Equal("chrome", settings.Config.Profiles.Single(p => p.Id == "chrome-work").Browser?.Default);
+        Assert.True(profile.UsesLocalTarget);
+    }
+
+    [Fact]
+    public void A_shared_target_chosen_before_this_computers_leaves_no_local_target()
+    {
+        var settings = _harness.WithSample().Create();
+        settings.Profiles.AddEmptyProfileCommand.Execute(null);
+        var profile = settings.Profiles.SelectedProfile!;
+
+        profile.TargetKind = ProfileTargetKind.Browser;
+
+        Assert.False(profile.UsesLocalTarget);
+        Assert.Null(profile.LocalTarget);
+        Assert.False(settings.Local.ProfileTargets?.ContainsKey(profile.Id) ?? false);
+        // A browser is chosen right away; a shared target without one would be read back as set on each computer.
+        Assert.Equal("chrome", profile.Browser?.Id);
+        Assert.Equal("chrome", settings.Config.Profiles.Single(p => p.Id == profile.Id).Browser?.Default);
+    }
+
+    [Fact]
     public void Targets_in_local_json_are_shown_when_the_settings_open()
     {
         _harness.WithSample();

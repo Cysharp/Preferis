@@ -136,6 +136,7 @@ internal sealed class ProfilesPage : IPageView
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(Bindings.MenuItem(L("Add All Browsers and Profiles"), _page.AddAllDetectedCommand));
         menu.Items.Add(Bindings.MenuItem(L("Command…"), _page.AddCommandProfileCommand));
+        menu.Items.Add(Bindings.MenuItem(L("Empty Profile…"), _page.AddEmptyProfileCommand));
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(Bindings.MenuItem(L("Detect Browsers Again"), _page.RefreshBrowsersCommand));
     }
@@ -211,7 +212,7 @@ internal sealed class ProfilesPage : IPageView
 
         var target = Ui.ComboBox(160);
         bindings.Choice(target, profile, nameof(ProfileViewModel.TargetKind),
-            [(ProfileTargetKind.Browser, L("Browser")), (ProfileTargetKind.Command, L("Command"))],
+            [(ProfileTargetKind.Browser, L("Browser")), (ProfileTargetKind.Command, L("Command")), (ProfileTargetKind.EachComputer, L("Set on each computer"))],
             () => profile.TargetKind, value => profile.TargetKind = value);
 
         var general = Form.Section(null,
@@ -325,8 +326,9 @@ internal sealed class ProfilesPage : IPageView
     }
 
     /// <summary>
-    /// What this PC opens instead of the shared target (local.json). The cards belong to the target's own view model,
-    /// which is replaced when the switch turns it on again, so they are rebuilt with it.
+    /// What this PC opens instead of the shared target (local.json), or, for a profile set on each computer, at all:
+    /// then without the switch. The cards belong to the target's own view model, which is replaced when the switch
+    /// turns it on again, so they are rebuilt with it.
     /// </summary>
     private static UIElement LocalSection(ProfileViewModel profile, Bindings bindings)
     {
@@ -350,9 +352,16 @@ internal sealed class ProfilesPage : IPageView
         }, nameof(ProfileViewModel.LocalTarget));
         bindings.Add(() => targetBindings?.Dispose());
 
-        return Form.Section(L("This Computer"),
-            Form.Card(L("Open with another browser or command on this computer"), uses, L("In place of the browser or command above, for example another browser profile. Saved on this computer only; rules and other computers are not affected.")),
-            cards);
+        var switchCard = Form.Card(L("Open with another browser or command on this computer"), uses, L("In place of the browser or command above, for example another browser profile. Saved on this computer only; rules and other computers are not affected."));
+        var footer = Form.Footer(L("Each computer that shares this configuration sets what it opens. One that has not opens the profile to use instead, or else the default profile or the picker."));
+        bindings.Observe(profile, () =>
+        {
+            Ui.Show(switchCard, !profile.IsEachComputer);
+            Ui.Show(footer, profile.IsEachComputer);
+        }, nameof(ProfileViewModel.TargetKind));
+        var section = Form.Section(L("This Computer"), switchCard, cards);
+        section.Children.Add(footer);
+        return section;
     }
 
     private static UIElement[] LocalTargetCards(LocalTargetViewModel target, Bindings bindings)

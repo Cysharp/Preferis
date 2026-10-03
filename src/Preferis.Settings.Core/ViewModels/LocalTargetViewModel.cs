@@ -88,6 +88,9 @@ public sealed partial class LocalTargetViewModel : ObservableObject
         ? ProfileViewModel.CommandSummary(CommandPath.Trim())
         : ProfileViewModel.BrowserSummary(Browser?.Title ?? L("No browser"), BrowserProfile?.Reference, Private);
 
+    /// <summary>Something to open is chosen: a browser, or a command (which may still need its program).</summary>
+    public bool IsSet => IsCommand || Browser is not null;
+
     /// <summary>The browser it opens; null for a command.</summary>
     public string? BrowserId => IsBrowser ? Browser?.Id : null;
 

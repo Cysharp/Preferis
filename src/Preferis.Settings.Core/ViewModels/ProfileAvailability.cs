@@ -9,7 +9,8 @@ namespace Preferis.Settings.ViewModels;
 
 /// <summary>
 /// Warnings about profiles this machine cannot open as configured: a browser that is not installed here, a browser
-/// profile it does not have, nothing set for this OS (docs/Design.md §7.4). The configuration may be right for other
+/// profile it does not have, nothing set for this OS or, for a profile set on each computer, for this computer
+/// (docs/Design.md §7.4). The configuration may be right for other
 /// machines, so these are warnings, each saying what opens instead. Checked against the browsers detected when the
 /// settings opened, as it runs on every edit; the Router itself detects again for each URL.
 /// </summary>
@@ -53,8 +54,8 @@ internal static class ProfileAvailability
             {
                 return L("No browser is chosen for this computer");
             }
-            // Without a browser for any OS the validator reports it already.
-            return profile.Browser is null ? null : L("No browser is set for {0}", os);
+            // Without a browser for any OS it is set on each computer, and not on this one.
+            return profile.Browser is null ? L("Not set on this computer") : L("No browser is set for {0}", os);
         }
 
         if (browsers.FirstOrDefault(b => b.Browser.Id == browserId) is not { } detected)
@@ -79,7 +80,7 @@ internal static class ProfileAvailability
         var current = profile;
         while (current.Fallback is { } fallbackId && visited.Add(fallbackId) && config.Profiles.FirstOrDefault(p => p.Id == fallbackId) is { } fallback)
         {
-            // The validator's problems (no target at all) make a fallback unusable too.
+            // As a target of this computer: one without a browser or a program is unusable too, whatever the reason.
             if (Problem(fallback, isLocal: true, browsers, platform) is null)
             {
                 return L("“{0}” is used instead.", fallback.Name);

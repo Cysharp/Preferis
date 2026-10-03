@@ -218,6 +218,20 @@ public class ProfileResolverTests
     }
 
     [Fact]
+    public void A_profile_set_on_each_computer_is_unresolved_where_it_is_not_set()
+    {
+        var (resolver, _, _) = Setup(HostPlatform.MacOS);
+        var config = PreferisConfig.CreateDefault();
+        config.Profiles.Add(new Profile { Id = "work", Name = "Work", Fallback = "safari" });
+        config.Profiles.Add(new Profile { Id = "safari", Name = "Safari", Browser = new BrowserReference("safari") });
+
+        var unresolved = Assert.IsType<ResolveResult.Unresolved>(resolver.Resolve(config.Profiles[^2], Url));
+        Assert.Equal("Profile 'Work' (work) is not set on this computer.", unresolved.Reason);
+        var result = Assert.IsType<ResolveResult.Resolved>(resolver.ResolveWithFallback(config, "work", Url));
+        Assert.Equal("safari", result.ProfileId);
+    }
+
+    [Fact]
     public void Fallback_profiles_are_followed_until_one_resolves()
     {
         var (resolver, _, _) = Setup(HostPlatform.MacOS);

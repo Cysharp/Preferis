@@ -65,7 +65,13 @@ public sealed class ProfileResolver
             return ResolveCommand(profile, url);
         }
 
-        var browserId = profile.Browser?.For(_platform);
+        if (profile.Browser is null)
+        {
+            // Set on each computer (docs/Design.md §7.4), and not on this one: neither shared nor in local.json.
+            return new ResolveResult.Unresolved(L("Profile {0} is not set on this computer.", ProfileNames.Describe(profile)));
+        }
+
+        var browserId = profile.Browser.For(_platform);
         if (browserId is null)
         {
             return new ResolveResult.Unresolved(L("Profile {0} has no browser or command for {1}.", ProfileNames.Describe(profile), _platform));

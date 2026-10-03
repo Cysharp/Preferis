@@ -130,6 +130,7 @@ internal sealed class ProfilesPage : IPageView
         menu.AddItem(NSMenuItem.SeparatorItem);
         menu.AddItem(new NSMenuItem(L("Add All Browsers and Profiles"), (_, _) => _page.AddAllDetectedCommand.Execute(null)));
         menu.AddItem(new NSMenuItem(L("Command…"), (_, _) => _page.AddCommandProfileCommand.Execute(null)));
+        menu.AddItem(new NSMenuItem(L("Empty Profile…"), (_, _) => _page.AddEmptyProfileCommand.Execute(null)));
         menu.AddItem(NSMenuItem.SeparatorItem);
         menu.AddItem(new NSMenuItem(L("Detect Browsers Again"), (_, _) => _page.RefreshBrowsersCommand.Execute(null)));
         menu.PopUpMenu(null, new CGPoint(0, -4), anchor);
@@ -210,7 +211,7 @@ internal sealed class ProfilesPage : IPageView
 
         var target = Ui.Popup();
         bindings.Choice(target, profile, nameof(ProfileViewModel.TargetKind),
-            [(ProfileTargetKind.Browser, L("Browser")), (ProfileTargetKind.Command, L("Command"))],
+            [(ProfileTargetKind.Browser, L("Browser")), (ProfileTargetKind.Command, L("Command")), (ProfileTargetKind.EachComputer, L("Set on each computer"))],
             () => profile.TargetKind, value => profile.TargetKind = value);
 
         var general = Form.Section(null,
@@ -323,9 +324,9 @@ internal sealed class ProfilesPage : IPageView
     }
 
     /// <summary>
-    /// What this Mac opens instead of the shared target (local.json). The rows of the target belong to its own view
-    /// model, which is replaced when the switch turns it on again, so they are a second group rebuilt with it; the
-    /// switch stays in place.
+    /// What this Mac opens instead of the shared target (local.json), or, for a profile set on each computer, at all:
+    /// then without the switch. The rows of the target belong to its own view model, which is replaced when the switch
+    /// turns it on again, so they are a second group rebuilt with it; the switch stays in place.
     /// </summary>
     private static NSView LocalSection(ProfileViewModel profile, Bindings bindings)
     {
@@ -334,7 +335,8 @@ internal sealed class ProfilesPage : IPageView
         var section = (NSStackView)Form.Section(L("This Computer"),
             Form.Row(L("Open with another browser or command on this computer"), uses, L("In place of the browser or command above, for example another browser profile. Saved on this computer only; rules and other computers are not affected.")));
         // The target's group follows the switch's as a continuation.
-        section.SetCustomSpacing((nfloat)Form.GroupSpacing, section.ArrangedSubviews[^1]);
+        var switchGroup = section.ArrangedSubviews[^1];
+        section.SetCustomSpacing((nfloat)Form.GroupSpacing, switchGroup);
 
         var host = Ui.VStack(0);
         section.AddArrangedSubview(host);
@@ -358,6 +360,15 @@ internal sealed class ProfilesPage : IPageView
             host.Hidden = profile.LocalTarget is null;
         }, nameof(ProfileViewModel.LocalTarget));
         bindings.Add(() => targetBindings?.Dispose());
+
+        var footer = Form.Footer(L("Each computer that shares this configuration sets what it opens. One that has not opens the profile to use instead, or else the default profile or the picker."));
+        section.AddArrangedSubview(footer);
+        Ui.FillWidth(footer, section);
+        bindings.Observe(profile, () =>
+        {
+            switchGroup.Hidden = profile.IsEachComputer;
+            footer.Hidden = !profile.IsEachComputer;
+        }, nameof(ProfileViewModel.TargetKind));
         return section;
     }
 

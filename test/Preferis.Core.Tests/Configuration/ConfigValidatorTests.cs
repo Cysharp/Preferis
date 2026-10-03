@@ -67,12 +67,10 @@ public class ConfigValidatorTests
     }
 
     [Fact]
-    public void A_profile_needs_a_browser_or_a_command()
+    public void A_profile_without_a_browser_or_a_command_is_set_on_each_computer()
     {
-        var issue = Single(WithProfiles(new Profile { Id = "x", Name = "X" }), IssueSeverity.Error);
-
-        Assert.Equal(IssueScope.Profile, issue.Scope);
-        Assert.Equal("x", issue.Id);
+        // Each computer sets its target in local.json; one that has not is warned about by the settings there.
+        Assert.Empty(ConfigValidator.Validate(WithProfiles(new Profile { Id = "x", Name = "X" })));
     }
 
     [Fact]

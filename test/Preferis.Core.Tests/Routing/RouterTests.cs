@@ -248,6 +248,213 @@ public class RouterTests
         Assert.Equal(["chrome"], open.ProfileIds);
     }
 
+    private static Rule Unwrap(string id, params RoutingAction[] then)
+        => RuleFor(id, Host("wrapper.example"), [new RewriteAction { Mode = RewriteMode.QueryParameter, Parameter = "url" }, .. then]);
+
+    [Fact]
+    public void Before_the_picker_for_a_url_its_own_rule_rewrote_the_rules_above_decide_with_that_url()
+    {
+        var config = Config("edge",
+            RuleFor("pinned", Host("target.example"), new OpenAction { Profiles = ["chrome"] }),
+            Unwrap("unwrap", new OpenAction { Profiles = ["edge", "chrome"] }));
+
+        var result = Route(config, "https://wrapper.example/?url=https%3A%2F%2Ftarget.example%2Fpage");
+
+        var open = Assert.IsType<RoutingDecision.Open>(result.Decision);
+        Assert.Equal(["chrome"], open.ProfileIds);
+        Assert.Equal("https://target.example/page", open.Url.AbsoluteUri);
+        Assert.Equal("pinned", result.RuleId);
+        Assert.Contains(result.Trace, t => t.Kind == TraceKind.Reevaluated && t.RuleId == "unwrap");
+    }
+
+    [Fact]
+    public void When_no_rule_above_decides_the_rule_that_rewrote_shows_the_picker()
+    {
+        var config = Config("edge",
+            RuleFor("other", Host("other.example"), new OpenAction { Profiles = ["chrome"] }),
+            Unwrap("unwrap", new OpenAction { Profiles = ["edge", "chrome"] }));
+
+        var result = Route(config, "https://wrapper.example/?url=https%3A%2F%2Ftarget.example%2F");
+
+        var open = Assert.IsType<RoutingDecision.Open>(result.Decision);
+        Assert.Equal(["edge", "chrome"], open.ProfileIds);
+        Assert.Equal("https://target.example/", open.Url.AbsoluteUri);
+        Assert.Equal("unwrap", result.RuleId);
+        Assert.Equal(["other", "other"], result.Trace.Where(t => t.Kind == TraceKind.RuleNotMatched).Select(t => t.RuleId));
+        Assert.Equal(2, result.Trace.Count(t => t.Kind == TraceKind.Reevaluated && t.RuleId == "unwrap"));
+    }
+
+    [Fact]
+    public void The_rules_above_are_evaluated_as_usual_and_a_rewrite_there_does_not_reach_the_picker()
+    {
+        // "upgrade" only rewrites and falls through to "pinned"; without "pinned", the picker opens the URL "unwrap" produced.
+        var upgrade = RuleFor("upgrade", new UrlCondition { Match = MatchKind.StartsWith, Pattern = "http://target.example/" },
+            new RewriteAction { Mode = RewriteMode.Regex, Pattern = "^http://", Replacement = "https://" });
+        var pinned = RuleFor("pinned", new UrlCondition { Match = MatchKind.StartsWith, Pattern = "https://target.example/" }, new OpenAction { Profiles = ["chrome"] });
+        var unwrap = Unwrap("unwrap", new OpenAction { Profiles = ["edge", "chrome"] });
+        var url = "https://wrapper.example/?url=http%3A%2F%2Ftarget.example%2F";
+
+        var decided = Assert.IsType<RoutingDecision.Open>(Route(Config("edge", upgrade, pinned, unwrap), url).Decision);
+        var picker = Assert.IsType<RoutingDecision.Open>(Route(Config("edge", upgrade, unwrap), url).Decision);
+
+        Assert.Equal(["chrome"], decided.ProfileIds);
+        Assert.Equal("https://target.example/", decided.Url.AbsoluteUri);
+        Assert.Equal(["edge", "chrome"], picker.ProfileIds);
+        Assert.Equal("http://target.example/", picker.Url.AbsoluteUri);
+    }
+
+    [Fact]
+    public void Several_rewrites_in_one_rule_let_the_rules_above_decide_with_the_last_url()
+    {
+        var config = Config("edge",
+            RuleFor("pinned", new UrlCondition { Match = MatchKind.StartsWith, Pattern = "https://target.example/" }, new OpenAction { Profiles = ["chrome"] }),
+            Unwrap("unwrap", new RewriteAction { Mode = RewriteMode.Regex, Pattern = "^http://", Replacement = "https://" }, new OpenAction { Profiles = ["edge", "chrome"] }));
+
+        var result = Route(config, "https://wrapper.example/?url=http%3A%2F%2Ftarget.example%2Fpage");
+
+        var open = Assert.IsType<RoutingDecision.Open>(result.Decision);
+        Assert.Equal(["chrome"], open.ProfileIds);
+        Assert.Equal("https://target.example/page", open.Url.AbsoluteUri);
+    }
+
+    [Fact]
+    public void Without_a_rewrite_of_its_own_the_rule_shows_the_picker_without_evaluating_the_rules_above_again()
+    {
+        // "pinned" would decide for the URL "unwrap" produced, but "unwrap" comes after it and only rewrites: as before,
+        // the rule that opens decides for the URL it was given.
+        var config = Config("edge",
+            RuleFor("pinned", Host("target.example"), new OpenAction { Profiles = ["chrome"] }),
+            Unwrap("unwrap"),
+            RuleFor("choose", Host("target.example"), new OpenAction { Profiles = ["edge", "chrome"] }));
+
+        var result = Route(config, "https://wrapper.example/?url=https%3A%2F%2Ftarget.example%2F");
+
+        var open = Assert.IsType<RoutingDecision.Open>(result.Decision);
+        Assert.Equal(["edge", "chrome"], open.ProfileIds);
+        Assert.Equal("choose", result.RuleId);
+        Assert.DoesNotContain(result.Trace, t => t.Kind == TraceKind.Reevaluated);
+    }
+
+    [Fact]
+    public void A_rewrite_that_leaves_the_url_as_it_was_does_not_evaluate_the_rules_above_again()
+    {
+        var config = Config("edge",
+            RuleFor("other", Host("other.example"), new OpenAction { Profiles = ["chrome"] }),
+            RuleFor("choose", Host("target.example"), new RewriteAction { Mode = RewriteMode.Regex, Pattern = "^http://", Replacement = "https://" }, new OpenAction { Profiles = ["edge", "chrome"] }));
+
+        var result = Route(config, "https://target.example/");
+
+        Assert.Equal(["edge", "chrome"], Assert.IsType<RoutingDecision.Open>(result.Decision).ProfileIds);
+        Assert.DoesNotContain(result.Trace, t => t.Kind == TraceKind.Reevaluated);
+    }
+
+    [Fact]
+    public void An_open_with_one_profile_after_a_rewrite_does_not_evaluate_the_rules_above()
+    {
+        var config = Config("edge",
+            RuleFor("pinned", Host("target.example"), new OpenAction { Profiles = ["chrome"] }),
+            Unwrap("unwrap", new OpenAction { Profiles = ["edge"] }));
+
+        var result = Route(config, "https://wrapper.example/?url=https%3A%2F%2Ftarget.example%2F");
+
+        var open = Assert.IsType<RoutingDecision.Open>(result.Decision);
+        Assert.Equal(["edge"], open.ProfileIds);
+        Assert.Equal("unwrap", result.RuleId);
+        Assert.DoesNotContain(result.Trace, t => t.Kind == TraceKind.Reevaluated);
+    }
+
+    [Fact]
+    public void A_rewrite_and_reroute_is_not_evaluated_again_before_the_picker()
+    {
+        // The rule that shows the picker did not rewrite: the Safe Links rule above did, and rerouted.
+        var result = Route(Sample(), "https://nam.safelinks.protection.outlook.com/?url=https%3A%2F%2Flogin.microsoftonline.com%2Fcommon");
+
+        var open = Assert.IsType<RoutingDecision.Open>(result.Decision);
+        Assert.Equal("ms-login", result.RuleId);
+        Assert.Equal(3, open.ProfileIds.Count);
+        Assert.DoesNotContain(result.Trace, t => t.Kind == TraceKind.Reevaluated);
+    }
+
+    [Fact]
+    public void Before_the_catch_alls_picker_for_a_url_it_rewrote_every_rule_decides_with_that_url()
+    {
+        var config = Config("edge", RuleFor("pinned", Host("target.example"), new OpenAction { Profiles = ["chrome"] }));
+        config.CatchAll.Actions = [new RewriteAction { Mode = RewriteMode.QueryParameter, Parameter = "url" }, new OpenAction { Profiles = ["edge", "chrome"] }];
+
+        var decided = Route(config, "https://wrapper.example/?url=https%3A%2F%2Ftarget.example%2F");
+        var picker = Route(config, "https://wrapper.example/?url=https%3A%2F%2Felsewhere.example%2F");
+
+        Assert.Equal(["chrome"], Assert.IsType<RoutingDecision.Open>(decided.Decision).ProfileIds);
+        Assert.Equal("pinned", decided.RuleId);
+        var open = Assert.IsType<RoutingDecision.Open>(picker.Decision);
+        Assert.Equal(["edge", "chrome"], open.ProfileIds);
+        Assert.Equal("https://elsewhere.example/", open.Url.AbsoluteUri);
+        Assert.Null(picker.RuleId);
+        Assert.Contains(picker.Trace, t => t.Kind == TraceKind.Reevaluated && t.RuleId is null);
+    }
+
+    [Fact]
+    public void The_catch_alls_implicit_picker_after_a_rewrite_evaluates_the_rules_too()
+    {
+        var config = Config("edge", RuleFor("pinned", Host("target.example"), new OpenAction { Profiles = ["chrome"] }));
+        config.DefaultProfile = null;
+        config.CatchAll.Actions = [new RewriteAction { Mode = RewriteMode.QueryParameter, Parameter = "url" }];
+
+        var result = Route(config, "https://wrapper.example/?url=https%3A%2F%2Ftarget.example%2F");
+
+        Assert.Equal(["chrome"], Assert.IsType<RoutingDecision.Open>(result.Decision).ProfileIds);
+        Assert.Equal("pinned", result.RuleId);
+    }
+
+    [Fact]
+    public void A_reroute_from_the_rules_above_restarts_the_routing()
+    {
+        var config = Config("edge",
+            RuleFor("inner", Host("inner.example"), new RewriteAction { Mode = RewriteMode.QueryParameter, Parameter = "url" }, new RerouteAction()),
+            Unwrap("unwrap", new OpenAction { Profiles = ["edge", "chrome"] }),
+            RuleFor("final", Host("final.example"), new OpenAction { Profiles = ["chrome"] }));
+        var inner = "https://inner.example/?url=" + Uri.EscapeDataString("https://final.example/");
+
+        var result = Route(config, "https://wrapper.example/?url=" + Uri.EscapeDataString(inner));
+
+        var open = Assert.IsType<RoutingDecision.Open>(result.Decision);
+        Assert.Equal(["chrome"], open.ProfileIds);
+        Assert.Equal("https://final.example/", open.Url.AbsoluteUri);
+        Assert.Equal("final", result.RuleId);
+        Assert.Contains(result.Trace, t => t.Kind == TraceKind.Rerouted && t.RuleId == "inner");
+    }
+
+    [Fact]
+    public void A_reroute_from_the_rules_above_is_guarded_against_loops()
+    {
+        // The rewritten URL reroutes as it is, and every time it comes back to the same rule.
+        var config = Config("edge",
+            RuleFor("loop", Host("target.example"), new RerouteAction()),
+            Unwrap("unwrap", new OpenAction { Profiles = ["edge", "chrome"] }));
+
+        var failed = Assert.IsType<RoutingDecision.Failed>(Route(config, "https://wrapper.example/?url=https%3A%2F%2Ftarget.example%2F").Decision);
+
+        Assert.Contains("loop", failed.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void A_rule_above_that_rewrites_before_its_own_picker_evaluates_only_the_rules_above_it()
+    {
+        // "outer" rewrites to a URL for "middle", which rewrites to a URL for "pinned": each looks only further up.
+        var config = Config("edge",
+            RuleFor("pinned", Host("target.example"), new OpenAction { Profiles = ["chrome"] }),
+            RuleFor("middle", Host("middle.example"), new RewriteAction { Mode = RewriteMode.QueryParameter, Parameter = "url" }, new OpenAction { Profiles = ["edge", "chrome"] }),
+            Unwrap("outer", new OpenAction { Profiles = ["edge", "chrome"] }));
+        var middle = "https://middle.example/?url=" + Uri.EscapeDataString("https://target.example/");
+
+        var result = Route(config, "https://wrapper.example/?url=" + Uri.EscapeDataString(middle));
+
+        Assert.Equal(["chrome"], Assert.IsType<RoutingDecision.Open>(result.Decision).ProfileIds);
+        Assert.Equal("pinned", result.RuleId);
+        // Once through all three, then the two above "outer", then the one above "middle".
+        Assert.Equal(["pinned", "middle", "outer", "pinned", "middle", "pinned"], result.Trace.Where(t => t.Kind is TraceKind.RuleMatched or TraceKind.RuleNotMatched).Select(t => t.RuleId));
+    }
+
     [Fact]
     public void Trace_records_every_evaluated_rule_and_the_decision()
     {

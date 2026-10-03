@@ -92,6 +92,8 @@ public static partial class CoreText
         { "No match for {0}", "{0} は一致しません" },
         { "Matched {0}", "{0} が一致しました" },
         { "No terminal action; continuing with {0}", "振り分けを完了するアクションがないため、{0} で次のルールに進みます" },
+        { "Evaluating the rules above with {0} before showing the picker", "ピッカーを表示する前に、上のルールを {0} で評価します" },
+        { "No rule above decided; showing the picker", "上のルールでは決まらなかったため、ピッカーを表示します" },
         { "No rule matched; applying the catch-all rule", "どのルールにも一致しないため、キャッチオールルールを適用します" },
         { "Rewrite failed.", "書き換えに失敗しました。" },
         { "Unknown action type '{0}'.", "アクションの種類「{0}」は不明です。" },

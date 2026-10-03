@@ -221,6 +221,64 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.Equal("{ broken", File.ReadAllText(_harness.Paths.DefaultConfigPath));
     }
 
+    // Valid JSON, but not a configuration that can be edited: treated like a file that could not be read.
+    [Theory]
+    [InlineData("""{ "profiles": null }""")]
+    [InlineData("""{ "rules": null }""")]
+    [InlineData("""{ "catchAll": null }""")]
+    [InlineData("""{ "catchAll": { "actions": null } }""")]
+    [InlineData("""{ "profiles": [ null ] }""")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "actions": [ null ] } ] }""")]
+    [InlineData("""{ "profiles": [ { "id": "edge", "name": null, "browser": "edge" } ] }""")]
+    [InlineData("""{ "rules": [ { "id": "r", "name": "r", "condition": { "type": "and", "conditions": [ { "type": "or", "conditions": null } ] }, "actions": [ { "type": "none" } ] } ] }""")]
+    public void A_file_with_null_where_a_value_is_needed_is_reported_and_left_alone(string json)
+    {
+        File.WriteAllText(_harness.Paths.DefaultConfigPath, json);
+
+        var settings = _harness.Create();
+
+        Assert.NotNull(settings.LoadError);
+        Assert.True(settings.ConfigUnreadable);
+        Assert.Empty(settings.Profiles.Profiles);
+        Assert.Empty(settings.Rules.Rules);
+        Assert.False(_harness.Saves.HasPending);
+        Assert.Equal(json, File.ReadAllText(_harness.Paths.DefaultConfigPath));
+    }
+
+    [Fact]
+    public void A_file_with_null_where_a_value_is_needed_is_replaced_only_when_asked()
+    {
+        const string json = """{ "version": 1, "profiles": [ { "id": "edge", "name": "Edge", "browser": "edge" } ], "rules": [ null ] }""";
+        File.WriteAllText(_harness.Paths.DefaultConfigPath, json);
+        var settings = _harness.Create();
+
+        settings.General.AutoSelectSeconds = 5;
+        _harness.Saves.RunPending();
+
+        Assert.True(settings.IsHoldingEditsForUnreadableFile);
+        Assert.Equal(json, File.ReadAllText(_harness.Paths.DefaultConfigPath));
+
+        settings.KeepMineCommand.Execute(null);
+
+        Assert.False(settings.ConfigUnreadable);
+        Assert.Equal(5, _harness.SavedConfig().Settings?.Picker?.AutoSelectSeconds);
+    }
+
+    [Fact]
+    public void A_local_json_with_null_where_a_value_is_needed_is_reported_and_left_alone()
+    {
+        const string json = """{ "profileTargets": { "edge": null } }""";
+        File.WriteAllText(_harness.Paths.LocalConfigPath, json);
+        _harness.WithSample();
+
+        var settings = _harness.Create();
+
+        Assert.NotNull(settings.LoadError);
+        Assert.Equal(6, settings.Profiles.Profiles.Count);
+        Assert.False(_harness.Saves.HasPending);
+        Assert.Equal(json, File.ReadAllText(_harness.Paths.LocalConfigPath));
+    }
+
     [Fact]
     public void Issues_follow_the_edits()
     {

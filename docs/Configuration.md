@@ -23,8 +23,8 @@ Preferis の設定は 2 つの JSON ファイルに分かれます。
 既存のファイルを変更せずに `configPath` だけを向けます。
 
 書き込みは一時ファイルに書いてから置き換える (アトミック書き込み) こととし、同期ツールが
-中途半端な状態のファイルを拾わないようにします。読み込み時に JSON が壊れていた場合は
-[Design.md §8](Design.md) のフォールバックに従います。
+中途半端な状態のファイルを拾わないようにします。読み込み時に JSON が壊れていた場合と、JSON としては正しくても
+値が必要な場所に `null` がある場合 (§4.1) は [Design.md §8](Design.md) のフォールバックに従います。
 
 ## 2. `config.json`
 
@@ -369,3 +369,26 @@ https://github.com/mayuki/*,Personal
   フォールバックに進む (Design.md §6.1)。設定 UI では警告表示する。
 - `type` プロパティはオブジェクト内のどの位置にあってもよい。
 - 旧バージョンの設定を読む場合は読み込み時にマイグレーションを適用し、保存時に新形式で書き出す。
+
+### 4.1 省略と `null`
+
+JSON として正しいことと、Preferis が処理できる設定であることを区別します。
+
+- 省略したプロパティは既定値で読む (`profiles`・`rules` は空、`catchAll` は `open` だけ、`enabled` と `ignoreCase` は
+  `true` など)。
+- `null` を書けるのは次の省略できるプロパティだけで、省略と同じ意味になる。
+  - `config.json`: `defaultProfile`、`settings`、`settings.picker`、`settings.language`、プロファイルの `previousIds`・
+    `browser` (OS ごとの指定の各 OS も)・`browserProfile` (その `directory`・`name`・`email` も)・`extraArgs`・`command`
+    (各 OS も)・`fallback`、ルールの `condition`、`not` の `condition`、`open` の `profiles`、`rewrite` の `pattern`・
+    `replacement`・`parameter`
+  - `local.json`: `configPath`、`browserOverrides`、`profileTargets`、`logging`、`browserOverrides` の値の `path`・
+    `userDataDir`、`profileTargets` の値の `browser`・`browserProfile`・`extraArgs`・`command`
+- それ以外の `null` は値が必要な場所にあり、構造の誤りとする。`profiles`・`rules`・`catchAll` とその `actions`、`id`・
+  `name`・`pattern`・`path`・`picker.position`・`logging.level` などの文字列、`and` / `or` の `conditions`、`args`、数値・
+  真偽値・`match` / `mode` の値、配列の要素 (`"actions": [null]`)、`browserOverrides`・`profileTargets` の値がこれに当たる。
+- 構造の誤りは JSON の構文エラーと同じく、ファイル全体の読み込みエラーにする。Router は読めない設定として扱い
+  (Design.md §8 の 1)、設定 UI は読めないファイルと同じく、利用者が選ぶまで上書きしない (Design.md §9.1)。誤りの箇所を
+  読み飛ばしたり、`null` を既定値に読み替えたりはしない (手で書いた内容を黙って書き換えることになるため)。エラーには
+  誤りの箇所の JSON パス (`$.rules[0].actions[1]`) が入る。
+- 未知のプロパティの値と、未知の `type` を持つ条件・アクションの中身は検査しない。`null` を含んでもそのまま保持して
+  書き戻す。

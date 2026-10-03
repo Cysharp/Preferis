@@ -54,7 +54,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial bool ConfigExists { get; private set; }
 
-    /// <summary>True when <c>config.json</c> exists but could not be parsed: saving replaces it, moving it is refused.</summary>
+    /// <summary>
+    /// True when <c>config.json</c> exists but could not be read as a configuration (malformed JSON, or null where a value
+    /// is needed): saving replaces it, moving it is refused.
+    /// </summary>
     public bool ConfigUnreadable { get; private set; }
 
     private bool LocalUnreadable { get; set; }

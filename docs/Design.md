@@ -106,6 +106,7 @@ Guidelines の `src` / `test` 構成に従います。
 
 ```
 Preferis.slnx
+Directory.Packages.props      NuGet パッケージのバージョンを一元管理
 src/
   Preferis.Core/              設定モデル、JSON シリアライズ、条件マッチャー、ルーティングエンジン、
                               プロファイル解決、ピッカー IPC メッセージ、Router の実行時オーケストレーション
@@ -134,6 +135,12 @@ docs/
 `Preferis.Windows.slnf`) でビルド可能なものだけを対象にします (`dotnet test Preferis.MacOS.slnf`)。
 `Preferis.Windows.slnf` は AppKit の 2 つを除き、WinUI 3 のピッカーと設定 UI を含みます (`dotnet test Preferis.Windows.slnf`)。
 これにより Guidelines の「常にビルドできる状態を保つ」を OS ごとに満たします。
+
+NuGet パッケージは [Central Package Management](https://learn.microsoft.com/en-us/nuget/consume-packages/central-package-management)
+を使い、リポジトリルートの `Directory.Packages.props` の `PackageVersion` でバージョンを一元管理します。
+各 `.csproj` はバージョンなしの `PackageReference` と、そのプロジェクト固有の参照メタデータを持ちます。
+パッケージの追加時は両方に項目を追加し、バージョン更新時は `Directory.Packages.props` を変更します。
+SDK やワークロードが暗黙に参照するパッケージは引き続き SDK 側で管理します。
 
 Platform 層は単一プロジェクトとし、`OperatingSystem.IsWindows()` 等による実行時分岐と
 `[SupportedOSPlatform]` 注釈で実装します。

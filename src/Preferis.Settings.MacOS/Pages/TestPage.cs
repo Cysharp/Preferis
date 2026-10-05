@@ -60,7 +60,7 @@ internal sealed class TestPage : IPageView
             routed.StringValue = page.RoutedUrl is { } url ? L("URL after rewriting: {0}", url) : "";
             routed.Hidden = page.RoutedUrl is null;
         }, nameof(TestPageViewModel.Decision), nameof(TestPageViewModel.RoutedUrl));
-        _bindings.ObserveCollection(page.Candidates, () =>
+        _bindings.Observe(page, () =>
         {
             Clear(candidates);
             foreach (var candidate in page.Candidates)
@@ -74,7 +74,7 @@ internal sealed class TestPage : IPageView
                 row.Alignment = NSLayoutAttribute.Top;
                 candidates.AddArrangedSubview(row);
             }
-        });
+        }, nameof(TestPageViewModel.Candidates));
         return section;
     }
 
@@ -99,7 +99,7 @@ internal sealed class TestPage : IPageView
     {
         var rows = Ui.VStack(6);
         var section = Form.Section(L("Steps"), Form.Wide(rows));
-        _bindings.ObserveCollection(page.Trace, () =>
+        _bindings.Observe(page, () =>
         {
             section.Hidden = page.Trace.Count == 0;
             Clear(rows);
@@ -116,7 +116,7 @@ internal sealed class TestPage : IPageView
                 row.Alignment = NSLayoutAttribute.Top;
                 rows.AddArrangedSubview(row);
             }
-        });
+        }, nameof(TestPageViewModel.Trace));
         return section;
     }
 
@@ -133,7 +133,7 @@ internal sealed class TestPage : IPageView
         Ui.FillWidth(box, section);
 
         _bindings.Observe(page, () => section.Hidden = !page.IsHistoryEnabled, nameof(TestPageViewModel.IsHistoryEnabled));
-        _bindings.ObserveCollection(page.History, () =>
+        _bindings.Observe(page, () =>
         {
             empty.Hidden = page.History.Count > 0;
             Clear(rows);
@@ -154,7 +154,7 @@ internal sealed class TestPage : IPageView
                 rows.AddArrangedSubview(row);
                 Ui.FillWidth(row, rows);
             }
-        });
+        }, nameof(TestPageViewModel.History));
         return section;
     }
 

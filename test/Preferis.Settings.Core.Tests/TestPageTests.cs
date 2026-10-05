@@ -28,6 +28,63 @@ public sealed class TestPageTests : IDisposable
     }
 
     [Fact]
+    public void Running_publishes_complete_result_lists_once()
+    {
+        var settings = _harness.WithSample().Create();
+        for (var i = 0; i < 1_000; i++)
+        {
+            settings.Config.Rules.Insert(0, new Rule
+            {
+                Id = $"unmatched-{i}",
+                Name = $"Unmatched {i}",
+                Condition = new HostCondition { Match = MatchKind.Exact, Pattern = $"unmatched-{i}.example" },
+                Actions = [new NoneAction()],
+            });
+        }
+        var page = settings.Test;
+        var traces = new List<string[]>();
+        var candidates = new List<string[]>();
+        page.PropertyChanged += (_, change) =>
+        {
+            if (change.PropertyName == nameof(page.Trace))
+            {
+                traces.Add(page.Trace.Select(t => t.Message).ToArray());
+            }
+            if (change.PropertyName == nameof(page.Candidates))
+            {
+                candidates.Add(page.Candidates.Select(c => c.Name).ToArray());
+            }
+        };
+
+        page.Url = "https://login.microsoftonline.com/common";
+        page.RunCommand.Execute(null);
+
+        Assert.Equal(page.Trace.Select(t => t.Message), Assert.Single(traces));
+        Assert.Equal(1_000, page.Trace.Count(t => t.Rule?.StartsWith("Unmatched ", StringComparison.Ordinal) == true));
+        Assert.Equal(["Microsoft Edge", "Chrome (Default)", "Chrome (Work)"], Assert.Single(candidates));
+    }
+
+    [Fact]
+    public void Invalid_input_replaces_previous_results_with_empty_lists_once()
+    {
+        var page = _harness.WithSample().Create().Test;
+        page.Url = "https://login.microsoftonline.com/common";
+        page.RunCommand.Execute(null);
+        var changed = new List<string?>();
+        page.PropertyChanged += (_, change) => changed.Add(change.PropertyName);
+
+        page.Url = "invalid";
+        page.RunCommand.Execute(null);
+
+        Assert.Empty(page.Trace);
+        Assert.Empty(page.Candidates);
+        Assert.Null(page.Decision);
+        Assert.NotNull(page.Error);
+        Assert.Single(changed, name => name == nameof(page.Trace));
+        Assert.Single(changed, name => name == nameof(page.Candidates));
+    }
+
+    [Fact]
     public void Unresolvable_candidates_say_why()
     {
         var page = _harness.WithSample().Create().Test;
@@ -172,6 +229,31 @@ public sealed class TestPageTests : IDisposable
         Assert.False(page.IsHistoryEnabled);
         Assert.Empty(page.History);
     }
+
+    [Fact]
+    public void Reloading_history_publishes_one_complete_snapshot()
+    {
+        File.WriteAllText(_harness.Paths.LocalConfigPath, """{ "logging": { "history": true } }""");
+        var history = new RoutingHistory(_harness.Paths.HistoryPath);
+        for (var i = 0; i < 20; i++)
+        {
+            history.Append(new HistoryEntry { Time = DateTimeOffset.Now, Url = $"https://example.com/{i}", Outcome = "Launched" }, 50);
+        }
+        var page = _harness.WithSample().Create().Test;
+        var snapshots = new List<string[]>();
+        page.PropertyChanged += (_, change) =>
+        {
+            if (change.PropertyName == nameof(page.History))
+            {
+                snapshots.Add(page.History.Select(h => h.Url).ToArray());
+            }
+        };
+
+        page.Activate();
+
+        Assert.Equal(history.Read().Select(h => h.Url), Assert.Single(snapshots));
+        Assert.Equal(20, page.History.Count);
+    }
 }
 
 public sealed class TestPageOpenTests : IDisposable
@@ -232,6 +314,42 @@ public sealed class TestPageOpenTests : IDisposable
         Assert.Empty(_harness.Dialogs.Asked);
         Assert.False(settings.IsDirty);
         Assert.Equal("Edited", _harness.SavedConfig().Profiles[0].Name);
+    }
+
+    [Fact]
+    public async Task Opening_waits_for_an_in_flight_save_after_the_edit_is_undone()
+    {
+        var settings = _harness.WithSample().Create();
+        var original = settings.Profiles.Profiles[0].Name;
+        settings.Profiles.Profiles[0].Name = "Temporary";
+        settings.Test.Url = "https://www.example.com/";
+        string? nameWhenOpened = null;
+        _harness.Platform.OnOpen = _ => nameWhenOpened = _harness.SavedConfig().Profiles[0].Name;
+
+        Task saving;
+        Task opening;
+        bool waitedForSave;
+        int openedBeforeUnlock;
+        using (_harness.Loader.Lock())
+        {
+            saving = _harness.Saves.RunPendingAsync();
+            settings.Profiles.Profiles[0].Name = original;
+            Assert.False(settings.IsDirty);
+            Assert.True(settings.HasPendingChanges);
+
+            opening = settings.Test.OpenCommand.ExecuteAsync(null);
+            waitedForSave = !opening.IsCompleted;
+            openedBeforeUnlock = _harness.Platform.OpenedUrls.Count;
+        }
+
+        await saving;
+        await opening;
+        Assert.True(waitedForSave);
+        Assert.Equal(0, openedBeforeUnlock);
+        Assert.Single(_harness.Platform.OpenedUrls);
+        Assert.Equal(original, nameWhenOpened);
+        Assert.Equal(original, _harness.SavedConfig().Profiles[0].Name);
+        Assert.False(settings.HasPendingChanges);
     }
 
     [Fact]

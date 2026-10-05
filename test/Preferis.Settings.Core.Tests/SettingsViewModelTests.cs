@@ -35,7 +35,7 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Edits_are_saved_after_a_pause_without_asking()
+    public async Task Edits_are_saved_after_a_pause_without_asking()
     {
         var settings = _harness.WithSample().Create();
 
@@ -43,7 +43,7 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.True(settings.IsDirty);
         Assert.Equal("Microsoft Edge", _harness.SavedConfig().Profiles[0].Name);
 
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
         Assert.False(settings.IsDirty);
         Assert.Equal("Edge (renamed)", _harness.SavedConfig().Profiles[0].Name);
@@ -71,19 +71,19 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Unknown_properties_survive_a_save()
+    public async Task Unknown_properties_survive_a_save()
     {
         File.WriteAllText(_harness.Paths.DefaultConfigPath, SettingsHarness.SampleJson.Replace("\"version\": 1,", "\"version\": 1, \"fromTheFuture\": { \"x\": 1 },", StringComparison.Ordinal));
         var settings = _harness.Create();
 
         settings.Profiles.Profiles[0].Name = "Edge (renamed)";
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
         Assert.Contains("fromTheFuture", File.ReadAllText(_harness.Paths.DefaultConfigPath), StringComparison.Ordinal);
     }
 
     [Fact]
-    public void A_file_changed_by_someone_else_is_not_overwritten_silently()
+    public async Task A_file_changed_by_someone_else_is_not_overwritten_silently()
     {
         var settings = _harness.WithSample().Create();
         settings.Profiles.Profiles[0].Name = "Mine";
@@ -92,7 +92,7 @@ public sealed class SettingsViewModelTests : IDisposable
         theirs.Profiles[1].Name = "Theirs";
         _harness.Loader.Save(theirs, _harness.Paths.DefaultConfigPath);
 
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
         Assert.True(settings.HasExternalChanges);
         Assert.True(settings.IsDirty);
@@ -100,10 +100,10 @@ public sealed class SettingsViewModelTests : IDisposable
 
         // Further edits wait for the decision instead of being saved over theirs.
         settings.Profiles.Profiles[2].Name = "Mine too";
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
         Assert.Equal("Theirs", _harness.SavedConfig().Profiles[1].Name);
 
-        settings.KeepMineCommand.Execute(null);
+        await settings.KeepMineCommand.ExecuteAsync(null);
 
         Assert.False(settings.HasExternalChanges);
         Assert.False(settings.IsDirty);
@@ -113,7 +113,7 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Using_theirs_drops_the_edits_that_were_waiting()
+    public async Task Using_theirs_drops_the_edits_that_were_waiting()
     {
         var settings = _harness.WithSample().Create();
         settings.SelectedPage = settings.Rules;
@@ -121,9 +121,9 @@ public sealed class SettingsViewModelTests : IDisposable
         var theirs = ConfigSerializer.Deserialize(SettingsHarness.SampleJson);
         theirs.Profiles[1].Name = "Theirs";
         _harness.Loader.Save(theirs, _harness.Paths.DefaultConfigPath);
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
-        settings.UseTheirsCommand.Execute(null);
+        await settings.UseTheirsCommand.ExecuteAsync(null);
 
         Assert.False(settings.HasExternalChanges);
         Assert.False(settings.IsDirty);
@@ -134,7 +134,7 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Local_only_edits_are_saved_without_touching_a_config_json_changed_meanwhile()
+    public async Task Local_only_edits_are_saved_without_touching_a_config_json_changed_meanwhile()
     {
         var settings = _harness.WithSample().Create();
         settings.General.LogLevel = "trace";
@@ -142,7 +142,7 @@ public sealed class SettingsViewModelTests : IDisposable
         theirs.Profiles[0].Name = "Theirs";
         _harness.Loader.Save(theirs, _harness.Paths.DefaultConfigPath);
 
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
         Assert.False(settings.HasExternalChanges);
         Assert.False(settings.IsDirty);
@@ -152,13 +152,13 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Saving_local_settings_does_not_pretend_a_broken_config_was_fixed()
+    public async Task Saving_local_settings_does_not_pretend_a_broken_config_was_fixed()
     {
         File.WriteAllText(_harness.Paths.DefaultConfigPath, "{ broken");
         var settings = _harness.Create();
 
         settings.General.LogLevel = "trace";
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
         Assert.NotNull(settings.LoadError);
         Assert.True(settings.ConfigUnreadable);
@@ -167,18 +167,18 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void A_broken_file_is_replaced_only_when_asked()
+    public async Task A_broken_file_is_replaced_only_when_asked()
     {
         File.WriteAllText(_harness.Paths.DefaultConfigPath, "{ broken");
         var settings = _harness.Create();
 
         settings.General.AutoSelectSeconds = 5;
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
         Assert.True(settings.IsHoldingEditsForUnreadableFile);
         Assert.Equal("{ broken", File.ReadAllText(_harness.Paths.DefaultConfigPath));
 
-        settings.KeepMineCommand.Execute(null);
+        await settings.KeepMineCommand.ExecuteAsync(null);
 
         Assert.False(settings.IsHoldingEditsForUnreadableFile);
         Assert.False(settings.ConfigUnreadable);
@@ -248,19 +248,19 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void A_file_with_null_where_a_value_is_needed_is_replaced_only_when_asked()
+    public async Task A_file_with_null_where_a_value_is_needed_is_replaced_only_when_asked()
     {
         const string json = """{ "version": 1, "profiles": [ { "id": "edge", "name": "Edge", "browser": "edge" } ], "rules": [ null ] }""";
         File.WriteAllText(_harness.Paths.DefaultConfigPath, json);
         var settings = _harness.Create();
 
         settings.General.AutoSelectSeconds = 5;
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
         Assert.True(settings.IsHoldingEditsForUnreadableFile);
         Assert.Equal(json, File.ReadAllText(_harness.Paths.DefaultConfigPath));
 
-        settings.KeepMineCommand.Execute(null);
+        await settings.KeepMineCommand.ExecuteAsync(null);
 
         Assert.False(settings.ConfigUnreadable);
         Assert.Equal(5, _harness.SavedConfig().Settings?.Picker?.AutoSelectSeconds);
@@ -299,7 +299,7 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Patterns_are_checked_again_only_when_an_edit_changes_them()
+    public async Task Patterns_are_checked_again_only_when_an_edit_changes_them()
     {
         var checkedPatterns = new List<string>();
         var settings = _harness.WithSample().Create(new PatternErrorCache((kind, pattern, ignoreCase) =>
@@ -313,7 +313,7 @@ public sealed class SettingsViewModelTests : IDisposable
         // Typing a name, saving and reading the file again leave every pattern as it was.
         rule.Name = "Sign-in";
         settings.Profiles.Profiles[0].Name = "Edge";
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
         var theirs = _harness.SavedConfig();
         theirs.Profiles[1].Name = "Theirs";
         _harness.Loader.Save(theirs, _harness.Paths.DefaultConfigPath);

@@ -199,7 +199,7 @@ internal sealed class SettingsWindow
     // Edits still waiting for the pause are saved first; closing asks only when they cannot be.
     private async void OnClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
-        if (_closeConfirmed || !_settings.IsDirty)
+        if (_closeConfirmed || !_settings.HasPendingChanges)
         {
             return;
         }

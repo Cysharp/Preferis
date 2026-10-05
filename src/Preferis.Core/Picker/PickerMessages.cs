@@ -76,7 +76,7 @@ public sealed class PickerResponse
 
 public static class PickerMessages
 {
-    public static PickerRequest CreateRequest(PreferisConfig config, RoutingDecision.Open decision, HostPlatform platform, string? message)
+    public static PickerRequest CreateRequest(PreferisConfig config, RoutingDecision.Open decision, HostPlatform platform, UiLanguage language, string? message)
     {
         var profiles = config.Profiles.ToDictionary(p => p.Id, StringComparer.Ordinal);
         var picker = config.Settings?.Picker;
@@ -101,7 +101,7 @@ public static class PickerMessages
                 AutoSelectSeconds = picker?.AutoSelectSeconds ?? 0,
                 RememberChoiceDefault = picker?.RememberChoiceDefault ?? false,
                 AllowRemember = decision.Url.Host.Length > 0,
-                Language = UiLanguages.Current.Code(),
+                Language = language.Code(),
             },
             Message = message,
         };

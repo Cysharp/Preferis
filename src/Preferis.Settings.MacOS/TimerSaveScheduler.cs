@@ -10,15 +10,15 @@ internal sealed class TimerSaveScheduler : ISaveScheduler
     private const double PauseSeconds = 0.6;
     private NSTimer? _timer;
 
-    public void Schedule(Action save)
+    public void Schedule(Func<Task> save)
     {
         _timer?.Invalidate();
-        _timer = NSTimer.CreateScheduledTimer(PauseSeconds, _ =>
+        _timer = NSTimer.CreateScheduledTimer(PauseSeconds, async _ =>
         {
             _timer = null;
             try
             {
-                save();
+                await save();
             }
             catch (Exception ex)
             {

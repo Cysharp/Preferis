@@ -69,7 +69,7 @@ internal sealed class TestPage : IPageView
             routed.Text = page.RoutedUrl is { } url ? L("URL after rewriting: {0}", url) : "";
             Ui.Show(routed, page.RoutedUrl is not null);
         }, nameof(TestPageViewModel.Decision), nameof(TestPageViewModel.RoutedUrl));
-        _bindings.ObserveCollection(page.Candidates, () =>
+        _bindings.Observe(page, () =>
         {
             candidates.Children.Clear();
             foreach (var candidate in page.Candidates)
@@ -80,7 +80,7 @@ internal sealed class TestPage : IPageView
                 mark.Margin = new Thickness(0, 3, 0, 0);
                 candidates.Children.Add(Ui.Columns(8, (mark, Ui.Auto), (Ui.VStack(2, Ui.Label(candidate.Name), Ui.Code(candidate.Detail)), Ui.Star)));
             }
-        });
+        }, nameof(TestPageViewModel.Candidates));
         return section;
     }
 
@@ -103,7 +103,7 @@ internal sealed class TestPage : IPageView
     {
         var rows = new StackPanel { Spacing = 6 };
         var section = Form.Section(L("Steps"), Form.Wide(rows));
-        _bindings.ObserveCollection(page.Trace, () =>
+        _bindings.Observe(page, () =>
         {
             Ui.Show(section, page.Trace.Count > 0);
             rows.Children.Clear();
@@ -125,7 +125,7 @@ internal sealed class TestPage : IPageView
                 kind.VerticalAlignment = rule.VerticalAlignment = VerticalAlignment.Top;
                 rows.Children.Add(row);
             }
-        });
+        }, nameof(TestPageViewModel.Trace));
         return section;
     }
 
@@ -138,7 +138,7 @@ internal sealed class TestPage : IPageView
         var section = Ui.VStack(Form.CardSpacing, Form.Header(L("Recently Opened"), clear), Form.Wide(Ui.VStack(4, empty, rows)));
 
         _bindings.Visible(section, page, () => page.IsHistoryEnabled, nameof(TestPageViewModel.IsHistoryEnabled));
-        _bindings.ObserveCollection(page.History, () =>
+        _bindings.Observe(page, () =>
         {
             Ui.Show(empty, page.History.Count == 0);
             rows.Children.Clear();
@@ -153,7 +153,7 @@ internal sealed class TestPage : IPageView
                 again.Click += (_, _) => page.TestHistoryEntryCommand.Execute(line);
                 rows.Children.Add(Ui.Columns(8, (Ui.Secondary(entry.Time), new GridLength(130)), (url, Ui.Star), (Ui.Secondary(entry.Rule), Ui.Auto), (again, Ui.Auto)));
             }
-        });
+        }, nameof(TestPageViewModel.History));
         return section;
     }
 }

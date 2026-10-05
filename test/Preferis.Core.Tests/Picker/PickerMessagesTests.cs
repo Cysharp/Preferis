@@ -19,7 +19,7 @@ public class PickerMessagesTests
         var config = Sample();
         var decision = Decide(config, "https://login.microsoftonline.com/common");
 
-        var request = PickerMessages.CreateRequest(config, decision, HostPlatform.MacOS, message: null);
+        var request = PickerMessages.CreateRequest(config, decision, HostPlatform.MacOS, UiLanguage.English, message: null);
 
         Assert.Equal("https://login.microsoftonline.com/common", request.Url);
         Assert.Equal(["edge", "chrome-default", "chrome-work"], request.Candidates.Select(c => c.ProfileId));
@@ -39,22 +39,25 @@ public class PickerMessagesTests
         var config = Sample();
         var decision = new RoutingDecision.Open(RoutingUrl.Parse("https://x.example.com/"), ["system-browser", "edge-private"], OpenSource.Explicit, null);
 
-        var request = PickerMessages.CreateRequest(config, decision, HostPlatform.MacOS, message: "設定ファイルを読み込めませんでした");
+        var request = PickerMessages.CreateRequest(config, decision, HostPlatform.MacOS, UiLanguage.English, message: "設定ファイルを読み込めませんでした");
 
         Assert.Equal("safari", request.Candidates[0].Browser);
         Assert.True(request.Candidates[1].Private);
         Assert.Equal("設定ファイルを読み込めませんでした", request.Message);
     }
 
-    [Fact]
-    public void The_request_names_the_language_to_show()
+    [Theory]
+    [InlineData(UiLanguage.English, "en")]
+    [InlineData(UiLanguage.Japanese, "ja")]
+    public void The_request_names_the_explicit_language_even_when_the_callers_language_differs(UiLanguage language, string code)
     {
         var config = Sample();
+        using var otherLanguage = UiLanguages.UseLazily(() => language == UiLanguage.English ? UiLanguage.Japanese : UiLanguage.English);
 
-        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.MacOS, null);
+        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.MacOS, language, null);
 
-        Assert.Equal("en", request.Options.Language);
-        Assert.Contains("\"language\": \"en\"", PickerMessages.Serialize(request), StringComparison.Ordinal);
+        Assert.Equal(code, request.Options.Language);
+        Assert.Contains($"\"language\": \"{code}\"", PickerMessages.Serialize(request), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -73,7 +76,7 @@ public class PickerMessagesTests
     {
         var config = Sample();
 
-        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.MacOS, null);
+        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.MacOS, UiLanguage.English, null);
 
         Assert.True(request.Options.AllowRemember);
     }
@@ -85,7 +88,7 @@ public class PickerMessagesTests
         var config = Sample();
         var decision = new RoutingDecision.Open(RoutingUrl.Parse("file:///Users/me/page.html"), ["edge", "chrome-work"], OpenSource.Explicit, null);
 
-        var request = PickerMessages.CreateRequest(config, decision, HostPlatform.MacOS, null);
+        var request = PickerMessages.CreateRequest(config, decision, HostPlatform.MacOS, UiLanguage.English, null);
 
         Assert.False(request.Options.AllowRemember);
     }
@@ -94,7 +97,7 @@ public class PickerMessagesTests
     public void Request_round_trips_through_json()
     {
         var config = Sample();
-        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.Windows, null);
+        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.Windows, UiLanguage.English, null);
 
         var json = PickerMessages.Serialize(request);
         var parsed = PickerMessages.DeserializeRequest(json);
@@ -110,7 +113,7 @@ public class PickerMessagesTests
     public void A_valid_selection_is_accepted()
     {
         var config = Sample();
-        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.Windows, null);
+        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.Windows, UiLanguage.English, null);
 
         var response = PickerMessages.TryParseResponse("""{ "result": "selected", "profileId": "chrome-work", "remember": true }""", request);
 
@@ -124,7 +127,7 @@ public class PickerMessagesTests
     public void Cancellation_is_accepted()
     {
         var config = Sample();
-        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.Windows, null);
+        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.Windows, UiLanguage.English, null);
 
         var response = PickerMessages.TryParseResponse("""{ "result": "cancelled" }""", request);
 
@@ -142,7 +145,7 @@ public class PickerMessagesTests
     public void Invalid_responses_are_rejected(string json)
     {
         var config = Sample();
-        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.Windows, null);
+        var request = PickerMessages.CreateRequest(config, Decide(config, "https://login.microsoftonline.com/"), HostPlatform.Windows, UiLanguage.English, null);
 
         Assert.Null(PickerMessages.TryParseResponse(json, request));
     }

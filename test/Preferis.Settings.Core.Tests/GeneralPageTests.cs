@@ -39,7 +39,7 @@ public sealed class GeneralPageTests : IDisposable
     }
 
     [Fact]
-    public void Logging_belongs_to_this_machine_and_is_saved_with_the_rest()
+    public async Task Logging_belongs_to_this_machine_and_is_saved_with_the_rest()
     {
         var settings = _harness.Create();
         var page = settings.General;
@@ -48,7 +48,7 @@ public sealed class GeneralPageTests : IDisposable
         page.IsHistoryEnabled = true;
         page.HistorySize = 20;
         Assert.True(settings.IsDirty);
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
         var local = _harness.Loader.LoadLocal();
         Assert.Equal("trace", local.Logging?.Level);

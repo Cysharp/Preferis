@@ -225,7 +225,7 @@ internal sealed class SettingsWindow
         // Edits still waiting for the pause are saved first; closing asks only when they cannot be.
         public override bool WindowShouldClose(NSObject sender)
         {
-            if (_owner._closeConfirmed || !_owner._settings.IsDirty)
+            if (_owner._closeConfirmed || !_owner._settings.HasPendingChanges)
             {
                 return true;
             }

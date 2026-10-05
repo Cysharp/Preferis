@@ -7,7 +7,7 @@ namespace Preferis.Settings.Windows.Controls;
 
 /// <summary>
 /// The list on the left of the profiles and rules pages: a card with the rows, reorderable by dragging, and a bar of
-/// small buttons below it. Each row binds itself to its item; the rows are rebuilt only when the collection changes.
+/// small buttons below it. Collection changes insert, remove or move the existing rows; only a reset rebuilds them.
 /// </summary>
 internal sealed class ListPane<T> : IDisposable
     where T : class, INotifyPropertyChanged
@@ -16,9 +16,10 @@ internal sealed class ListPane<T> : IDisposable
     private readonly Func<T, Bindings, UIElement> _row;
     private readonly Action<T?> _select;
     private readonly Action<T, int>? _move;
-    private readonly List<Bindings> _rowBindings = [];
+    private readonly Dictionary<T, (ListViewItem View, Bindings Bindings)> _rows = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<int, T> _rowItems = [];
     private readonly ListView _list;
-    private List<T> _shown = [];
+    private int _nextRowId;
     private bool _updating;
     private T? _dragged;
 
@@ -43,10 +44,10 @@ internal sealed class ListPane<T> : IDisposable
         {
             if (!_updating)
             {
-                _select(_list.SelectedIndex >= 0 && _list.SelectedIndex < _items.Count ? _items[_list.SelectedIndex] : null);
+                _select(ItemOf(_list.SelectedItem as ListViewItem));
             }
         };
-        _list.DragItemsStarting += (_, e) => _dragged = e.Items.Count == 1 && e.Items[0] is ListViewItem { Tag: int index } && index < _items.Count ? _items[index] : null;
+        _list.DragItemsStarting += (_, e) => _dragged = e.Items.Count == 1 ? ItemOf(e.Items[0] as ListViewItem) : null;
         _list.DragItemsCompleted += (_, _) => OnDragged();
 
         var box = Form.Box(_list);
@@ -83,7 +84,7 @@ internal sealed class ListPane<T> : IDisposable
     public void Select(T? item)
     {
         _updating = true;
-        _list.SelectedIndex = item is null ? -1 : _items.IndexOf(item);
+        _list.SelectedItem = RowFor(item);
         _updating = false;
         if (_list.SelectedItem is not null)
         {
@@ -100,33 +101,110 @@ internal sealed class ListPane<T> : IDisposable
         DisposeRows();
     }
 
-    private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => Rebuild();
+    private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            Rebuild();
+            return;
+        }
+
+        var selected = ItemOf(_list.SelectedItem as ListViewItem);
+        _updating = true;
+        try
+        {
+            switch (e.Action)
+            {
+                case NotifyCollectionChangedAction.Add:
+                    for (var i = 0; i < e.NewItems!.Count; i++)
+                    {
+                        _list.Items.Insert(e.NewStartingIndex + i, CreateRow((T)e.NewItems[i]!));
+                    }
+                    break;
+                case NotifyCollectionChangedAction.Remove:
+                case NotifyCollectionChangedAction.Replace:
+                    for (var i = 0; i < e.OldItems!.Count; i++)
+                    {
+                        var row = (ListViewItem)_list.Items[e.OldStartingIndex];
+                        var item = ItemOf(row)!;
+                        _rows[item].Bindings.Dispose();
+                        _rows.Remove(item);
+                        _rowItems.Remove((int)row.Tag);
+                        _list.Items.RemoveAt(e.OldStartingIndex);
+                    }
+                    if (e.Action == NotifyCollectionChangedAction.Replace)
+                    {
+                        for (var i = 0; i < e.NewItems!.Count; i++)
+                        {
+                            _list.Items.Insert(e.NewStartingIndex + i, CreateRow((T)e.NewItems[i]!));
+                        }
+                    }
+                    break;
+                case NotifyCollectionChangedAction.Move:
+                    var moved = e.NewItems!.Cast<T>().Select(item => RowFor(item)!).ToArray();
+                    // A drag already moved the native row; a toolbar command has not. In both cases keep the row
+                    // and its bindings, and put it at the source collection's destination.
+                    if (moved.Length == 1 && _list.Items.IndexOf(moved[0]) == e.NewStartingIndex)
+                    {
+                        break;
+                    }
+                    foreach (var row in moved)
+                    {
+                        _list.Items.Remove(row);
+                    }
+                    for (var i = 0; i < moved.Length; i++)
+                    {
+                        _list.Items.Insert(e.NewStartingIndex + i, moved[i]);
+                    }
+                    break;
+            }
+            _list.SelectedItem = RowFor(selected);
+        }
+        finally
+        {
+            _updating = false;
+        }
+    }
 
     private void Rebuild()
     {
         // The rows are new objects: keep the selection on the same item (moving an item keeps the view model's selection).
-        var selected = _list.SelectedItem is ListViewItem { Tag: int previous } ? _shown.ElementAtOrDefault(previous) : null;
+        var selected = ItemOf(_list.SelectedItem as ListViewItem);
         _updating = true;
         DisposeRows();
         _list.Items.Clear();
-        _shown = [.. _items];
-        for (var i = 0; i < _items.Count; i++)
+        foreach (var item in _items)
         {
-            var bindings = new Bindings();
-            _rowBindings.Add(bindings);
-            _list.Items.Add(new ListViewItem
-            {
-                Content = _row(_items[i], bindings),
-                Tag = i,
-                HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                Padding = new Thickness(12, 8, 12, 8),
-            });
+            _list.Items.Add(CreateRow(item));
         }
-        _list.SelectedIndex = selected is null ? -1 : _items.IndexOf(selected);
+        _list.SelectedItem = RowFor(selected);
         _updating = false;
     }
 
-    // The list reordered its own rows; tell the view model, whose collection change then rebuilds the rows.
+    private ListViewItem CreateRow(T item)
+    {
+        var bindings = new Bindings();
+        var id = _nextRowId++;
+        var row = new ListViewItem
+        {
+            Content = _row(item, bindings),
+            // A stable integer crosses the WinRT boundary; the view model stays on the managed side.
+            Tag = id,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Padding = new Thickness(12, 8, 12, 8),
+        };
+        _rows.Add(item, (row, bindings));
+        _rowItems.Add(id, item);
+        return row;
+    }
+
+    private T? ItemOf(ListViewItem? row)
+        => row?.Tag is int id && _rowItems.TryGetValue(id, out var item) ? item : null;
+
+    private ListViewItem? RowFor(T? item)
+        => item is not null && _rows.TryGetValue(item, out var row) ? row.View : null;
+
+    // The list reordered its own rows; tell the view model, retaining the row and its selection.
     private void OnDragged()
     {
         if (_dragged is not { } item || _move is null)
@@ -136,7 +214,7 @@ internal sealed class ListPane<T> : IDisposable
         _dragged = null;
         for (var i = 0; i < _list.Items.Count; i++)
         {
-            if (_list.Items[i] is ListViewItem { Tag: int index } && index < _items.Count && ReferenceEquals(_items[index], item))
+            if (_list.Items[i] is ListViewItem row && ReferenceEquals(ItemOf(row), item))
             {
                 _move(item, i);
                 Select(item);
@@ -147,10 +225,11 @@ internal sealed class ListPane<T> : IDisposable
 
     private void DisposeRows()
     {
-        foreach (var bindings in _rowBindings)
+        foreach (var row in _rows.Values)
         {
-            bindings.Dispose();
+            row.Bindings.Dispose();
         }
-        _rowBindings.Clear();
+        _rows.Clear();
+        _rowItems.Clear();
     }
 }

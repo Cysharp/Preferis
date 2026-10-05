@@ -94,13 +94,13 @@ public sealed partial class RulesPageViewModel : PageViewModel
     }
 
     /// <summary>
-    /// Rules from a CSV of "URL or domain, profile name" lines (docs/Configuration.md §2.12), added after the existing
+    /// Rules from a CSV of "pattern, profile name, ..." lines (docs/Configuration.md §2.12), added after the existing
     /// ones. Says what was imported and what was not, line by line.
     /// </summary>
     [RelayCommand]
     private async Task ImportRules()
     {
-        if (await Settings.Dialogs.PickFileAsync(L("Choose a CSV file of URLs or domains and profile names")) is not { } path)
+        if (await Settings.Dialogs.PickFileAsync(L("Choose a CSV file of patterns and profile names")) is not { } path)
         {
             return;
         }

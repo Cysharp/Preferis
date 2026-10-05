@@ -272,7 +272,7 @@ public static partial class SettingsText
         { "reroute", "振り分け直し" },
 
         // ---- rules: importing ----
-        { "Choose a CSV file of URLs or domains and profile names", "URL またはドメインとプロファイル名の CSV ファイルを選択" },
+        { "Choose a CSV file of patterns and profile names", "パターンとプロファイル名の CSV ファイルを選択" },
         { "The file could not be read.", "ファイルを読み込めませんでした。" },
         { "1 line", "1 行" },
         { "{0} lines", "{0} 行" },

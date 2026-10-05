@@ -1,10 +1,12 @@
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using Preferis.Core.Routing;
 using static Preferis.Core.Localization.CoreText;
 
 namespace Preferis.Core.Configuration;
 
-/// <param name="Rules">New rules, one per profile in the order the profiles first appear. They are not in the configuration yet.</param>
+/// <param name="Rules">New rules, one per profile set in first appearance order. They are not in the configuration yet.</param>
 /// <param name="ImportedLines">Lines that became a condition of one of <paramref name="Rules"/>.</param>
 /// <param name="Skipped">Lines that did not, in file order. A header line is not among them.</param>
 public sealed record RuleImportResult(IReadOnlyList<Rule> Rules, int ImportedLines, IReadOnlyList<SkippedLine> Skipped);
@@ -13,13 +15,13 @@ public sealed record RuleImportResult(IReadOnlyList<Rule> Rules, int ImportedLin
 public sealed record SkippedLine(int Line, string Reason);
 
 /// <summary>
-/// Rules from a CSV of "URL or domain, profile name" lines, as other tools export them (docs/Configuration.md §2.12).
+/// Rules from a CSV of "pattern, profile name, ..." lines, as other tools export them (docs/Configuration.md §2.12).
 /// </summary>
 public static partial class RuleCsvImport
 {
     public static RuleImportResult Import(PreferisConfig config, string csv)
     {
-        var groups = new List<(Profile Profile, List<PatternCondition> Conditions)>();
+        var groups = new List<(List<Profile> Profiles, List<Condition> Conditions)>();
         var skipped = new List<SkippedLine>();
         var imported = 0;
         var records = Records(csv);
@@ -40,10 +42,10 @@ public static partial class RuleCsvImport
         var ids = config.Rules.Select(r => r.Id).ToList();
         var names = config.Rules.Select(r => r.Name).ToList();
         var rules = new List<Rule>();
-        foreach (var (profile, conditions) in groups)
+        foreach (var (profiles, conditions) in groups)
         {
             // Rule names follow the profile names' rule: an existing rule of the same name gets a number.
-            var name = ProfileNames.Unique(L("Imported Rule for {0}", profile.Name.Trim()), names);
+            var name = ProfileNames.Unique(L("Imported Rule for {0}", Names(profiles)), names);
             var id = IdGenerator.ForName(name, "rule", ids);
             names.Add(name);
             ids.Add(id);
@@ -53,48 +55,75 @@ public static partial class RuleCsvImport
                 Name = name,
                 Enabled = true,
                 Condition = conditions.Count == 1 ? conditions[0] : new OrCondition { Conditions = [.. conditions] },
-                Actions = [new OpenAction { Profiles = [profile.Id] }],
+                Actions = [new OpenAction { Profiles = profiles.Select(p => p.Id).ToList() }],
             });
         }
         return new RuleImportResult(rules, imported, skipped);
     }
 
-    /// <summary>Adds the line to its profile's group. Returns why it cannot be imported, or null.</summary>
-    private static string? Add(PreferisConfig config, List<(Profile Profile, List<PatternCondition> Conditions)> groups, List<string> fields)
+    /// <summary>Adds the line to its profile set's group. Returns why it cannot be imported, or null.</summary>
+    private static string? Add(PreferisConfig config, List<(List<Profile> Profiles, List<Condition> Conditions)> groups, List<string> fields)
     {
-        if (fields.Count < 2 || fields[0].Length == 0 || fields[1].Length == 0)
+        if (fields.Count < 2 || fields.Any(f => f.Length == 0))
         {
-            return L("A URL or domain and a profile name are needed.");
+            return L("A pattern and at least one profile name are needed. Profile columns cannot be empty.");
         }
-        var (pattern, name) = (fields[0], fields[1]);
-        if (config.Profiles.FirstOrDefault(p => ProfileNames.Same(p.Name, name)) is not { } profile)
+        var pattern = fields[0];
+        var selected = new HashSet<Profile>();
+        foreach (var name in fields.Skip(1))
         {
-            return L("No profile is named “{0}”.", name);
+            if (config.Profiles.FirstOrDefault(p => ProfileNames.Same(p.Name, name)) is not { } profile)
+            {
+                return L("No profile is named “{0}”.", name);
+            }
+            selected.Add(profile);
         }
         if (ToCondition(pattern) is not { } condition)
         {
-            return L("“{0}” is neither a URL (it would start with a scheme such as https://) nor a domain.", pattern);
+            return L("“{0}” is not a URL, domain, host:port, or regular expression starting with /.", pattern);
+        }
+        if (condition is UrlCondition { Match: MatchKind.Regex } regex &&
+            (regex.Pattern.Length == 0 || PatternMatcher.ErrorOf(regex.Match, regex.Pattern, regex.IgnoreCase) is not null))
+        {
+            return L("“{0}” is not a valid regular expression.", pattern);
         }
 
-        var index = groups.FindIndex(g => ReferenceEquals(g.Profile, profile));
+        // The picker uses configuration order, so CSV column order does not create a different group.
+        var profiles = config.Profiles.Where(selected.Contains).ToList();
+        var index = groups.FindIndex(g => g.Profiles.SequenceEqual(profiles));
         if (index < 0)
         {
-            groups.Add((profile, []));
+            groups.Add((profiles, []));
             index = groups.Count - 1;
         }
         var conditions = groups[index].Conditions;
-        // Both kinds of condition compare without case here: hosts always, URLs by default.
-        if (conditions.Any(c => c.GetType() == condition.GetType() && string.Equals(c.Pattern, condition.Pattern, StringComparison.OrdinalIgnoreCase)))
+        if (conditions.Any(c => SameCondition(c, condition)))
         {
-            return L("“{0}” is already in the rule for “{1}”.", pattern, profile.Name.Trim());
+            return L("“{0}” is already in the rule for “{1}”.", pattern, Names(profiles));
         }
         conditions.Add(condition);
         return null;
     }
 
-    /// <summary>A <c>url</c> condition when the pattern starts with a scheme, a <c>host</c> condition otherwise; both wildcards.</summary>
-    private static PatternCondition? ToCondition(string pattern)
+    private static string Names(IEnumerable<Profile> profiles) => string.Join(", ", profiles.Select(p => p.Name.Trim()));
+
+    private static bool SameCondition(Condition left, Condition right) => (left, right) switch
     {
+        // Regex escapes such as \d and \D differ even when the regex matches without case.
+        (PatternCondition a, PatternCondition b) => a.GetType() == b.GetType() && a.Match == b.Match &&
+            string.Equals(a.Pattern, b.Pattern, a.Match == MatchKind.Regex ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase),
+        (AndCondition a, AndCondition b) => a.Conditions.Count == b.Conditions.Count &&
+            a.Conditions.Zip(b.Conditions).All(pair => SameCondition(pair.First, pair.Second)),
+        _ => false,
+    };
+
+    private static Condition? ToCondition(string pattern)
+    {
+        // Only the first slash is a marker. A final slash is part of the expression, not a closing delimiter.
+        if (pattern.StartsWith('/'))
+        {
+            return new UrlCondition { Match = MatchKind.Regex, Pattern = pattern[1..] };
+        }
         if (Scheme().Match(pattern) is { Success: true } scheme)
         {
             var rest = pattern[scheme.Length..];
@@ -106,10 +135,64 @@ public static partial class RuleCsvImport
             // it means the whole site.
             return new UrlCondition { Match = MatchKind.Wildcard, Pattern = rest.IndexOfAny(['/', '?', '#']) < 0 ? pattern + "/*" : pattern };
         }
-        // A host has no path, port or spaces; such a pattern would never match one.
+        var colon = pattern.LastIndexOf(':');
+        if (colon >= 0)
+        {
+            var host = pattern[..colon];
+            if (host.Length == 0 || host.Any(c => c is '/' or '@' or '#' or '\\' || char.IsWhiteSpace(c)) ||
+                !ushort.TryParse(pattern[(colon + 1)..], NumberStyles.None, CultureInfo.InvariantCulture, out var port))
+            {
+                return null;
+            }
+            if (host.Contains(':'))
+            {
+                if (!host.StartsWith('[') || !host.EndsWith(']') ||
+                    !Uri.TryCreate("http://" + host, UriKind.Absolute, out var ipv6) || ipv6.HostNameType != UriHostNameType.IPv6)
+                {
+                    return null;
+                }
+                // RoutingUrl uses System.Uri's compressed IPv6 host as well.
+                host = ipv6.Host;
+            }
+
+            // Host matching keeps IDN handling and wildcard semantics; the URL condition checks only the authority port.
+            return new AndCondition
+            {
+                Conditions =
+                [
+                    new HostCondition { Match = MatchKind.Wildcard, Pattern = host },
+                    new UrlCondition { Match = MatchKind.Regex, Pattern = PortPattern(port) },
+                ],
+            };
+        }
+        // A host has no path or spaces; such a pattern would never match one.
         return pattern.Any(c => c is '/' or ':' || char.IsWhiteSpace(c))
             ? null
             : new HostCondition { Match = MatchKind.Wildcard, Pattern = pattern };
+    }
+
+    private static string PortPattern(ushort port)
+    {
+        var authority = "[A-Za-z][A-Za-z0-9+.-]*://[^/?#]*:" + port.ToString(CultureInfo.InvariantCulture);
+        // System.Uri removes these schemes' default ports from AbsoluteUri. A default branch must exclude explicit
+        // non-default ports, while allowing user information and bracketed IPv6 hosts.
+        var schemes = port switch
+        {
+            80 => "http|ws",
+            443 => "https|wss",
+            21 => "ftp",
+            70 => "gopher",
+            119 => "nntp",
+            23 => "telnet",
+            389 => "ldap",
+            808 => @"net\.tcp",
+            _ => null,
+        };
+        if (schemes is not null)
+        {
+            authority += $"""|(?:{schemes})://(?:[^/?#@]*@)?(?:\[[^\]]+\]|[^:/?#@]+)""";
+        }
+        return "^(?:" + authority + ")(?:[/?#]|$)";
     }
 
     /// <summary>

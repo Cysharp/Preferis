@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "defaultProfile": "alpha",
+  "profiles": [
+    { "id": "alpha", "name": "Alpha", "browser": "edge" },
+    { "id": "bravo", "name": "Bravo", "browser": "edge" },
+    { "id": "charlie", "name": "Charlie", "browser": "edge" }
+  ],
+  "rules": [
+    {
+      "id": "one", "name": "One",
+      "condition": { "type": "host", "match": "equals", "pattern": "one.example" },
+      "actions": [{ "type": "none" }]
+    },
+    {
+      "id": "two", "name": "Two",
+      "condition": { "type": "host", "match": "equals", "pattern": "two.example" },
+      "actions": [{ "type": "none" }]
+    },
+    {
+      "id": "three", "name": "Three",
+      "condition": { "type": "host", "match": "equals", "pattern": "three.example" },
+      "actions": [{ "type": "none" }]
+    }
+  ],
+  "settings": { "language": "en" }
+}

@@ -292,7 +292,7 @@ public sealed class LocalTargetTests : IDisposable
     }
 
     [Fact]
-    public void Deleting_a_profile_forgets_its_target_and_duplicating_copies_it()
+    public async Task Deleting_a_profile_forgets_its_target_and_duplicating_copies_it()
     {
         var settings = _harness.WithSample().Create();
         var page = settings.Profiles;
@@ -307,7 +307,8 @@ public sealed class LocalTargetTests : IDisposable
         Assert.NotSame(settings.Local.ProfileTargets["edge-private"], settings.Local.ProfileTargets[copy.Id]);
 
         page.SelectedProfile = profile;
-        page.DeleteCommand.Execute(null);
+        _harness.Dialogs.Answers.Enqueue("Delete");
+        await page.DeleteCommand.ExecuteAsync(null);
         Assert.False(settings.Local.ProfileTargets.ContainsKey("edge-private"));
     }
 

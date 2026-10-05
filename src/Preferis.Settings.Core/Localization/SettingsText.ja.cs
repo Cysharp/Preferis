@@ -159,6 +159,7 @@ public static partial class SettingsText
         { "Command", "コマンド" },
         { "{0} copy", "{0} のコピー" },
         { "It is used by:\n{0}\n\nThese references will be removed.", "次の場所で使用されています:\n{0}\n\nこれらの参照は削除されます。" },
+        { "This profile will be deleted.", "このプロファイルは削除されます。" },
         { "Delete “{0}”?", "「{0}」を削除しますか?" },
         { "Delete", "削除" },
         { "the default profile setting", "既定のプロファイルの設定" },
@@ -237,6 +238,7 @@ public static partial class SettingsText
         // ---- rules: list ----
         { "Add a rule below the selected one", "選択したルールの下にルールを追加" },
         { "Delete the selected rule", "選択したルールを削除" },
+        { "This rule will be deleted.", "このルールは削除されます。" },
         { "Import from CSV…", "CSV からインポート…" },
         { "Turn the rule on or off", "ルールのオン/オフを切り替え" },
         { "Enabled", "有効" },

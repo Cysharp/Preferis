@@ -95,13 +95,18 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
     {
         var profile = SelectedProfile!;
         var usages = Usages(Settings.Config, profile.Id);
-        if (usages.Count > 0)
+        var message = usages.Count > 0
+            ? L("It is used by:\n{0}\n\nThese references will be removed.", "• " + string.Join("\n• ", usages))
+            : L("This profile will be deleted.");
+        if (await Settings.Dialogs.AskAsync(L("Delete “{0}”?", profile.Name), message, [L("Delete"), L("Cancel")]) != 0)
         {
-            var message = L("It is used by:\n{0}\n\nThese references will be removed.", "• " + string.Join("\n• ", usages));
-            if (await Settings.Dialogs.AskAsync(L("Delete “{0}”?", profile.Name), message, [L("Delete"), L("Cancel")]) != 0)
-            {
-                return;
-            }
+            return;
+        }
+
+        // Reactivating the window can reload the settings while the confirmation is open.
+        if (Settings.Profiles != this)
+        {
+            return;
         }
 
         RemoveReferences(Settings.Config, profile.Id);

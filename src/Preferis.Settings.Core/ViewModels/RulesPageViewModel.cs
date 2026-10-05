@@ -75,7 +75,7 @@ public sealed partial class RulesPageViewModel : PageViewModel
         var name = L("New rule");
         var rule = new Rule
         {
-            Id = IdGenerator.ForName(name, "rule", Settings.Config.Rules.Select(r => r.Id)),
+            Id = IdGenerator.Unique("rule", Settings.Config.Rules.Select(r => r.Id)),
             Name = name,
             Condition = new HostCondition { Match = MatchKind.Exact, Pattern = "" },
             Actions = [new OpenAction()],

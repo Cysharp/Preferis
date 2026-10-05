@@ -263,24 +263,50 @@ public class RuleCsvImportTests
     [Theory]
     [InlineData(@"/^https?://regex\.example\.com/\d+$", "https://regex.example.com/123", true)]
     [InlineData(@"/^https?://regex\.example\.com/\d+$", "https://regex.example.com/abc", false)]
+    [InlineData(@"/^https?://regex\.example\.com/\d+$/", "https://regex.example.com/123", true)]
+    [InlineData(@"/^https?://regex\.example\.com/\d+$/", "https://regex.example.com/abc", false)]
     [InlineData(@"/^https://EXAMPLE\.com/", "https://example.com/path", true)]
     [InlineData(@"/(?i)^https://example\.com/(?-i:ABC)$", "https://example.com/ABC", true)]
     [InlineData(@"/(?i)^https://example\.com/(?-i:ABC)$", "https://example.com/abc", false)]
     [InlineData(@"/example\.com/path/", "https://example.com/path/child", true)]
-    [InlineData(@"/example\.com/path/", "https://example.com/pathology", false)]
+    [InlineData(@"/example\.com/path/", "https://example.com/pathology", true)]
+    [InlineData(@"/example\.com/path\/", "https://example.com/path/child", true)]
+    [InlineData(@"/example\.com/path\/", "https://example.com/pathology", false)]
+    [InlineData(@"/example\.com/path\//", "https://example.com/path/child", true)]
+    [InlineData(@"/example\.com/path\//", "https://example.com/pathology", false)]
     public void A_leading_slash_marks_a_url_regular_expression(string pattern, string url, bool matches)
     {
         AssertImportedMatch(pattern, url, matches);
         var rule = Assert.Single(RuleCsvImport.Import(Config(), pattern + ",Work").Rules);
         var condition = Assert.IsType<UrlCondition>(rule.Condition);
         Assert.Equal(MatchKind.Regex, condition.Match);
-        Assert.Equal(pattern[1..], condition.Pattern);
+    }
+
+    [Theory]
+    [InlineData(@"/^https?://docs\.example\.com/", @"^https?://docs\.example\.com")]
+    [InlineData(@"/^https?://docs\.example\.com\/", @"^https?://docs\.example\.com\/")]
+    [InlineData(@"/^https?://docs\.example\.com\//", @"^https?://docs\.example\.com\/")]
+    [InlineData(@"/\d+", @"\d+")]
+    [InlineData(@"/\d+/", @"\d+")]
+    [InlineData(@"/path\\/", @"path\\")]
+    [InlineData(@"/path\\\/", @"path\\\/")]
+    [InlineData(@"/path\\\\/", @"path\\\\")]
+    [InlineData("///", "/")]
+    public void Regex_delimiters_are_removed_unless_the_final_slash_is_escaped(string pattern, string expected)
+    {
+        var rule = Assert.Single(RuleCsvImport.Import(Config(), pattern + ",Work").Rules);
+
+        var condition = Assert.IsType<UrlCondition>(rule.Condition);
+        Assert.Equal(MatchKind.Regex, condition.Match);
+        Assert.Equal(expected, condition.Pattern);
     }
 
     [Theory]
     [InlineData("/")]
+    [InlineData("//")]
     [InlineData("/[")]
     [InlineData("/(")]
+    [InlineData("/[/")]
     public void Invalid_or_empty_regular_expressions_are_reported_without_losing_valid_rows(string pattern)
     {
         var result = RuleCsvImport.Import(Config(), "URL,Profile\n" + pattern + ",Work\nexample.com,Work");
@@ -305,11 +331,12 @@ public class RuleCsvImportTests
             HTTPS://EXAMPLE.COM/*,Work
             example.com:8080,Work
             EXAMPLE.COM:08080,Work
+            /\d/,Work
             """;
         var result = RuleCsvImport.Import(Config(), Csv);
 
         Assert.Equal(5, result.ImportedLines);
-        Assert.Equal([6, 7, 9], result.Skipped.Select(s => s.Line));
+        Assert.Equal([6, 7, 9, 10], result.Skipped.Select(s => s.Line));
         Assert.Equal(5, Assert.IsType<OrCondition>(Assert.Single(result.Rules).Condition).Conditions.Count);
     }
 

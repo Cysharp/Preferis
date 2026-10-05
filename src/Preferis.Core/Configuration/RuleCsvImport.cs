@@ -119,10 +119,23 @@ public static partial class RuleCsvImport
 
     private static Condition? ToCondition(string pattern)
     {
-        // Only the first slash is a marker. A final slash is part of the expression, not a closing delimiter.
         if (pattern.StartsWith('/'))
         {
-            return new UrlCondition { Match = MatchKind.Regex, Pattern = pattern[1..] };
+            var end = pattern.Length;
+            if (end > 1 && pattern[^1] == '/')
+            {
+                // Paired backslashes escape each other; only an odd run escapes the final slash.
+                var backslashes = 0;
+                for (var i = end - 2; i > 0 && pattern[i] == '\\'; i--)
+                {
+                    backslashes++;
+                }
+                if (backslashes % 2 == 0)
+                {
+                    end--;
+                }
+            }
+            return new UrlCondition { Match = MatchKind.Regex, Pattern = pattern[1..end] };
         }
         if (Scheme().Match(pattern) is { Success: true } scheme)
         {

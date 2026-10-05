@@ -437,7 +437,7 @@ public sealed class RulesPageTests : IDisposable
         File.WriteAllText(csv, """
             URL,Profile,Profile
             intranet.example.com:8080,Chrome (Work),Microsoft Edge
-            /^https?://regex\.example\.com/,Chrome (Work)
+            /^https?://regex\.example\.com\//,Chrome (Work)
             rejected.example.com,Chrome (Work),Nobody
             """);
         _harness.Dialogs.Files.Enqueue(csv);
@@ -459,6 +459,7 @@ public sealed class RulesPageTests : IDisposable
         Assert.Equal(6, saved.Rules.Count);
         Assert.Equal(["edge", "chrome-work"], Assert.IsType<OpenAction>(Assert.Single(saved.Rules[4].Actions)).Profiles);
         Assert.Equal(["chrome-work"], Assert.IsType<OpenAction>(Assert.Single(saved.Rules[5].Actions)).Profiles);
+        Assert.Equal(@"^https?://regex\.example\.com\/", Assert.IsType<UrlCondition>(saved.Rules[5].Condition).Pattern);
         var router = new Router(saved);
 
         void RoutesTo(string url, string? ruleId, params string[] profileIds)

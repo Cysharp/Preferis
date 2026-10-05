@@ -161,9 +161,20 @@ public sealed partial class RulesPageViewModel : PageViewModel
     }
 
     [RelayCommand(CanExecute = nameof(HasRule))]
-    private void DeleteRule()
+    private async Task DeleteRule()
     {
         var rule = SelectedRule!;
+        if (await Settings.Dialogs.AskAsync(L("Delete “{0}”?", rule.Name), L("This rule will be deleted."), [L("Delete"), L("Cancel")]) != 0)
+        {
+            return;
+        }
+
+        // Reactivating the window can reload the settings while the confirmation is open.
+        if (Settings.Rules != this)
+        {
+            return;
+        }
+
         var index = Rules.IndexOf(rule);
         Settings.Config.Rules.Remove(rule.Model);
         Rules.Remove(rule);

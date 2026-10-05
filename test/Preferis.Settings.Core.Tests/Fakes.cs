@@ -122,6 +122,9 @@ internal sealed class FakeDialogs : IDialogService
     /// <summary>Answers to <see cref="AskAsync"/>, by button label. Unanswered questions are dismissed (-1).</summary>
     public Queue<string> Answers { get; } = new();
 
+    /// <summary>A deferred answer to the next question, for changes made while a dialog is open.</summary>
+    public Task<int>? NextAnswer { get; set; }
+
     public List<(string Title, string Message, IReadOnlyList<string> Buttons)> Asked { get; } = [];
 
     public Task<string?> PickFolderAsync(string title) => Task.FromResult(Folders.Count > 0 ? Folders.Dequeue() : null);
@@ -131,6 +134,11 @@ internal sealed class FakeDialogs : IDialogService
     public Task<int> AskAsync(string title, string message, IReadOnlyList<string> buttons)
     {
         Asked.Add((title, message, buttons));
+        if (NextAnswer is { } deferred)
+        {
+            NextAnswer = null;
+            return deferred;
+        }
         if (Answers.Count == 0)
         {
             return Task.FromResult(-1);

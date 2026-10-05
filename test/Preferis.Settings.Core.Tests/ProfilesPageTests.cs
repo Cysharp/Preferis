@@ -186,17 +186,53 @@ public sealed class ProfilesPageTests : IDisposable
     }
 
     [Fact]
-    public async Task Deleting_an_unused_profile_does_not_ask()
+    public async Task Deleting_an_unused_profile_asks_before_removing_it()
     {
         var settings = _harness.WithSample().Create();
         var page = settings.Profiles;
         page.SelectedProfile = page.Profiles.Single(p => p.Id == "custom-tool");
+        _harness.Dialogs.Answers.Enqueue("Delete");
 
         await page.DeleteCommand.ExecuteAsync(null);
 
-        Assert.Empty(_harness.Dialogs.Asked);
+        var question = Assert.Single(_harness.Dialogs.Asked);
+        Assert.Equal("Delete “社内ツール”?", question.Title);
+        Assert.Equal(["Delete", "Cancel"], question.Buttons);
         Assert.Equal(5, page.Profiles.Count);
         Assert.Equal(page.Profiles[4], page.SelectedProfile);
+        Assert.True(settings.IsDirty);
+        await _harness.Saves.RunPendingAsync();
+        Assert.DoesNotContain(_harness.SavedConfig().Profiles, p => p.Id == "custom-tool");
+    }
+
+    [Theory]
+    [InlineData("edge", "Cancel")]
+    [InlineData("edge", null)]
+    [InlineData("edge-private", "Cancel")]
+    [InlineData("edge-private", null)]
+    public async Task Cancelling_profile_deletion_keeps_the_profile_references_and_local_target(string id, string? answer)
+    {
+        var settings = _harness.WithSample().Create();
+        var page = settings.Profiles;
+        var profile = page.SelectedProfile = page.Profiles.Single(p => p.Id == id);
+        profile.UsesLocalTarget = true;
+        await _harness.Saves.RunPendingAsync();
+        var config = ConfigSerializer.Serialize(settings.Config);
+        var local = ConfigSerializer.SerializeLocal(settings.Local);
+        if (answer is not null)
+        {
+            _harness.Dialogs.Answers.Enqueue(answer);
+        }
+
+        await page.DeleteCommand.ExecuteAsync(null);
+
+        Assert.Single(_harness.Dialogs.Asked);
+        Assert.Equal(config, ConfigSerializer.Serialize(settings.Config));
+        Assert.Equal(local, ConfigSerializer.SerializeLocal(settings.Local));
+        Assert.Contains(profile, page.Profiles);
+        Assert.Same(profile, page.SelectedProfile);
+        Assert.False(settings.IsDirty);
+        Assert.False(_harness.Saves.HasPending);
     }
 
     [Fact]

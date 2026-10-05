@@ -91,7 +91,7 @@ public sealed class RulesPageTests : IDisposable
     }
 
     [Fact]
-    public void Rules_can_be_duplicated_moved_and_deleted()
+    public async Task Rules_can_be_duplicated_moved_and_deleted()
     {
         var page = Page(out var settings);
         page.SelectedRule = Rule(page, "google-admin");
@@ -105,9 +105,40 @@ public sealed class RulesPageTests : IDisposable
         Assert.Equal("google-admin-2", settings.Config.Rules[0].Id);
         Assert.False(page.MoveRuleUpCommand.CanExecute(null));
 
-        page.DeleteRuleCommand.Execute(null);
+        var deletedName = page.SelectedRule.Name;
+        _harness.Dialogs.Answers.Enqueue("Delete");
+        await page.DeleteRuleCommand.ExecuteAsync(null);
+        var question = Assert.Single(_harness.Dialogs.Asked);
+        Assert.Equal($"Delete “{deletedName}”?", question.Title);
+        Assert.Equal(["Delete", "Cancel"], question.Buttons);
         Assert.Equal(["unwrap-safelinks", "google-admin", "app-split", "ms-login"], settings.Config.Rules.Select(r => r.Id));
         Assert.Equal("unwrap-safelinks", page.SelectedRule?.Id);
+        await _harness.Saves.RunPendingAsync();
+        Assert.Equal(settings.Config.Rules.Select(r => r.Id), _harness.SavedConfig().Rules.Select(r => r.Id));
+    }
+
+    [Theory]
+    [InlineData("Cancel")]
+    [InlineData(null)]
+    public async Task Cancelling_rule_deletion_keeps_the_rule_and_selection(string? answer)
+    {
+        var page = Page(out var settings);
+        var rule = page.SelectedRule = Rule(page, "google-admin");
+        var config = ConfigSerializer.Serialize(settings.Config);
+        if (answer is not null)
+        {
+            _harness.Dialogs.Answers.Enqueue(answer);
+        }
+
+        await page.DeleteRuleCommand.ExecuteAsync(null);
+
+        Assert.Single(_harness.Dialogs.Asked);
+        Assert.Equal(config, ConfigSerializer.Serialize(settings.Config));
+        Assert.Contains(rule, page.Rules);
+        Assert.Same(rule, page.SelectedRule);
+        Assert.Same(rule, page.CurrentEditor);
+        Assert.False(settings.IsDirty);
+        Assert.False(_harness.Saves.HasPending);
     }
 
     [Fact]

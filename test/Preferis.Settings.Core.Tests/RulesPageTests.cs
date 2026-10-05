@@ -49,7 +49,8 @@ public sealed class RulesPageTests : IDisposable
         // The first rule is selected when the page opens, and new rules go right after the selection.
         var rule = page.SelectedRule!;
         Assert.Same(rule, page.CurrentEditor);
-        Assert.Equal("new-rule", rule.Id);
+        Assert.Equal("rule", rule.Id);
+        Assert.Equal("New rule", rule.Name);
         Assert.Same(rule.Model, settings.Config.Rules[1]);
         var root = ConditionPredicates.ToEditor(rule.Model.Condition)!;
         Assert.Equal(CompoundKind.All, root.Kind);
@@ -66,7 +67,27 @@ public sealed class RulesPageTests : IDisposable
         page.AddRuleCommand.Execute(null);
 
         Assert.Equal(2, page.Rules.IndexOf(page.SelectedRule!));
-        Assert.Equal("new-rule", settings.Config.Rules[2].Id);
+        Assert.Equal("rule", settings.Config.Rules[2].Id);
+    }
+
+    [Fact]
+    public async Task New_rule_ids_avoid_collisions_and_preserve_existing_ids()
+    {
+        var page = Page(out var settings);
+        page.Rules[0].Model.Id = "rule";
+        page.Rules[1].Model.Id = "rule-3";
+        page.Rules[2].Model.Id = "new-rule";
+        page.SelectCatchAllCommand.Execute(null);
+
+        page.AddRuleCommand.Execute(null);
+        Assert.Equal("rule-2", page.SelectedRule!.Id);
+
+        page.AddRuleCommand.Execute(null);
+        Assert.Equal("rule-4", page.SelectedRule!.Id);
+
+        await _harness.Saves.RunPendingAsync();
+        Assert.Equal(["rule", "rule-3", "new-rule", "ms-login", "rule-2", "rule-4"],
+            _harness.SavedConfig().Rules.Select(r => r.Id));
     }
 
     [Fact]

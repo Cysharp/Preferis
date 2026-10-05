@@ -33,9 +33,8 @@
 
   <ItemGroup>
     <!-- The WinUI component alone: the Microsoft.WindowsAppSDK metapackage would add the AI, ML and Search runtimes to the self-contained output. -->
-    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.9" />
-    <!-- WinUI 2.3.9 names InteractiveExperiences 2.1.8, which was never published; pin the next one (NU1603). -->
-    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.9" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
   </ItemGroup>
 
   <ItemGroup>

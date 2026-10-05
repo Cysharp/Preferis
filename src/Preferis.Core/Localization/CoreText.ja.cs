@@ -55,9 +55,10 @@ public static partial class CoreText
 
         // ---- importing rules ----
         { "Imported Rule for {0}", "{0} 用にインポートしたルール" },
-        { "A URL or domain and a profile name are needed.", "URL またはドメインと、プロファイル名が必要です。" },
+        { "A pattern and at least one profile name are needed. Profile columns cannot be empty.", "パターンと 1 つ以上のプロファイル名が必要です。プロファイルの列は空にできません。" },
         { "No profile is named “{0}”.", "「{0}」という名前のプロファイルは見つかりません。" },
-        { "“{0}” is neither a URL (it would start with a scheme such as https://) nor a domain.", "「{0}」は URL (https:// などのスキームで始まるもの) でもドメインでもありません。" },
+        { "“{0}” is not a URL, domain, host:port, or regular expression starting with /.", "「{0}」は URL、ドメイン、ホスト:ポート、/ で始まる正規表現のいずれでもありません。" },
+        { "“{0}” is not a valid regular expression.", "「{0}」は有効な正規表現ではありません。" },
         { "“{0}” is already in the rule for “{1}”.", "「{0}」は既に「{1}」のルールに含まれています。" },
 
         // ---- routing and resolving ----

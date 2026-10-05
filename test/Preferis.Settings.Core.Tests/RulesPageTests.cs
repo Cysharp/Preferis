@@ -1,4 +1,5 @@
 using Preferis.Core.Configuration;
+using Preferis.Core.Routing;
 using Preferis.Settings.ViewModels;
 
 namespace Preferis.Settings.Core.Tests;
@@ -478,6 +479,56 @@ public sealed class RulesPageTests : IDisposable
 
         await _harness.Saves.RunPendingAsync();
         Assert.Equal(6, _harness.SavedConfig().Rules.Count);
+    }
+
+    [Fact]
+    public async Task Csv_ports_regexes_and_multiple_profiles_are_saved_and_route_as_imported()
+    {
+        var page = Page(out var settings);
+        var csv = Path.Combine(_harness.Root, "rules.csv");
+        File.WriteAllText(csv, """
+            URL,Profile,Profile
+            intranet.example.com:8080,Chrome (Work),Microsoft Edge
+            /^https?://regex\.example\.com\//,Chrome (Work)
+            rejected.example.com,Chrome (Work),Nobody
+            """);
+        _harness.Dialogs.Files.Enqueue(csv);
+
+        await page.ImportRulesCommand.ExecuteAsync(null);
+
+        Assert.Equal(6, settings.Config.Rules.Count);
+        Assert.Equal(settings.Config.Rules.Select(r => r.Id), page.Rules.Select(r => r.Id));
+        Assert.Same(page.Rules[4], page.SelectedRule);
+        Assert.Empty(page.Rules[4].Issues);
+        Assert.Empty(page.Rules[5].Issues);
+        var (title, message, buttons) = _harness.Dialogs.Asked[^1];
+        Assert.Equal("Imported 2 lines.", title);
+        Assert.Contains("• Line 4: No profile is named “Nobody”.", message, StringComparison.Ordinal);
+        Assert.Equal(["OK"], buttons);
+
+        await _harness.Saves.RunPendingAsync();
+        var saved = _harness.SavedConfig();
+        Assert.Equal(6, saved.Rules.Count);
+        Assert.Equal(["edge", "chrome-work"], Assert.IsType<OpenAction>(Assert.Single(saved.Rules[4].Actions)).Profiles);
+        Assert.Equal(["chrome-work"], Assert.IsType<OpenAction>(Assert.Single(saved.Rules[5].Actions)).Profiles);
+        Assert.Equal(@"^https?://regex\.example\.com\/", Assert.IsType<UrlCondition>(saved.Rules[5].Condition).Pattern);
+        var router = new Router(saved);
+
+        void RoutesTo(string url, string? ruleId, params string[] profileIds)
+        {
+            var result = router.Route(RoutingUrl.Parse(url));
+            Assert.Equal(ruleId, result.RuleId);
+            Assert.Equal(profileIds, Assert.IsType<RoutingDecision.Open>(result.Decision).ProfileIds);
+        }
+
+        RoutesTo("http://intranet.example.com:8080/path", saved.Rules[4].Id, "edge", "chrome-work");
+        RoutesTo("https://intranet.example.com:8080/path", saved.Rules[4].Id, "edge", "chrome-work");
+        RoutesTo("https://intranet.example.com:8081/path", null, "edge");
+        RoutesTo("https://intranet.example.com/path", null, "edge");
+        RoutesTo("http://regex.example.com/path", saved.Rules[5].Id, "chrome-work");
+        RoutesTo("https://regex.example.com/path", saved.Rules[5].Id, "chrome-work");
+        RoutesTo("https://regex.example.com.evil.test/path", null, "edge");
+        RoutesTo("https://rejected.example.com/path", null, "edge");
     }
 
     [Fact]

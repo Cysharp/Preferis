@@ -1,4 +1,3 @@
-using System.Runtime.ExceptionServices;
 using Preferis.Core;
 using Preferis.Core.Browsers;
 using Preferis.Core.Configuration;
@@ -23,7 +22,7 @@ public sealed class ConcurrentSaveTests : IDisposable
     public void Dispose() => _harness.Dispose();
 
     [Fact]
-    public void A_save_while_the_router_remembers_waits_for_it_and_holds_the_edits()
+    public async Task A_save_while_the_router_remembers_waits_for_it_and_holds_the_edits()
     {
         var settings = _harness.WithSample().Create();
         settings.Profiles.Profiles[0].Name = "Mine";
@@ -34,13 +33,13 @@ public sealed class ConcurrentSaveTests : IDisposable
         {
             if (count == 2)
             {
-                save = new Background(_harness.Saves.RunPending);
+                save = new Background(_harness.Saves.RunPendingAsync);
                 save.Wait(TimeSpan.FromMilliseconds(300));
             }
         });
 
         router.Open(MicrosoftLogin, "edge");
-        save!.Finish();
+        await save!.FinishAsync();
 
         Assert.True(settings.HasExternalChanges);
         Assert.True(settings.IsDirty);
@@ -51,7 +50,7 @@ public sealed class ConcurrentSaveTests : IDisposable
     }
 
     [Fact]
-    public void Moving_the_file_while_the_router_remembers_takes_the_remembered_rule_along()
+    public async Task Moving_the_file_while_the_router_remembers_takes_the_remembered_rule_along()
     {
         var settings = _harness.WithSample().Create();
         var cloud = Path.Combine(Directory.CreateDirectory(Path.Combine(_harness.Root, "Cloud")).FullName, "config.json");
@@ -61,13 +60,13 @@ public sealed class ConcurrentSaveTests : IDisposable
         {
             if (count == 2)
             {
-                move = new Background(() => settings.Relocate(cloud, overwrite: false));
+                move = new Background(() => settings.RelocateAsync(cloud, overwrite: false));
                 move.Wait(TimeSpan.FromMilliseconds(300));
             }
         });
 
         router.Open(MicrosoftLogin, "edge");
-        move!.Finish();
+        await move!.FinishAsync();
 
         Assert.Equal(cloud, settings.ConfigPath);
         Assert.Contains(_harness.SavedConfig().Rules, r => r.Id.StartsWith("remember-", StringComparison.Ordinal));
@@ -76,7 +75,7 @@ public sealed class ConcurrentSaveTests : IDisposable
     }
 
     [Fact]
-    public void Moving_edits_while_the_router_remembers_stops_at_the_conflict()
+    public async Task Moving_edits_while_the_router_remembers_stops_at_the_conflict()
     {
         var settings = _harness.WithSample().Create();
         settings.Profiles.Profiles[0].Name = "Mine";
@@ -86,14 +85,14 @@ public sealed class ConcurrentSaveTests : IDisposable
         {
             if (count == 2)
             {
-                move = new Background(() => settings.Relocate(cloud, overwrite: false));
+                move = new Background(() => settings.RelocateAsync(cloud, overwrite: false));
                 move.Wait(TimeSpan.FromMilliseconds(300));
             }
         });
 
         router.Open(MicrosoftLogin, "edge");
 
-        var failure = Assert.Throws<IOException>(move!.Finish);
+        var failure = await Assert.ThrowsAsync<IOException>(move!.FinishAsync);
         Assert.Contains("changed on disk", failure.Message, StringComparison.Ordinal);
         Assert.True(settings.HasExternalChanges);
         Assert.Equal("Mine", settings.Profiles.Profiles[0].Name);
@@ -103,7 +102,7 @@ public sealed class ConcurrentSaveTests : IDisposable
     }
 
     [Fact]
-    public void Moving_stops_when_the_file_can_no_longer_be_read()
+    public async Task Moving_stops_when_the_file_can_no_longer_be_read()
     {
         var settings = _harness.WithSample().Create();
         var cloud = Path.Combine(Directory.CreateDirectory(Path.Combine(_harness.Root, "Cloud")).FullName, "config.json");
@@ -111,7 +110,7 @@ public sealed class ConcurrentSaveTests : IDisposable
         // it is an unreadable file shown as the default configuration, which must not replace it anywhere.
         File.WriteAllText(_harness.Paths.DefaultConfigPath, "{ broken");
 
-        var failure = Assert.Throws<IOException>(() => settings.Relocate(cloud, overwrite: false));
+        var failure = await Assert.ThrowsAsync<IOException>(() => settings.RelocateAsync(cloud, overwrite: false));
 
         Assert.Contains("cannot be read", failure.Message, StringComparison.Ordinal);
         Assert.False(File.Exists(cloud));
@@ -120,7 +119,7 @@ public sealed class ConcurrentSaveTests : IDisposable
     }
 
     [Fact]
-    public void Saving_only_local_json_does_not_wait_for_the_lock()
+    public async Task Saving_only_local_json_does_not_wait_for_the_lock()
     {
         File.WriteAllText(_harness.Paths.DefaultConfigPath, SettingsHarness.SampleJson);
         var settings = new SettingsViewModel(NewLoader(lockTimeout: TimeSpan.FromMilliseconds(100)), _harness.Platform, _harness.Dialogs, _harness.Saves);
@@ -129,7 +128,7 @@ public sealed class ConcurrentSaveTests : IDisposable
         // The lock orders writers of config.json; this computer's own file is no part of that.
         using (NewLoader().Lock())
         {
-            _harness.Saves.RunPending();
+            await _harness.Saves.RunPendingAsync();
         }
 
         Assert.False(settings.IsDirty);
@@ -148,7 +147,7 @@ public sealed class ConcurrentSaveTests : IDisposable
         // e.g. a Router that stopped responding while remembering.
         using (NewLoader().Lock())
         {
-            _harness.Saves.RunPending();
+            await _harness.Saves.RunPendingAsync();
         }
 
         Assert.True(settings.IsDirty);
@@ -167,39 +166,17 @@ public sealed class ConcurrentSaveTests : IDisposable
     private ConfigLoader NewLoader(TimeSpan? lockTimeout = null)
         => new(_harness.Paths, HostPlatform.MacOS, _ => null, _harness.Root) { LockTimeout = lockTimeout ?? TimeSpan.FromSeconds(5) };
 
-    /// <summary>Runs an action on a thread of its own; its exception, if any, is thrown by <see cref="Finish"/>.</summary>
+    /// <summary>Starts another participant in a concurrent file operation.</summary>
     private sealed class Background
     {
-        private readonly Thread _thread;
-        private Exception? _failure;
+        private readonly Task _task;
 
-        public Background(Action action)
-        {
-            _thread = new Thread(() =>
-            {
-                try
-                {
-                    action();
-                }
-                catch (Exception ex)
-                {
-                    _failure = ex;
-                }
-            });
-            _thread.Start();
-        }
+        public Background(Func<Task> action) => _task = Task.Run(action);
 
-        /// <summary>Gives the action <paramref name="timeout"/> to finish, as it would unless something holds it up.</summary>
-        public void Wait(TimeSpan timeout) => _thread.Join(timeout);
+        public void Wait(TimeSpan timeout)
+            => Task.WhenAny(_task, Task.Delay(timeout)).GetAwaiter().GetResult();
 
-        public void Finish()
-        {
-            _thread.Join();
-            if (_failure is not null)
-            {
-                ExceptionDispatchInfo.Throw(_failure);
-            }
-        }
+        public Task FinishAsync() => _task;
     }
 
     /// <summary>

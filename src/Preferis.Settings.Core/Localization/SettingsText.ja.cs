@@ -405,5 +405,6 @@ public static partial class SettingsText
         { "Preferis could not open the URL.", "Preferis は URL を開けませんでした。" },
         { "Could not clear the history: {0}", "履歴を消去できませんでした: {0}" },
         { "Could not read the history: {0}", "履歴を読み込めませんでした: {0}" },
+        { "The settings changed while the file was being read. Try again.", "ファイルを読み込んでいる間に設定が編集されました。もう一度操作してください。" },
     };
 }

@@ -8,26 +8,47 @@ public enum UiLanguage
 }
 
 /// <summary>
-/// Which language this process shows. <c>settings.language</c> chooses it; <c>auto</c> follows the OS's preferred
-/// languages. Process wide, like the UI it describes: set once at start-up, before any text is built (the settings'
-/// drop-down lists are built once), and by the Router for each URL.
+/// Which language this execution shows. UI processes set their default once at start-up, before building any text.
+/// The Router uses a scope for each URL so concurrent requests and their diagnostics keep their own language.
 /// </summary>
 public static class UiLanguages
 {
     private static Lazy<UiLanguage> _current = new(UiLanguage.English);
+    private static readonly AsyncLocal<Lazy<UiLanguage>?> Scoped = new();
 
-    /// <summary>The language of everything shown from now on. English until something sets it.</summary>
+    /// <summary>The active scope's language, or the process default. Set only the default, at UI process start-up.</summary>
     public static UiLanguage Current
     {
-        get => _current.Value;
+        get => (Scoped.Value ?? _current).Value;
         set => _current = new(value);
     }
 
     /// <summary>
-    /// Decides <see cref="Current"/> when it is first read, for the Router, which sets it for every URL before it knows
-    /// whether any text will be needed.
+    /// Keeps a language for this execution until disposed, restoring the enclosing scope even on failure. Concurrent
+    /// executions have separate scopes; asynchronous continuations inherit their caller's. Resolve only when text is
+    /// needed, so a successful configuration load need not query the OS before an explicit language takes over.
     /// </summary>
-    public static void SetLazily(Func<UiLanguage> resolve) => _current = new(resolve);
+    public static IDisposable UseLazily(Func<UiLanguage> resolve)
+    {
+        var scope = new LanguageScope(Scoped.Value);
+        Scoped.Value = new(resolve);
+        return scope;
+    }
+
+    private sealed class LanguageScope(Lazy<UiLanguage>? previous) : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            Scoped.Value = previous;
+            _disposed = true;
+        }
+    }
 
     /// <summary>The code of <c>settings.language</c> and of the picker request.</summary>
     public static string Code(this UiLanguage language) => language == UiLanguage.Japanese ? "ja" : "en";

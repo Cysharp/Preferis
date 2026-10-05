@@ -95,9 +95,9 @@ internal sealed class DispatcherSaveScheduler : ISaveScheduler
     // Long enough for a word typed into a field, short enough that the file is current by the time anyone looks.
     private static readonly TimeSpan Pause = TimeSpan.FromSeconds(0.6);
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _timer;
-    private Action? _save;
+    private Func<Task>? _save;
 
-    public void Schedule(Action save)
+    public void Schedule(Func<Task> save)
     {
         _save = save;
         if (_timer is null)
@@ -105,11 +105,21 @@ internal sealed class DispatcherSaveScheduler : ISaveScheduler
             _timer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
             _timer.Interval = Pause;
             _timer.IsRepeating = false;
-            _timer.Tick += (_, _) =>
+            _timer.Tick += async (_, _) =>
             {
                 var pending = _save;
                 _save = null;
-                pending?.Invoke();
+                try
+                {
+                    if (pending is not null)
+                    {
+                        await pending();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Saving failed: {ex}");
+                }
             };
         }
         _timer.Stop();

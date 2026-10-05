@@ -83,7 +83,7 @@ internal sealed class AppDelegate : NSApplicationDelegate
     // Quitting saves the edits still waiting, like closing the window, and asks only when they cannot be saved.
     public override NSApplicationTerminateReply ApplicationShouldTerminate(NSApplication sender)
     {
-        if (_settings is not { IsDirty: true })
+        if (_settings is not { HasPendingChanges: true })
         {
             return NSApplicationTerminateReply.Now;
         }

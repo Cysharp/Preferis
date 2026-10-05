@@ -134,7 +134,7 @@ public sealed class RulesPageTests : IDisposable
     }
 
     [Fact]
-    public void Editing_a_row_updates_the_rule_and_is_saved()
+    public async Task Editing_a_row_updates_the_rule_and_is_saved()
     {
         var page = Page(out var settings);
         var rule = Rule(page, "google-admin");
@@ -147,7 +147,7 @@ public sealed class RulesPageTests : IDisposable
         Assert.Equal("host ends with .google.com → open Chrome (Work)", rule.Summary);
         Assert.True(settings.IsDirty);
 
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
         Assert.Equal(".google.com", Assert.IsType<HostCondition>(_harness.SavedConfig().Rules[1].Condition).Pattern);
     }
 
@@ -179,7 +179,7 @@ public sealed class RulesPageTests : IDisposable
     }
 
     [Fact]
-    public void Conditions_can_be_added_and_removed()
+    public async Task Conditions_can_be_added_and_removed()
     {
         var page = Page(out var settings);
         var rule = Rule(page, "google-admin");
@@ -195,7 +195,7 @@ public sealed class RulesPageTests : IDisposable
         EditCondition(rule, root => root with { Children = root.Children.Skip(1).ToList() });
 
         Assert.Equal("admin.google.com", Assert.IsType<HostCondition>(settings.Config.Rules[1].Condition).Pattern);
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
         Assert.Equal("admin.google.com", Assert.IsType<HostCondition>(_harness.SavedConfig().Rules[1].Condition).Pattern);
     }
 
@@ -375,7 +375,7 @@ public sealed class RulesPageTests : IDisposable
     }
 
     [Fact]
-    public void Unknown_conditions_and_actions_are_kept_as_they_are()
+    public async Task Unknown_conditions_and_actions_are_kept_as_they_are()
     {
         var rule = RuleFromANewerPreferis();
         // The condition editor cannot show it; the UIs show its JSON instead.
@@ -383,7 +383,7 @@ public sealed class RulesPageTests : IDisposable
         Assert.Equal("teleport", Assert.IsType<UnknownActionViewModel>(rule.Actions.Items[0]).Type);
 
         rule.Name = "Slack";
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
         var saved = File.ReadAllText(_harness.Paths.DefaultConfigPath);
         Assert.Contains("Slack", saved, StringComparison.Ordinal);
@@ -392,7 +392,7 @@ public sealed class RulesPageTests : IDisposable
     }
 
     [Fact]
-    public void An_unknown_condition_can_be_replaced_with_a_new_one()
+    public async Task An_unknown_condition_can_be_replaced_with_a_new_one()
     {
         var rule = RuleFromANewerPreferis();
 
@@ -400,7 +400,7 @@ public sealed class RulesPageTests : IDisposable
         rule.SetCondition(new HostCondition { Match = MatchKind.Exact, Pattern = "" });
 
         Assert.Equal(HostRow(""), Assert.Single(ConditionPredicates.ToEditor(rule.Model.Condition)!.Children));
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
         Assert.DoesNotContain("sourceApp", File.ReadAllText(_harness.Paths.DefaultConfigPath), StringComparison.Ordinal);
     }
 
@@ -424,7 +424,7 @@ public sealed class RulesPageTests : IDisposable
         Assert.Contains("• Line 5: No profile is named “Nobody”.", message, StringComparison.Ordinal);
         Assert.Equal(["OK"], buttons);
 
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
         Assert.Equal(6, _harness.SavedConfig().Rules.Count);
     }
 

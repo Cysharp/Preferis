@@ -150,8 +150,13 @@ public sealed class ConfigLoader : IConfigStore
     /// at it. Moving to the default location removes the redirection. The file at <paramref name="currentPath"/> is deleted
     /// only when it is this machine's default location: anywhere else it may be shared with other machines.
     /// </summary>
-    /// <exception cref="IOException"><paramref name="newPath"/> exists and <paramref name="overwrite"/> is false, or a file operation failed.</exception>
-    public void RelocateConfig(PreferisConfig config, string currentPath, string newPath, bool overwrite)
+    /// <returns>
+    /// A warning when only removal of the old file failed, or null. Once the new file and local.json have been written,
+    /// the move is committed: callers must follow the new location even when the old file could not be removed.
+    /// </returns>
+    /// <exception cref="IOException"><paramref name="newPath"/> exists and <paramref name="overwrite"/> is false, or writing the target or local.json failed.</exception>
+    /// <exception cref="UnauthorizedAccessException">Writing the target or local.json was denied.</exception>
+    public string? RelocateConfig(PreferisConfig config, string currentPath, string newPath, bool overwrite)
     {
         var target = Path.GetFullPath(newPath);
         var current = Path.GetFullPath(currentPath);
@@ -166,7 +171,15 @@ public sealed class ConfigLoader : IConfigStore
         PointLocalConfigAt(target);
         if (!samePlace && string.Equals(current, Path.GetFullPath(_paths.DefaultConfigPath), StringComparison.Ordinal) && File.Exists(current))
         {
-            File.Delete(current);
+            try
+            {
+                File.Delete(current);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // The Router already follows the new location. Failed cleanup must not leave the editor saving to the old one.
+                return L("The configuration was moved, but the old file could not be removed ({0}): {1}", current, ex.Message);
+            }
             // Two spellings of one file (a symbolic link in the path, /var vs /private/var, letter case): the delete
             // removed what was just written. Paths cannot be compared reliably across platforms, so check the result.
             if (!File.Exists(target))
@@ -174,6 +187,7 @@ public sealed class ConfigLoader : IConfigStore
                 Save(config, target);
             }
         }
+        return null;
     }
 
     /// <summary>Points <c>local.json</c> at a configuration that already exists (e.g. synced from another machine) without modifying it.</summary>

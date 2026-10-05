@@ -106,6 +106,7 @@ public sealed partial class GeneralPageViewModel : PageViewModel
 
         try
         {
+            string? warning;
             if (File.Exists(target))
             {
                 var answer = await Settings.Dialogs.AskAsync(
@@ -118,7 +119,7 @@ public sealed partial class GeneralPageViewModel : PageViewModel
                         await Adopt(target);
                         return;
                     case 1:
-                        Settings.Relocate(target, overwrite: true);
+                        warning = await Settings.RelocateAsync(target, overwrite: true);
                         break;
                     default:
                         return;
@@ -126,9 +127,9 @@ public sealed partial class GeneralPageViewModel : PageViewModel
             }
             else
             {
-                Settings.Relocate(target, overwrite: false);
+                warning = await Settings.RelocateAsync(target, overwrite: false);
             }
-            Settings.StatusMessage = null;
+            Settings.StatusMessage = warning;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -145,7 +146,7 @@ public sealed partial class GeneralPageViewModel : PageViewModel
         }
         try
         {
-            Settings.Adopt(path);
+            await Settings.AdoptAsync(path);
             Settings.StatusMessage = null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)

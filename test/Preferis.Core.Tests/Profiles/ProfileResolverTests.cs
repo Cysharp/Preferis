@@ -90,6 +90,23 @@ public class ProfileResolverTests
         Assert.Contains(result.Warnings, w => w.Contains("Profile 1", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Unreadable_chromium_profiles_without_a_stored_directory_cannot_be_resolved(bool emptyList)
+    {
+        var (resolver, locator, profiles) = Setup(HostPlatform.MacOS);
+        profiles.ByBrowserId["chrome"] = emptyList ? [] : null;
+        var profile = Chrome(new BrowserProfileRef { Name = "Work", Email = "me@work.example.com" });
+
+        var target = new ProfileTargetResolver(HostPlatform.MacOS, locator, profiles).Resolve(profile);
+        var failure = Assert.IsType<ProfileTargetResolution.Unresolved>(target);
+        var launch = Assert.IsType<ResolveResult.Unresolved>(resolver.Resolve(profile, Url));
+
+        Assert.Equal(ProfileTargetFailure.BrowserProfileDataUnavailable, failure.Failure);
+        Assert.Equal(failure.Reason, launch.Reason);
+    }
+
     [Fact]
     public void A_profile_that_matches_nothing_is_unresolved()
     {
@@ -245,6 +262,22 @@ public class ProfileResolverTests
         Assert.Equal("safari", result.ProfileId);
         Assert.Equal("/Applications/Safari.app", result.Plan.Path);
         Assert.Equal(2, result.Warnings.Count(w => w.Contains("fallback", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
+    public void Falling_back_to_a_command_keeps_the_resolution_warning_and_expands_the_url()
+    {
+        var (resolver, _, _) = Setup(HostPlatform.MacOS);
+        var config = PreferisConfig.CreateDefault();
+        config.Profiles.Add(new Profile { Id = "missing", Name = "Missing", Browser = new BrowserReference("brave"), Fallback = "tool" });
+        config.Profiles.Add(new Profile { Id = "tool", Name = "Tool", Command = new CommandTarget { MacOS = new CommandSpec { Path = "~/bin/tool", Args = ["--open", "{url}"] } } });
+
+        var result = Assert.IsType<ResolveResult.Resolved>(resolver.ResolveWithFallback(config, "missing", Url));
+
+        Assert.Equal("tool", result.ProfileId);
+        Assert.Equal("/Users/me/bin/tool", result.Plan.Path);
+        Assert.Equal(["--open", Url.AbsoluteUri], result.Plan.Arguments);
+        Assert.Contains("using fallback", Assert.Single(result.Warnings), StringComparison.Ordinal);
     }
 
     [Fact]

@@ -27,17 +27,14 @@ public sealed class RoutingService
     public HandleResult Handle(RoutingUrl url)
     {
         // The language of the picker and of the messages (docs/Design.md §9.4) is config.json's; while it loads, and when it
-        // cannot be read, the system's rather than that of the previous URL.
+        // cannot be read, the system's rather than that of the previous URL. Scopes belong to this execution: another
+        // URL may load or wait for its picker concurrently without changing these texts.
         var systemLanguages = _services.SystemLanguages;
-        if (systemLanguages is not null)
-        {
-            UiLanguages.SetLazily(() => UiLanguages.Resolve(null, systemLanguages));
-        }
+        using var loadingLanguage = systemLanguages is null ? null
+            : UiLanguages.UseLazily(() => UiLanguages.Resolve(null, systemLanguages));
         var loaded = _services.Config.Load();
-        if (systemLanguages is not null && loaded.Config.Settings?.Language is { } setting)
-        {
-            UiLanguages.SetLazily(() => UiLanguages.Resolve(setting, systemLanguages));
-        }
+        using var configuredLanguage = systemLanguages is not null && loaded.Config.Settings?.Language is { } setting
+            ? UiLanguages.UseLazily(() => UiLanguages.Resolve(setting, systemLanguages)) : null;
         if (loaded.Error is not null)
         {
             Log(LogLevel.Warning, loaded.Error);
@@ -54,7 +51,8 @@ public sealed class RoutingService
 
         // Everything from here on (launching, the picker, remembering, the fallbacks) works on the URL the rules
         // produced: after a rewrite (e.g. an unwrapped Safe Link) that is no longer the URL that came in.
-        var context = new Context(result.Decision.Url, loaded, config, new ProfileResolver(_services.HostPlatform, _services.Browsers, _services.BrowserProfiles, _services.GetEnvironmentVariable, _services.HomeDirectory));
+        var resolver = new ProfileResolver(_services.HostPlatform, _services.Browsers, _services.BrowserProfiles, _services.GetEnvironmentVariable, _services.HomeDirectory);
+        var context = new Context(result.Decision.Url, loaded, config, resolver, UiLanguages.Current);
         return Execute(context, result.Decision, loaded.Error) with { RuleId = result.RuleId };
     }
 
@@ -151,7 +149,7 @@ public sealed class RoutingService
     private HandleResult? ShowProfilePicker(Context context, IReadOnlyList<string> profileIds, string? ruleId, string? message, bool allowFallbackPicker)
     {
         var decision = new RoutingDecision.Open(context.Url, profileIds, OpenSource.Explicit, ruleId);
-        var request = PickerMessages.CreateRequest(context.Config, decision, _services.HostPlatform, message);
+        var request = PickerMessages.CreateRequest(context.Config, decision, _services.HostPlatform, context.Language, message);
         var response = _services.Picker.Show(request);
         if (response is null)
         {
@@ -255,7 +253,7 @@ public sealed class RoutingService
                     AutoSelectSeconds = picker?.AutoSelectSeconds ?? 0,
                     RememberChoiceDefault = false,
                     AllowRemember = false,
-                    Language = UiLanguages.Current.Code(),
+                    Language = context.Language.Code(),
                 },
                 Message = message,
             };
@@ -315,5 +313,5 @@ public sealed class RoutingService
     private void Log(LogLevel level, string message) => _services.Log.Write(level, message);
 
     /// <param name="Config">The configuration with this machine's targets applied; <see cref="Loaded"/> has it as the file has it.</param>
-    private sealed record Context(RoutingUrl Url, ConfigLoadResult Loaded, PreferisConfig Config, ProfileResolver Resolver);
+    private sealed record Context(RoutingUrl Url, ConfigLoadResult Loaded, PreferisConfig Config, ProfileResolver Resolver, UiLanguage Language);
 }

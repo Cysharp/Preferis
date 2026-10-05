@@ -6,6 +6,6 @@ namespace Preferis.Settings.Services;
 /// </summary>
 public interface ISaveScheduler
 {
-    /// <summary>Runs <paramref name="save"/> on the UI thread after a short pause, replacing a request still waiting.</summary>
-    void Schedule(Action save);
+    /// <summary>Starts <paramref name="save"/> on the UI thread after a short pause, replacing a request still waiting.</summary>
+    void Schedule(Func<Task> save);
 }

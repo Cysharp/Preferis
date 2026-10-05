@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Preferis.Core.Configuration;
@@ -16,17 +15,13 @@ namespace Preferis.Settings.ViewModels;
 /// </summary>
 public sealed partial class SettingsViewModel : ObservableObject
 {
-    private readonly ConfigLoader _loader;
+    private readonly SettingsSession _session;
     private readonly ISaveScheduler _saves;
 
     // Every edit validates the whole configuration; most leave the patterns as they were (and reloading the file
     // usually does too), so their errors are looked up rather than checked again.
     private readonly PatternErrorCache _patterns;
 
-    // config.json as it was on disk when we last read or wrote it (null: no file), to notice outside changes.
-    private string? _diskText;
-    private string _savedConfigJson = "";
-    private string _savedLocalJson = "";
     private bool _loading;
 
     public SettingsViewModel(ConfigLoader loader, ISettingsPlatform platform, IDialogService dialogs, ISaveScheduler saves)
@@ -37,20 +32,21 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <param name="patterns">Where validation looks up the pattern errors (the tests count what it checks).</param>
     internal SettingsViewModel(ConfigLoader loader, ISettingsPlatform platform, IDialogService dialogs, ISaveScheduler saves, PatternErrorCache patterns)
     {
-        _loader = loader;
+        _session = new SettingsSession(loader);
         _saves = saves;
         _patterns = patterns;
         Platform = platform;
         Dialogs = dialogs;
         Browsers = platform.DetectBrowsers();
-        Load();
+        _session.ModelsReplaced += () => ApplySession(scheduleSave: false);
+        ApplySession();
     }
 
     public ISettingsPlatform Platform { get; }
 
     public IDialogService Dialogs { get; }
 
-    public ConfigLoader Loader => _loader;
+    public ConfigLoader Loader => _session.Loader;
 
     /// <summary>Browsers installed on this machine, detected once per session (refreshable from the profiles page).</summary>
     public IReadOnlyList<DetectedBrowserInfo> Browsers { get; private set; }
@@ -71,9 +67,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// </summary>
     public bool ConfigUnreadable { get; private set; }
 
-    private bool LocalUnreadable { get; set; }
-
-    private bool ConfigEdited => ConfigSerializer.Serialize(Config) != _savedConfigJson;
+    /// <summary>Includes a write in flight even if the user has just undone the edit that started it.</summary>
+    public bool HasPendingChanges => IsDirty || _session.IsBusy;
 
     /// <summary>Edits that are not on disk yet: waiting for the pause, or held back (see <see cref="HasExternalChanges"/>).</summary>
     [ObservableProperty]
@@ -142,35 +137,49 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnSelectedPageChanged(PageViewModel? value) => value?.Activate();
 
     /// <summary>Called by the pages after every edit of <see cref="Config"/> or <see cref="Local"/>; schedules the save.</summary>
-    internal void MarkChanged()
+    internal void MarkChanged(bool scheduleSave = true)
     {
         if (_loading)
         {
             return;
         }
-        var configEdited = ConfigEdited;
-        var localEdited = ConfigSerializer.SerializeLocal(Local) != _savedLocalJson;
-        IsDirty = configEdited || localEdited;
+        IsDirty = _session.IsDirty;
         Issues = [.. ConfigValidator.Validate(Config, _patterns), .. ProfileAvailability.Check(Config, Local, Browsers, Platform.Platform)];
         Profiles.UpdateIssues(Issues);
         Rules.UpdateIssues(Issues);
         // Held config.json edits wait for a decision; asking for a save again would only hold them again.
-        if ((configEdited && !HasExternalChanges && !IsHoldingEditsForUnreadableFile) || localEdited)
+        if (scheduleSave && _session.CanAutoSave)
         {
-            _saves.Schedule(() => SaveCore(force: false));
+            _saves.Schedule(() => SaveCoreAsync(force: false));
         }
     }
 
     /// <summary>Saves the held edits over <c>config.json</c>, whether it changed elsewhere or could not be read.</summary>
     [RelayCommand]
-    private void KeepMine() => SaveCore(force: true);
+    private Task KeepMine() => SaveCoreAsync(force: true);
 
     /// <summary>Drops the held edits of <c>config.json</c> and shows the file as it is now.</summary>
     [RelayCommand]
-    private void UseTheirs() => Load(keepLocalEdits: true);
+    private async Task UseTheirs()
+    {
+        await _session.UseTheirsAsync();
+        StatusMessage = _session.SaveError;
+        ApplySession();
+    }
 
     /// <summary>Saves now, for a page that needs the file on disk to be current (opening a URL for real). False when it could not.</summary>
-    internal bool SaveNow() => SaveCore(force: false);
+    internal async Task<bool> SaveNowAsync()
+    {
+        do
+        {
+            if (!await SaveCoreAsync(force: false))
+            {
+                return false;
+            }
+        }
+        while (IsDirty);
+        return true;
+    }
 
     /// <summary>
     /// Called when the window becomes active (and before moving the file): a <c>config.json</c> changed elsewhere is
@@ -178,18 +187,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// </summary>
     public void CheckForExternalChanges()
     {
-        if (ReadDisk() == _diskText)
-        {
-            return;
-        }
-        if (ConfigEdited)
-        {
-            HasExternalChanges = true;
-        }
-        else
-        {
-            Load(keepLocalEdits: true);
-        }
+        _session.CheckForExternalChanges();
+        ApplySession();
     }
 
     /// <summary>
@@ -198,7 +197,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// </summary>
     public async Task<bool> CanCloseAsync()
     {
-        if (!IsDirty || SaveCore(force: false))
+        if (!HasPendingChanges || await SaveNowAsync())
         {
             return true;
         }
@@ -213,7 +212,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         var answer = await Dialogs.AskAsync(title, message, buttons);
         if (held && answer == 0)
         {
-            return SaveCore(force: true);
+            return await SaveCoreAsync(force: true) && await SaveNowAsync();
         }
         return answer == buttons.Length - 2;
     }
@@ -234,157 +233,72 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <exception cref="IOException">
     /// Writing failed, or <c>config.json</c> changed elsewhere while edited here, or can no longer be read.
     /// </exception>
-    internal void Relocate(string target, bool overwrite)
+    internal async Task<string?> RelocateAsync(string target, bool overwrite)
     {
-        // Under the lock, as saving is: a rule the Router remembered in between would otherwise stay in the old file, or
-        // bring it back after the move deleted it. The page checked for changes before asking, maybe a while ago.
-        using (_loader.Lock())
-        {
-            CheckForExternalChanges();
-            if (HasExternalChanges)
-            {
-                throw new IOException(L("config.json changed on disk while it was being edited here. Reload or save first, then move it."));
-            }
-            // Read again, a file that became unreadable meanwhile shows as the default configuration: moving would write
-            // that in its place and delete it, which the page refuses for a file that was unreadable to begin with.
-            if (ConfigUnreadable)
-            {
-                throw new IOException(L("The current config.json cannot be read. Save a working configuration before moving it."));
-            }
-            _loader.RelocateConfig(Config, ConfigPath, target, overwrite);
-        }
-        var json = ConfigSerializer.Serialize(Config);
-        _savedConfigJson = json;
-        _diskText = json;
-        // local.json now points at the new place; other local edits are saved as usual after the pause.
-        var onDisk = _loader.LoadLocal();
-        Local.ConfigPath = onDisk.ConfigPath;
-        _savedLocalJson = ConfigSerializer.SerializeLocal(onDisk);
-        ConfigPath = Path.GetFullPath(target);
-        ConfigExists = true;
-        HasExternalChanges = false;
-        General.OnConfigPathChanged();
-        MarkChanged();
-    }
-
-    /// <summary>Switches to a configuration that already exists elsewhere and reloads everything from it.</summary>
-    internal void Adopt(string path)
-    {
-        _loader.UseExistingConfig(path);
-        Load();
-    }
-
-    /// <summary>Writes what was edited. False when edits of <c>config.json</c> are held back or writing failed.</summary>
-    private bool SaveCore(bool force)
-    {
-        var configJson = ConfigSerializer.Serialize(Config);
-        var configEdited = configJson != _savedConfigJson;
-        bool diskChanged;
-        var holdConfig = false;
         try
         {
-            // The Router remembers a choice by reading, changing and writing config.json under the same lock, so it
-            // cannot write between this comparison and the write below, which would replace its rule unseen. Without
-            // edits of config.json there is no such write: local.json, this computer's own, is saved without waiting.
-            using var exclusive = configEdited ? _loader.Lock() : null;
-            diskChanged = ReadDisk() != _diskText;
-            // Only edits of config.json can conflict with the file on disk; local.json belongs to this machine alone and
-            // is saved either way.
-            if (configEdited && !force)
-            {
-                if (diskChanged)
-                {
-                    HasExternalChanges = holdConfig = true;
-                }
-                else if (ConfigUnreadable)
-                {
-                    IsHoldingEditsForUnreadableFile = holdConfig = true;
-                }
-            }
-
-            if (configEdited && !holdConfig)
-            {
-                _loader.Save(Config, ConfigPath);
-                _savedConfigJson = configJson;
-                _diskText = configJson;
-                ConfigUnreadable = false;
-                IsHoldingEditsForUnreadableFile = false;
-                HasExternalChanges = false;
-            }
-            var localJson = ConfigSerializer.SerializeLocal(Local);
-            if (localJson != _savedLocalJson)
-            {
-                _loader.SaveLocal(Local);
-                _savedLocalJson = localJson;
-                LocalUnreadable = false;
-            }
+            return await _session.RelocateAsync(target, overwrite);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        finally
         {
-            // Also when another process held the lock too long. The edits stay waiting (IsDirty) and go with the next
-            // edit, or when the window closes.
-            StatusMessage = L("Could not save: {0}", ex.Message);
-            return false;
+            ApplySession();
+            General.OnConfigPathChanged();
         }
-
-        StatusMessage = null;
-        if (!configEdited && diskChanged)
-        {
-            // Nothing of ours was in config.json: show what someone else saved there.
-            Load(keepLocalEdits: true);
-            return true;
-        }
-
-        ConfigExists = File.Exists(ConfigPath);
-        if (!ConfigUnreadable && !LocalUnreadable)
-        {
-            LoadError = null;
-        }
-        MarkChanged();
-        return !holdConfig;
     }
 
-    private void Load(bool keepLocalEdits = false)
+    /// <summary>Switches to an existing configuration after any in-flight save has finished.</summary>
+    internal async Task AdoptAsync(string path)
     {
+        await _session.AdoptAsync(path);
+        // ApplySession ran synchronously at the model switch; any input while saving now edits the new file.
+        if (!await SaveNowAsync())
+        {
+            throw new IOException(StatusMessage);
+        }
+    }
+
+    private async Task<bool> SaveCoreAsync(bool force)
+    {
+        var saved = await _session.SaveAsync(force);
+        StatusMessage = _session.SaveError;
+        ApplySession(scheduleSave: saved);
+        return saved;
+    }
+
+    /// <summary>Refreshes display state; only replacing the edited model replaces its page view models.</summary>
+    private void ApplySession(bool scheduleSave = true)
+    {
+        var replaced = !ReferenceEquals(Config, _session.Config);
         var current = SelectedPage is null ? 0 : Math.Max(0, Pages.ToList().IndexOf(SelectedPage));
-        var result = _loader.Load();
-
         _loading = true;
-        Config = result.Config;
-        ConfigPath = result.ConfigPath;
-        ConfigExists = result.Exists;
-        ConfigUnreadable = result.Exists && !IsParsable(result.ConfigPath, ConfigSerializer.Deserialize);
-        if (!keepLocalEdits)
+        Config = _session.Config;
+        Local = _session.Local;
+        ConfigPath = _session.ConfigPath;
+        ConfigExists = _session.ConfigExists;
+        ConfigUnreadable = _session.ConfigUnreadable;
+        LoadError = _session.LoadError;
+        HasExternalChanges = _session.HasExternalChanges;
+        IsHoldingEditsForUnreadableFile = _session.IsHoldingEditsForUnreadableFile;
+        if (replaced)
         {
-            Local = result.Local;
-            _savedLocalJson = ConfigSerializer.SerializeLocal(Local);
-            LocalUnreadable = File.Exists(_loader.Paths.LocalConfigPath) && !IsParsable(_loader.Paths.LocalConfigPath, ConfigSerializer.DeserializeLocal);
+            Profiles = new ProfilesPageViewModel(this);
+            Rules = new RulesPageViewModel(this);
+            // Keep the test result across reloads caused by the Router remembering a picker choice.
+            Test ??= new TestPageViewModel(this);
+            General = new GeneralPageViewModel(this);
         }
-        // Profiles renamed on another machine: this machine's targets follow them to their new ids (saved as an edit).
-        LocalProfileTargets.MigrateKeys(Config, Local);
-        LoadError = result.Error;
-        HasExternalChanges = false;
-        IsHoldingEditsForUnreadableFile = false;
-        _diskText = ReadDisk();
-        _savedConfigJson = ConfigSerializer.Serialize(Config);
-
-        Profiles = new ProfilesPageViewModel(this);
-        Rules = new RulesPageViewModel(this);
-        // The test page holds no configuration of its own (it routes with Config when asked), and keeping it keeps
-        // what it shows, e.g. the result of opening a URL whose picker choice was remembered and caused this reload.
-        Test ??= new TestPageViewModel(this);
-        General = new GeneralPageViewModel(this);
         _loading = false;
-
-        ReplacePages(null);
-        var unchanged = Pages[current] == SelectedPage;
-        SelectedPage = Pages[current];
-        if (unchanged)
+        if (replaced)
         {
-            // Still the same page object, so it was not activated by the change: refresh it with the reloaded configuration.
-            SelectedPage.Activate();
+            ReplacePages(null);
+            var unchanged = Pages[current] == SelectedPage;
+            SelectedPage = Pages[current];
+            if (unchanged)
+            {
+                SelectedPage!.Activate();
+            }
         }
-        MarkChanged();
+        MarkChanged(scheduleSave);
     }
 
     private void ReplacePages(PageViewModel? select)
@@ -396,31 +310,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    private string? ReadDisk()
-    {
-        try
-        {
-            return File.Exists(ConfigPath) ? File.ReadAllText(ConfigPath) : null;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Unreadable right now (e.g. a sync client holds it): treat as unchanged rather than guess.
-            return _diskText;
-        }
-    }
-
-    private static bool IsParsable<T>(string path, Func<string, T> parse)
-    {
-        try
-        {
-            parse(File.ReadAllText(path));
-            return true;
-        }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
 }
 
 /// <summary>A page of the settings window.</summary>

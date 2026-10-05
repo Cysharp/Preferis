@@ -45,16 +45,16 @@ public sealed class UnknownPropertiesTests : IDisposable
         """);
 
     /// <summary>The file once the pending save has run.</summary>
-    private JsonElement Saved()
+    private async Task<JsonElement> SavedAsync()
     {
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
         using var document = JsonDocument.Parse(File.ReadAllText(_harness.Paths.DefaultConfigPath));
         return document.RootElement.Clone();
     }
 
-    private Condition? SavedCondition()
+    private async Task<Condition?> SavedConditionAsync()
     {
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
         return _harness.SavedConfig().Rules[0].Condition;
     }
 
@@ -101,7 +101,7 @@ public sealed class UnknownPropertiesTests : IDisposable
     }
 
     [Fact]
-    public void Adding_an_action_keeps_what_a_newer_preferis_added_to_the_others()
+    public async Task Adding_an_action_keeps_what_a_newer_preferis_added_to_the_others()
     {
         var settings = Open("""
             { "version": 1, "profiles": [], "rules": [],
@@ -112,7 +112,7 @@ public sealed class UnknownPropertiesTests : IDisposable
 
         settings.Rules.CatchAll.Actions.AddCommand.Execute(ActionKind.None);
 
-        var actions = Saved().GetProperty("catchAll").GetProperty("actions");
+        var actions = (await SavedAsync()).GetProperty("catchAll").GetProperty("actions");
         Assert.Equal(["rewrite", "open", "none"], actions.EnumerateArray().Select(a => a.GetProperty("type").GetString()));
         Assert.True(actions[0].GetProperty("futureSetting").GetBoolean());
     }
@@ -123,25 +123,25 @@ public sealed class UnknownPropertiesTests : IDisposable
     [InlineData("""{ "type": "none", "futureSetting": { "level": 2 } }""")]
     [InlineData("""{ "type": "rewrite", "mode": "regex", "pattern": "^http://", "replacement": "https://", "futureSetting": { "level": 2 } }""")]
     [InlineData("""{ "type": "reroute", "futureSetting": { "level": 2 } }""")]
-    public void Every_kind_of_action_keeps_what_a_newer_preferis_added_when_the_list_changes(string action)
+    public async Task Every_kind_of_action_keeps_what_a_newer_preferis_added_when_the_list_changes(string action)
     {
         var actions = OpenRule(Tree, action).Rules.Rules[0].Actions;
 
         actions.AddCommand.Execute(ActionKind.System);
         actions.Items[0].MoveDownCommand.Execute(null);
 
-        var saved = Saved().GetProperty("rules")[0].GetProperty("actions");
+        var saved = (await SavedAsync()).GetProperty("rules")[0].GetProperty("actions");
         Assert.Equal(2, saved[1].GetProperty("futureSetting").GetProperty("level").GetInt32());
         Assert.False(saved[0].TryGetProperty("futureSetting", out _));
 
         actions.Items[0].RemoveCommand.Execute(null);
 
-        saved = Saved().GetProperty("rules")[0].GetProperty("actions");
+        saved = (await SavedAsync()).GetProperty("rules")[0].GetProperty("actions");
         Assert.Equal(2, Assert.Single(saved.EnumerateArray()).GetProperty("futureSetting").GetProperty("level").GetInt32());
     }
 
     [Fact]
-    public void Editing_an_action_keeps_what_a_newer_preferis_added_to_it()
+    public async Task Editing_an_action_keeps_what_a_newer_preferis_added_to_it()
     {
         var actions = OpenRule(Tree,
             """{ "type": "rewrite", "mode": "regex", "pattern": "^http://", "replacement": "https://", "futureSetting": "rewrite" }""",
@@ -153,7 +153,7 @@ public sealed class UnknownPropertiesTests : IDisposable
         rewrite.Parameter = "url";
         open.Profiles.Single(p => p.Id == "chrome").IsSelected = true;
 
-        var saved = Saved().GetProperty("rules")[0].GetProperty("actions");
+        var saved = (await SavedAsync()).GetProperty("rules")[0].GetProperty("actions");
         Assert.Equal("url", saved[0].GetProperty("parameter").GetString());
         Assert.Equal("rewrite", saved[0].GetProperty("futureSetting").GetString());
         Assert.Equal(["edge", "chrome"], saved[1].GetProperty("profiles").EnumerateArray().Select(p => p.GetString()));
@@ -161,7 +161,7 @@ public sealed class UnknownPropertiesTests : IDisposable
     }
 
     [Fact]
-    public void Moving_and_renaming_rules_keeps_what_a_newer_preferis_added_to_their_conditions_and_actions()
+    public async Task Moving_and_renaming_rules_keeps_what_a_newer_preferis_added_to_their_conditions_and_actions()
     {
         var settings = Open($$"""
             { "version": 1, "profiles": {{Profiles}},
@@ -174,7 +174,7 @@ public sealed class UnknownPropertiesTests : IDisposable
         settings.Rules.MoveRule(settings.Rules.Rules[0], 1);
         settings.Rules.Rules[1].Name = "renamed";
 
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
         var saved = _harness.SavedConfig();
         Assert.Equal(["second", "first"], saved.Rules.Select(r => r.Id));
         Assert.Equal(AllMarks, Marks(saved.Rules[1].Condition));
@@ -182,21 +182,21 @@ public sealed class UnknownPropertiesTests : IDisposable
     }
 
     [Fact]
-    public void Typing_into_a_condition_keeps_what_a_newer_preferis_added()
+    public async Task Typing_into_a_condition_keeps_what_a_newer_preferis_added()
     {
         var rule = OpenRule(Tree, """{ "type": "open" }""").Rules.Rules[0];
 
         Edit(rule, root => Group(root, 1, any => Row(any, 0, b => ((ComparisonPredicate)b) with { Pattern = "https://b.example.org/" })));
         Edit(rule, root => Group(root, 2, none => Row(none, 1, e => ((ComparisonPredicate)e) with { Match = MatchKind.StartsWith })));
 
-        var saved = SavedCondition();
+        var saved = (await SavedConditionAsync());
         Assert.Equal(AllMarks, Marks(saved));
         var any = Assert.IsType<OrCondition>(Assert.IsType<AndCondition>(saved).Conditions[1]);
         Assert.Equal("https://b.example.org/", Assert.IsType<UrlCondition>(any.Conditions[0]).Pattern);
     }
 
     [Fact]
-    public void A_row_typed_into_the_same_as_another_keeps_its_own()
+    public async Task A_row_typed_into_the_same_as_another_keeps_its_own()
     {
         var rule = OpenRule("""
             { "type": "or", "conditions": [
@@ -206,51 +206,51 @@ public sealed class UnknownPropertiesTests : IDisposable
 
         Edit(rule, root => Row(root, 0, a => ((ComparisonPredicate)a) with { Pattern = "b" }));
 
-        Assert.Equal(["a", "b"], Marks(SavedCondition()));
+        Assert.Equal(["a", "b"], Marks((await SavedConditionAsync())));
     }
 
     [Fact]
-    public void Adding_and_removing_conditions_keeps_what_a_newer_preferis_added_to_the_others()
+    public async Task Adding_and_removing_conditions_keeps_what_a_newer_preferis_added_to_the_others()
     {
         var rule = OpenRule(Tree, """{ "type": "open" }""").Rules.Rules[0];
 
         Edit(rule, root => Group(root, 1, any => any with { Children = [NewRow, .. any.Children] }));
-        Assert.Equal(AllMarks, Marks(SavedCondition()));
+        Assert.Equal(AllMarks, Marks((await SavedConditionAsync())));
 
         Edit(rule, root => Row(root, 0, _ => null));
-        Assert.Equal(AllMarks.Except(["a"]), Marks(SavedCondition()));
+        Assert.Equal(AllMarks.Except(["a"]), Marks((await SavedConditionAsync())));
 
         Edit(rule, root => Group(root, 1, none => Row(none, 0, _ => null)));
-        Assert.Equal(["and", "or", "b", "c", "not", "e"], Marks(SavedCondition()));
+        Assert.Equal(["and", "or", "b", "c", "not", "e"], Marks((await SavedConditionAsync())));
     }
 
     [Fact]
-    public void A_lone_condition_keeps_what_a_newer_preferis_added_when_rows_come_and_go()
+    public async Task A_lone_condition_keeps_what_a_newer_preferis_added_when_rows_come_and_go()
     {
         var rule = OpenRule("""{ "type": "host", "match": "equals", "pattern": "a.example.com", "futureSetting": "a" }""", """{ "type": "open" }""").Rules.Rules[0];
 
         Edit(rule, root => root with { Children = [.. root.Children, NewRow] });
-        Assert.Equal(["a"], Marks(Assert.IsType<AndCondition>(SavedCondition())));
+        Assert.Equal(["a"], Marks(Assert.IsType<AndCondition>((await SavedConditionAsync()))));
 
         Edit(rule, root => Row(root, 1, _ => null));
-        Assert.Equal(["a"], Marks(Assert.IsType<HostCondition>(SavedCondition())));
+        Assert.Equal(["a"], Marks(Assert.IsType<HostCondition>((await SavedConditionAsync()))));
     }
 
     [Fact]
-    public void A_condition_turned_into_another_type_loses_what_a_newer_preferis_added_to_it()
+    public async Task A_condition_turned_into_another_type_loses_what_a_newer_preferis_added_to_it()
     {
         var rule = OpenRule(Tree, """{ "type": "open" }""").Rules.Rules[0];
 
         // Host to URL: the property was written for a host condition and may mean nothing, or something else, on a URL condition.
         Edit(rule, root => Group(root, 1, any => Row(any, 1, c => ((ComparisonPredicate)c) with { Field = PredicateField.Url })));
-        Assert.Equal(AllMarks.Except(["c"]), Marks(SavedCondition()));
+        Assert.Equal(AllMarks.Except(["c"]), Marks((await SavedConditionAsync())));
 
         // Any to all: the group's own property goes, its rows keep theirs.
         Edit(rule, root => Group(root, 1, any => any with { Kind = CompoundKind.All }));
-        Assert.Equal(AllMarks.Except(["c", "or"]), Marks(SavedCondition()));
+        Assert.Equal(AllMarks.Except(["c", "or"]), Marks((await SavedConditionAsync())));
 
         Edit(rule, root => Group(root, 2, none => none with { Kind = CompoundKind.Any }));
-        Assert.Equal(["and", "a", "b", "d", "e"], Marks(SavedCondition()));
+        Assert.Equal(["and", "a", "b", "d", "e"], Marks((await SavedConditionAsync())));
     }
 
     [Theory]
@@ -272,7 +272,7 @@ public sealed class UnknownPropertiesTests : IDisposable
 
     // A root of one row is stored as that row (ConditionPredicates), so the "and" goes; what is under it stays.
     [Fact]
-    public void A_root_of_one_group_keeps_what_a_newer_preferis_added_under_it()
+    public async Task A_root_of_one_group_keeps_what_a_newer_preferis_added_under_it()
     {
         var rule = OpenRule("""
             { "type": "and", "futureSetting": "and", "conditions": [ { "type": "or", "futureSetting": "or", "conditions": [
@@ -282,11 +282,11 @@ public sealed class UnknownPropertiesTests : IDisposable
 
         Edit(rule, root => Group(root, 0, any => Row(any, 1, b => ((ComparisonPredicate)b) with { Pattern = "b2" })));
 
-        Assert.Equal(["or", "a", "b"], Marks(Assert.IsType<OrCondition>(SavedCondition())));
+        Assert.Equal(["or", "a", "b"], Marks(Assert.IsType<OrCondition>((await SavedConditionAsync()))));
     }
 
     [Fact]
-    public void Conditions_and_actions_of_a_newer_preferis_are_still_written_back_as_they_are()
+    public async Task Conditions_and_actions_of_a_newer_preferis_are_still_written_back_as_they_are()
     {
         const string condition = """{ "bundleId": "com.tinyspeck.slackmacgap", "type": "sourceApp", "nested": { "a": [1, 2] } }""";
         const string action = """{ "type": "teleport", "where": "moon" }""";
@@ -295,7 +295,7 @@ public sealed class UnknownPropertiesTests : IDisposable
         settings.Rules.Rules[0].Actions.AddCommand.Execute(ActionKind.None);
         settings.Rules.CatchAll.Actions.AddCommand.Execute(ActionKind.None);
 
-        var rule = Saved().GetProperty("rules")[0];
+        var rule = (await SavedAsync()).GetProperty("rules")[0];
         using var expectedCondition = JsonDocument.Parse(condition);
         using var expectedAction = JsonDocument.Parse(action);
         Assert.True(JsonElement.DeepEquals(expectedCondition.RootElement, rule.GetProperty("condition").GetProperty("conditions")[0]));

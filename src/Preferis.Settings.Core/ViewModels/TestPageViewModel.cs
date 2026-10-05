@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -52,9 +51,11 @@ public sealed partial class TestPageViewModel : PageViewModel
 
     public bool HasResult => Decision is not null;
 
-    public ObservableCollection<TraceLine> Trace { get; } = [];
+    [ObservableProperty]
+    public partial IReadOnlyList<TraceLine> Trace { get; private set; } = [];
 
-    public ObservableCollection<CandidateLine> Candidates { get; } = [];
+    [ObservableProperty]
+    public partial IReadOnlyList<CandidateLine> Candidates { get; private set; } = [];
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(OpenCommand))]
@@ -72,7 +73,8 @@ public sealed partial class TestPageViewModel : PageViewModel
     [ObservableProperty]
     public partial bool IsHistoryEnabled { get; private set; }
 
-    public ObservableCollection<HistoryLine> History { get; } = [];
+    [ObservableProperty]
+    public partial IReadOnlyList<HistoryLine> History { get; private set; } = [];
 
     private RoutingHistory RoutingHistory => new(Settings.Loader.Paths.HistoryPath);
 
@@ -89,14 +91,14 @@ public sealed partial class TestPageViewModel : PageViewModel
     [RelayCommand]
     private void Run()
     {
-        Trace.Clear();
-        Candidates.Clear();
         Decision = null;
         RoutedUrl = null;
         Error = null;
 
         if (!RoutingUrl.TryParse(Url.Trim(), out var url))
         {
+            Trace = [];
+            Candidates = [];
             Error = L("Enter an absolute URL, such as https://www.example.com/.");
             return;
         }
@@ -104,15 +106,14 @@ public sealed partial class TestPageViewModel : PageViewModel
         // As the Router on this machine sees it: with this machine's own targets.
         var config = LocalProfileTargets.Apply(Settings.Config, Settings.Local);
         var result = new Router(config).Route(url);
-        foreach (var entry in result.Trace)
-        {
-            Trace.Add(new TraceLine(KindText(entry.Kind), entry.RuleId is null ? null : RuleName(config, entry.RuleId), entry.Message));
-        }
+        Trace = result.Trace.Select(entry => new TraceLine(
+            KindText(entry.Kind), entry.RuleId is null ? null : RuleName(config, entry.RuleId), entry.Message)).ToArray();
 
         var source = result.RuleId is null ? L("(catch-all)") : L("(rule \"{0}\")", RuleName(config, result.RuleId));
         Decision = Describe(result.Decision, config, source);
         RoutedUrl = result.Decision.Url.AbsoluteUri != url.AbsoluteUri ? result.Decision.Url.AbsoluteUri : null;
 
+        var candidates = new List<CandidateLine>();
         if (result.Decision is RoutingDecision.Open open)
         {
             var platform = Settings.Platform;
@@ -120,9 +121,10 @@ public sealed partial class TestPageViewModel : PageViewModel
             foreach (var id in open.ProfileIds)
             {
                 var isLocal = Settings.Config.Profiles.FirstOrDefault(p => p.Id == id) is { } shared && LocalProfileTargets.Find(Settings.Local, shared, Settings.Config) is not null;
-                Candidates.Add(Resolve(resolver, config, id, open.Url, isLocal));
+                candidates.Add(Resolve(resolver, config, id, open.Url, isLocal));
             }
         }
+        Candidates = candidates;
     }
 
     /// <summary>
@@ -138,7 +140,7 @@ public sealed partial class TestPageViewModel : PageViewModel
             return;
         }
 
-        if (Settings.IsDirty && !Settings.SaveNow())
+        if (Settings.HasPendingChanges && !await Settings.SaveNowAsync())
         {
             var answer = await Settings.Dialogs.AskAsync(
                 L("Your latest changes are not saved."),
@@ -188,31 +190,29 @@ public sealed partial class TestPageViewModel : PageViewModel
         {
             Settings.StatusMessage = L("Could not clear the history: {0}", ex.Message);
         }
-        History.Clear();
+        History = [];
     }
 
     private void LoadHistory()
     {
-        History.Clear();
         // The checkbox on the general page may not be saved yet; follow what is being edited.
         IsHistoryEnabled = Settings.Local.Logging?.History == true;
         if (!IsHistoryEnabled)
         {
+            History = [];
             return;
         }
         try
         {
-            foreach (var entry in RoutingHistory.Read())
-            {
-                History.Add(new HistoryLine(
+            History = RoutingHistory.Read().Select(entry => new HistoryLine(
                     entry.Time.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
                     entry.Url,
                     entry.RuleId is null ? L("catch-all") : RuleName(Settings.Config, entry.RuleId),
-                    OutcomeText(entry.Outcome)));
-            }
+                    OutcomeText(entry.Outcome))).ToArray();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            History = [];
             Settings.StatusMessage = L("Could not read the history: {0}", ex.Message);
         }
     }

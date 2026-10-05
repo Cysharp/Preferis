@@ -60,6 +60,10 @@ internal sealed class FakeHost
     /// <summary>The OS's preferred languages; null leaves the language of the texts as it is (English in tests).</summary>
     public Func<IEnumerable<string>>? SystemLanguages { get; set; }
 
+    public Action? BeforeConfigLoad { get; set; }
+
+    public Action? BeforeLogWrite { get; set; }
+
     public RoutingService CreateService() => new(new RoutingServices(
         ConfigStore ?? new Store(this), HostPlatform.MacOS, new Detector(this), new Profiles(this), new Launcher(this),
         new SystemOpener(this), new Picker(this), new Notifier(this), new Logger(this), _ => null, "/Users/me", SystemLanguages));
@@ -68,6 +72,7 @@ internal sealed class FakeHost
     {
         public ConfigLoadResult Load()
         {
+            host.BeforeConfigLoad?.Invoke();
             host.LanguageWhileLoading = UiLanguages.Current;
             return new(host.Config, host.Local, "/Users/me/config.json", host.ConfigExists, host.ConfigError);
         }
@@ -132,6 +137,10 @@ internal sealed class FakeHost
 
     private sealed class Logger(FakeHost host) : IRoutingLog
     {
-        public void Write(LogLevel level, string message) => host.Log.Add((level, message));
+        public void Write(LogLevel level, string message)
+        {
+            host.BeforeLogWrite?.Invoke();
+            host.Log.Add((level, message));
+        }
     }
 }

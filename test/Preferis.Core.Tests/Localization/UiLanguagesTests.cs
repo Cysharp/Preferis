@@ -4,6 +4,47 @@ namespace Preferis.Core.Tests.Localization;
 
 public class UiLanguagesTests
 {
+    [Fact]
+    public void Nested_scopes_restore_the_enclosing_language_even_when_work_fails()
+    {
+        var original = UiLanguages.Current;
+        using (UiLanguages.UseLazily(() => UiLanguage.Japanese))
+        {
+            Assert.Equal(UiLanguage.Japanese, UiLanguages.Current);
+            Assert.Throws<InvalidOperationException>((Action)(() =>
+            {
+                using var inner = UiLanguages.UseLazily(() => UiLanguage.English);
+                Assert.Equal(UiLanguage.English, UiLanguages.Current);
+                throw new InvalidOperationException("Interrupted.");
+            }));
+            Assert.Equal(UiLanguage.Japanese, UiLanguages.Current);
+        }
+        Assert.Equal(original, UiLanguages.Current);
+    }
+
+    [Fact]
+    public async Task Async_work_inherits_its_scope_without_changing_the_callers_scope()
+    {
+        using var outer = UiLanguages.UseLazily(() => UiLanguage.Japanese);
+        await Task.Run(async () =>
+        {
+            Assert.Equal(UiLanguage.Japanese, UiLanguages.Current);
+            using var inner = UiLanguages.UseLazily(() => UiLanguage.English);
+            await Task.Yield();
+            Assert.Equal(UiLanguage.English, UiLanguages.Current);
+        });
+        Assert.Equal(UiLanguage.Japanese, UiLanguages.Current);
+    }
+
+    [Fact]
+    public void An_explicit_language_scope_does_not_resolve_an_unused_system_language()
+    {
+        using var loading = UiLanguages.UseLazily(() => throw new InvalidOperationException("OS languages were requested."));
+        using var configured = UiLanguages.UseLazily(() => UiLanguage.Japanese);
+
+        Assert.Equal("開く", CoreText.L("Open"));
+    }
+
     [Theory]
     [InlineData("en", UiLanguage.English)]
     [InlineData("ja", UiLanguage.Japanese)]

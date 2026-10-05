@@ -171,12 +171,80 @@ public class ConfigLoaderTests : IDisposable
         config.DefaultProfile = "chrome-work";
         var cloud = Path.Combine(_root, "cloud", "Preferis", "config.json");
 
-        loader.RelocateConfig(config, Paths.DefaultConfigPath, cloud, overwrite: false);
+        var warning = loader.RelocateConfig(config, Paths.DefaultConfigPath, cloud, overwrite: false);
 
+        Assert.Null(warning);
         Assert.False(File.Exists(Paths.DefaultConfigPath));
         var reloaded = loader.Load();
         Assert.Equal(cloud, reloaded.ConfigPath);
         Assert.Equal("chrome-work", reloaded.Config.DefaultProfile);
+    }
+
+    [Fact]
+    public void A_move_stays_committed_when_only_removing_the_old_file_fails()
+    {
+        var source = Directory.CreateDirectory(Path.Combine(_root, "source")).FullName;
+        var paths = Paths with { DefaultConfigPath = Path.Combine(source, "config.json") };
+        var loader = new ConfigLoader(paths, HostPlatform.MacOS, _ => null, _root);
+        File.WriteAllText(paths.DefaultConfigPath, Fixtures.ConfigSample);
+        var config = loader.Load().Config;
+        config.DefaultProfile = "chrome-work";
+        var target = Path.Combine(_root, "cloud", "config.json");
+
+        // local.json remains writable: only the cleanup after the location has changed should fail.
+        if (OperatingSystem.IsWindows())
+        {
+            File.SetAttributes(paths.DefaultConfigPath, FileAttributes.ReadOnly);
+        }
+        else if (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
+        {
+            File.SetUnixFileMode(source, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        }
+        else
+        {
+            return;
+        }
+        try
+        {
+            string? warning = null;
+            var error = Record.Exception(() => { warning = loader.RelocateConfig(config, paths.DefaultConfigPath, target, overwrite: false); });
+
+            Assert.Null(error);
+            Assert.NotNull(warning);
+            Assert.Contains("was moved, but the old file could not be removed", warning, StringComparison.Ordinal);
+            Assert.Contains(paths.DefaultConfigPath, warning, StringComparison.Ordinal);
+            Assert.True(File.Exists(paths.DefaultConfigPath));
+            var reloaded = loader.Load();
+            Assert.Equal(target, reloaded.ConfigPath);
+            Assert.Equal("chrome-work", reloaded.Config.DefaultProfile);
+            Assert.Equal("edge", ConfigSerializer.Deserialize(File.ReadAllText(paths.DefaultConfigPath)).DefaultProfile);
+        }
+        finally
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                File.SetAttributes(paths.DefaultConfigPath, FileAttributes.Normal);
+            }
+            else if (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
+            {
+                File.SetUnixFileMode(source, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+        }
+    }
+
+    [Fact]
+    public void A_move_that_cannot_update_local_json_still_throws_and_keeps_the_old_location()
+    {
+        var loader = Loader();
+        File.WriteAllText(Paths.DefaultConfigPath, Fixtures.ConfigSample);
+        Directory.CreateDirectory(Paths.LocalConfigPath);
+        var target = Path.Combine(_root, "cloud", "config.json");
+
+        var error = Record.Exception(() => { loader.RelocateConfig(loader.Load().Config, Paths.DefaultConfigPath, target, overwrite: false); });
+
+        Assert.True(error is IOException or UnauthorizedAccessException, $"Expected a failed pointer write, got {error}");
+        Assert.True(File.Exists(Paths.DefaultConfigPath));
+        Assert.Equal(Paths.DefaultConfigPath, loader.Load().ConfigPath);
     }
 
     [Fact]

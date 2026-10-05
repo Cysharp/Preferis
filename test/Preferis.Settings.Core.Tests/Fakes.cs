@@ -145,18 +145,21 @@ internal sealed class FakeDialogs : IDialogService
 /// <summary>Holds the save the view model asks for until the test runs it, as the UI's timer would after a pause.</summary>
 internal sealed class FakeSaveScheduler : ISaveScheduler
 {
-    private Action? _pending;
+    private Func<Task>? _pending;
 
     public bool HasPending => _pending is not null;
 
-    public void Schedule(Action save) => _pending = save;
+    public void Schedule(Func<Task> save) => _pending = save;
 
     /// <summary>The pause is over: runs the save that is waiting, if any.</summary>
-    public void RunPending()
+    public async Task RunPendingAsync()
     {
         var save = _pending;
         _pending = null;
-        save?.Invoke();
+        if (save is not null)
+        {
+            await save();
+        }
     }
 }
 

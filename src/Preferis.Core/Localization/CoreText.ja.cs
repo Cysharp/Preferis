@@ -14,6 +14,7 @@ public static partial class CoreText
         { "{0} is not a Preferis configuration: {1}", "{0} は Preferis の設定ファイルではありません: {1}" },
         { "{0} must not be null.", "{0} に null は指定できません。" },
         { "The configuration is locked by another Preferis process ({0}).", "設定は別の Preferis のプロセスがロックしています ({0})。" },
+        { "The configuration was moved, but the old file could not be removed ({0}): {1}", "設定は移動しましたが、元のファイルを削除できませんでした ({0}): {1}" },
 
         // ---- configuration issues ----
         { "The default profile '{0}' does not exist.", "既定のプロファイル「{0}」は存在しません。" },

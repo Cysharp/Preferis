@@ -33,7 +33,7 @@ public sealed class LocalTargetTests : IDisposable
     }
 
     [Fact]
-    public void Editing_this_computers_target_changes_local_json_only()
+    public async Task Editing_this_computers_target_changes_local_json_only()
     {
         var settings = _harness.WithSample().Create();
         var profile = Profile(settings, "chrome-work");
@@ -41,7 +41,7 @@ public sealed class LocalTargetTests : IDisposable
 
         profile.LocalTarget!.Browser = profile.LocalTarget.BrowserChoices.Single(c => c.Id == "safari");
         profile.LocalTarget.Private = true;
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
         var saved = _harness.Loader.LoadLocal().ProfileTargets?["chrome-work"];
         Assert.Equal("safari", saved?.Browser);
@@ -99,13 +99,13 @@ public sealed class LocalTargetTests : IDisposable
     }
 
     [Fact]
-    public void An_empty_profile_is_set_on_each_computer()
+    public async Task An_empty_profile_is_set_on_each_computer()
     {
         var settings = _harness.WithSample().Create();
         var page = settings.Profiles;
 
         page.AddEmptyProfileCommand.Execute(null);
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
         var profile = page.SelectedProfile!;
         Assert.Equal("New Profile", profile.Name);
@@ -123,14 +123,14 @@ public sealed class LocalTargetTests : IDisposable
     }
 
     [Fact]
-    public void What_a_profile_set_on_each_computer_opens_here_is_saved_in_local_json()
+    public async Task What_a_profile_set_on_each_computer_opens_here_is_saved_in_local_json()
     {
         var settings = _harness.WithSample().Create();
         settings.Profiles.AddEmptyProfileCommand.Execute(null);
         var profile = settings.Profiles.SelectedProfile!;
 
         profile.LocalTarget!.Browser = profile.LocalTarget.BrowserChoices.Single(c => c.Id == "safari");
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
         Assert.Equal("safari", _harness.Loader.LoadLocal().ProfileTargets?[profile.Id].Browser);
         Assert.Null(_harness.SavedConfig().Profiles.Single(p => p.Id == profile.Id).Browser);
@@ -143,13 +143,13 @@ public sealed class LocalTargetTests : IDisposable
     }
 
     [Fact]
-    public void Setting_a_profile_on_each_computer_keeps_what_this_computer_opens()
+    public async Task Setting_a_profile_on_each_computer_keeps_what_this_computer_opens()
     {
         var settings = _harness.WithSample().Create();
         var profile = Profile(settings, "chrome-work");
 
         profile.TargetKind = ProfileTargetKind.EachComputer;
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
         var saved = _harness.SavedConfig().Profiles.Single(p => p.Id == "chrome-work");
         Assert.Null(saved.Browser);
@@ -227,6 +227,45 @@ public sealed class LocalTargetTests : IDisposable
         Assert.Contains("“Work” was not found in Google Chrome", issue.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Unreadable_browser_profiles_need_a_stored_directory_for_chromium(bool emptyList)
+    {
+        _harness.Platform.Browsers[0] = _harness.Platform.Browsers[0] with { Profiles = emptyList ? [] : null };
+        File.WriteAllText(_harness.Paths.DefaultConfigPath, """
+            { "profiles": [
+                { "id": "work", "name": "Work", "browser": "chrome", "browserProfile": { "name": "Work", "email": "work@example.com" } }
+            ] }
+            """);
+
+        var issue = Assert.Single(Profile(_harness.Create(), "work").Issues);
+
+        Assert.Equal(IssueSeverity.Warning, issue.Severity);
+        Assert.Contains("no profile directory is stored", issue.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Availability_skips_a_fallback_whose_browser_profile_cannot_be_resolved(bool emptyList)
+    {
+        _harness.Platform.Browsers[0] = _harness.Platform.Browsers[0] with { Profiles = emptyList ? [] : null };
+        _harness.Platform.Browsers.RemoveAll(b => b.Browser.Id == "edge");
+        File.WriteAllText(_harness.Paths.DefaultConfigPath, """
+            { "profiles": [
+                { "id": "missing", "name": "Missing", "browser": "edge", "fallback": "work" },
+                { "id": "work", "name": "Work", "browser": "chrome", "browserProfile": { "name": "Work" }, "fallback": "safari" },
+                { "id": "safari", "name": "Safari", "browser": "safari" }
+            ] }
+            """);
+
+        var issue = Assert.Single(Profile(_harness.Create(), "missing").Issues);
+
+        Assert.Contains("“Safari” is used instead", issue.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("“Work” is used instead", issue.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void A_profile_for_the_other_os_only_is_flagged()
     {
@@ -239,7 +278,7 @@ public sealed class LocalTargetTests : IDisposable
     }
 
     [Fact]
-    public void A_command_of_this_computer_without_a_program_is_flagged()
+    public async Task A_command_of_this_computer_without_a_program_is_flagged()
     {
         var settings = _harness.WithSample().Create();
         var profile = Profile(settings, "edge");
@@ -248,7 +287,7 @@ public sealed class LocalTargetTests : IDisposable
         profile.LocalTarget!.TargetKind = ProfileTargetKind.Command;
 
         Assert.Contains("has no program", Assert.Single(profile.Issues).Message, StringComparison.Ordinal);
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
         Assert.Equal(ProfileTargetKind.Command, Profile(_harness.Create(), "edge").LocalTarget?.TargetKind);
     }
 
@@ -273,7 +312,7 @@ public sealed class LocalTargetTests : IDisposable
     }
 
     [Fact]
-    public void A_target_kept_under_a_previous_id_moves_to_the_current_one_when_the_settings_open()
+    public async Task A_target_kept_under_a_previous_id_moves_to_the_current_one_when_the_settings_open()
     {
         File.WriteAllText(_harness.Paths.DefaultConfigPath, SettingsHarness.SampleJson.Replace(
             "\"id\": \"chrome-work\",",
@@ -282,7 +321,7 @@ public sealed class LocalTargetTests : IDisposable
         WriteLocal("""{ "profileTargets": { "chrome-work": { "browser": "safari" } } }""");
 
         var settings = _harness.Create();
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
         Assert.True(Profile(settings, "work").UsesLocalTarget);
         Assert.Equal(["work"], _harness.Loader.LoadLocal().ProfileTargets?.Keys);
@@ -305,7 +344,7 @@ public sealed class LocalTargetTests : IDisposable
     }
 
     [Fact]
-    public void Changing_the_id_rewrites_the_references_and_keeps_the_previous_one()
+    public async Task Changing_the_id_rewrites_the_references_and_keeps_the_previous_one()
     {
         var settings = _harness.WithSample().Create();
         var profile = Profile(settings, "edge");
@@ -314,7 +353,7 @@ public sealed class LocalTargetTests : IDisposable
         profile.IdDraft = "personal";
         Assert.Null(profile.IdError);
         profile.ChangeIdCommand.Execute(null);
-        _harness.Saves.RunPending();
+        await _harness.Saves.RunPendingAsync();
 
         Assert.Equal("personal", profile.Id);
         var saved = _harness.SavedConfig();

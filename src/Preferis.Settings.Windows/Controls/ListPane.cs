@@ -42,12 +42,13 @@ internal sealed class ListPane<T> : IDisposable
         };
         _list.SelectionChanged += (_, _) =>
         {
-            if (!_updating)
+            // Native reordering temporarily removes the selected row before inserting it at its destination.
+            if (!_updating && _dragged is null)
             {
                 _select(ItemOf(_list.SelectedItem as ListViewItem));
             }
         };
-        _list.DragItemsStarting += (_, e) => _dragged = e.Items.Count == 1 ? ItemOf(e.Items[0] as ListViewItem) : null;
+        _list.DragItemsStarting += (_, e) => _dragged = e.Items.Count == 1 ? ItemOfDrag(e.Items[0]) : null;
         _list.DragItemsCompleted += (_, _) => OnDragged();
 
         var box = Form.Box(_list);
@@ -201,6 +202,11 @@ internal sealed class ListPane<T> : IDisposable
     private T? ItemOf(ListViewItem? row)
         => row?.Tag is int id && _rowItems.TryGetValue(id, out var item) ? item : null;
 
+    // For explicit ListViewItem containers, WinUI reports their Content in DragItemsStarting.Items.
+    private T? ItemOfDrag(object value)
+        => value is ListViewItem row ? ItemOf(row)
+            : _rows.FirstOrDefault(pair => ReferenceEquals(pair.Value.View.Content, value)).Key;
+
     private ListViewItem? RowFor(T? item)
         => item is not null && _rows.TryGetValue(item, out var row) ? row.View : null;
 
@@ -218,6 +224,7 @@ internal sealed class ListPane<T> : IDisposable
             {
                 _move(item, i);
                 Select(item);
+                _select(item);
                 return;
             }
         }

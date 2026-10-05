@@ -322,6 +322,9 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
   ルール / テスト)、28 px のページ見出しとその下に問題の件数、4 px 間隔のカード (左に名前と説明、右にコントロール)。
   Community Toolkit の `SettingsCard` は使わない (カードは Border と Grid で足り、外部の XAML コントロールを NativeAOT で検証する手間を避ける)。
   プロファイルとルールは左に一覧 (`ListPane`。ドラッグで並べ替え、下に + − ⋯)、右に選択中の項目の編集画面。
+- `ListPane` のドラッグ開始イベントは、明示的に追加した `ListViewItem` 自体ではなく、その `Content` を返す。
+  行の中身から ViewModel を特定し、完了時に一覧の順序を ViewModel と設定ファイルへ反映する (#20)。
+  WinUI が行を削除・挿入して移動する間の一時的な選択解除は無視し、完了時に移動した項目を画面と ViewModel の両方で選択する。
 - 狭いウィンドウでも編集画面に幅を残す: ナビゲーションは `PaneDisplayMode.Auto` で、幅が足りないとアイコンだけに畳み
   (開くボタンはその時だけ出す)、一覧の幅は画面の 36 % (240〜320 DIP)。カードはコントロールの横に文字の幅が 200 DIP 残らない時、
   コントロールを文字の下に回す (設定アプリの SettingsCard と同じ考え方)。既定のウィンドウ (1120 × 780 DIP) でも
@@ -351,6 +354,23 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
   チェックは `RenderTargetBitmap` では「−」に写る (実際の状態は UI Automation で確認した)。PNG の名前はページ (`general`、
   `profiles` など) で表示言語によらない。日本語の画面は `PREFERIS_SETTINGS_SNAPSHOT_CONFIG` の `config.json` に
   `"language": "ja"` を書いて写す (macOS も同じ)。
+
+#### 並べ替えの UI 回帰テスト
+
+`test/Preferis.Settings.Windows.Tests/Reordering.ps1` は WinApp CLI 0.7 以上を使い、実際のドラッグで表示順と
+保存順、選択中の編集欄、上下への移動、同じ位置へのドロップ、メニューによる移動、ページを開き直した後の順序を確認する。
+プロファイルとルールの両方を対象にし、失敗すると例外を返す。ViewModel の単体テストだけでは、WinUI のイベントが返す
+オブジェクトの違いを検出できないため別に実行する。
+
+設定がまだない使い捨ての Windows VM で、同じフォルダーの `Reordering.config.json` を
+`%APPDATA%/Preferis/config.json` に配置する (`local.json` もない状態)。通常権限でビルド済みの
+`Preferis.Settings.exe` を開き、VM の対話セッションから次を実行する。管理者権限で起動したアプリでは WinUI のドラッグを検証できない。
+
+```powershell
+./test/Preferis.Settings.Windows.Tests/Reordering.ps1 `
+    -AppPid (Get-Process Preferis.Settings).Id `
+    -ConfigPath "$env:APPDATA/Preferis/config.json"
+```
 
 ## 3. macOS
 

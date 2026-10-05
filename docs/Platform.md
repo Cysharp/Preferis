@@ -14,6 +14,8 @@ Preferis.Core.Configuration.ConfigPaths / ConfigLoader (IConfigStore)
     local.json / 既定 config.json / ログの場所。読み込みは決して例外を投げず、壊れていれば (値が必要な場所の null を
     含む。Configuration.md §4.1) 既定 + エラー文字列
     Lock() で config.json を読んで書き戻す間、このマシンのロック (config.lock) を持つ
+    Save() は保存前の内容を config.old.json に残す。無い場合か前回の作成から 24 時間以上経過した場合に作成
+    (Configuration.md §1.2)。必要なバックアップに失敗したら設定を上書きしない。SaveLocal() は対象外
 Preferis.Core.Browsers.IBrowserLocator        TryResolve(browserId) -> DetectedBrowser?   高速経路用 (1 件だけ)
 Preferis.Core.Hosting.IBrowserDetector        : IBrowserLocator + DetectBrowsers()         設定 UI とフォールバック用
 Preferis.Core.Browsers.IBrowserProfileEnumerator  Enumerate(browser) -> list | null (読めない)

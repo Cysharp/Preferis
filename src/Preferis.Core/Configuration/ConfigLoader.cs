@@ -15,18 +15,21 @@ public sealed record ConfigLoadResult(PreferisConfig Config, LocalConfig Local, 
 public sealed class ConfigLoader : IConfigStore
 {
     private static readonly TimeSpan LockRetryInterval = TimeSpan.FromMilliseconds(20);
+    private static readonly TimeSpan BackupInterval = TimeSpan.FromDays(1);
 
     private readonly ConfigPaths _paths;
     private readonly HostPlatform _platform;
     private readonly Func<string, string?> _getEnvironmentVariable;
     private readonly string _homeDirectory;
+    private readonly TimeProvider _time;
 
-    public ConfigLoader(ConfigPaths paths, HostPlatform platform, Func<string, string?> getEnvironmentVariable, string homeDirectory)
+    public ConfigLoader(ConfigPaths paths, HostPlatform platform, Func<string, string?> getEnvironmentVariable, string homeDirectory, TimeProvider? time = null)
     {
         _paths = paths;
         _platform = platform;
         _getEnvironmentVariable = getEnvironmentVariable;
         _homeDirectory = homeDirectory;
+        _time = time ?? TimeProvider.System;
     }
 
     public static ConfigLoader ForCurrentMachine() => new(
@@ -140,8 +143,16 @@ public sealed class ConfigLoader : IConfigStore
         return new ConfigLoadResult(config, local, configPath, exists, errors.Count == 0 ? null : string.Join(Environment.NewLine, errors));
     }
 
-    /// <summary>Writes <c>config.json</c> atomically (temp file + rename) so a sync client never sees a half written file.</summary>
-    public void Save(PreferisConfig config, string configPath) => WriteAtomically(configPath, ConfigSerializer.Serialize(config));
+    /// <summary>
+    /// Backs up the previous <c>config.json</c> at most once a day, then writes it atomically (temp file + rename) so a
+    /// sync client never sees a half written file. Callers hold <see cref="Lock"/> across reading and saving.
+    /// </summary>
+    public void Save(PreferisConfig config, string configPath)
+    {
+        var content = ConfigSerializer.Serialize(config);
+        BackUpConfig(configPath);
+        WriteAtomically(configPath, content);
+    }
 
     public void SaveLocal(LocalConfig local) => WriteAtomically(_paths.LocalConfigPath, ConfigSerializer.SerializeLocal(local));
 
@@ -218,13 +229,38 @@ public sealed class ConfigLoader : IConfigStore
         SaveLocal(local);
     }
 
+    private void BackUpConfig(string configPath)
+    {
+        if (!File.Exists(configPath))
+        {
+            return;
+        }
+
+        var backupPath = Path.ChangeExtension(configPath, ".old.json");
+        var now = _time.GetUtcNow().UtcDateTime;
+        if (File.Exists(backupPath) && now - File.GetLastWriteTimeUtc(backupPath) < BackupInterval)
+        {
+            return;
+        }
+
+        WriteAtomically(backupPath, temp =>
+        {
+            File.Copy(configPath, temp);
+            // Copy preserves the source timestamp; rotation must count from this backup, not the previous edit.
+            File.SetLastWriteTimeUtc(temp, now);
+        });
+    }
+
     private static void WriteAtomically(string path, string content)
+        => WriteAtomically(path, temp => File.WriteAllText(temp, content));
+
+    private static void WriteAtomically(string path, Action<string> writeTemp)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temp = path + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp";
         try
         {
-            File.WriteAllText(temp, content);
+            writeTemp(temp);
             File.Move(temp, path, overwrite: true);
         }
         finally

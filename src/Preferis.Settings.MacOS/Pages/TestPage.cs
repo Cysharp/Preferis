@@ -34,8 +34,8 @@ internal sealed class TestPage : IPageView
 
         var intro = Form.Section(null,
             page.CanOpenUrls
-                ? L("Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so the picker and the browser can be tried for real.")
-                : L("Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so the picker and the browser can be tried for real. Open needs Preferis Settings to run from inside Preferis.app."),
+                ? L("Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so you can test how the picker and browser work.")
+                : L("Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so you can test how the picker and browser work. Open needs Preferis Settings to run from inside Preferis.app."),
             Form.Row(L("URL"), input));
 
         View = Form.Page(intro, errorFooter, Result(page), Opened(page), Steps(page), History(page));

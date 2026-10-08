@@ -216,7 +216,7 @@ internal sealed class ProfilesPage : IPageView
 
         var general = Form.Section(null,
             Form.Row(L("Name"), name, L("The name shown in the picker. Each profile needs a name of its own.")),
-            Form.Row(L("Default profile"), isDefault, L("Opens links that the matching rule does not assign to a profile.")),
+            Form.Row(L("Default profile"), isDefault, L("Used when the matching rule does not specify a profile.")),
             Form.Row(L("Opens with"), target));
 
         return Form.Page(
@@ -333,7 +333,7 @@ internal sealed class ProfilesPage : IPageView
         var uses = Ui.Switch();
         bindings.Switch(uses, profile, nameof(ProfileViewModel.UsesLocalTarget), () => profile.UsesLocalTarget, value => profile.UsesLocalTarget = value);
         var section = (NSStackView)Form.Section(L("This Computer"),
-            Form.Row(L("Open with another browser or command on this computer"), uses, L("In place of the browser or command above, for example another browser profile. Saved on this computer only; rules and other computers are not affected.")));
+            Form.Row(L("Open with another browser or command on this computer"), uses, L("Use settings specific to this computer in place of the browser or command configured in the profile. These settings are saved on this computer only; rules and other computers are not affected.")));
         // The target's group follows the switch's as a continuation.
         var switchGroup = section.ArrangedSubviews[^1];
         section.SetCustomSpacing((nfloat)Form.GroupSpacing, switchGroup);
@@ -361,7 +361,7 @@ internal sealed class ProfilesPage : IPageView
         }, nameof(ProfileViewModel.LocalTarget));
         bindings.Add(() => targetBindings?.Dispose());
 
-        var footer = Form.Footer(L("Each computer that shares this configuration sets what it opens. One that has not opens the profile to use instead, or else the default profile or the picker."));
+        var footer = Form.Footer(L("Each computer that shares this configuration sets what to open. Computers without a target use the alternative profile, or the default profile or picker if none is set."));
         section.AddArrangedSubview(footer);
         Ui.FillWidth(footer, section);
         bindings.Observe(profile, () =>

@@ -208,7 +208,7 @@ internal sealed class RulesPage : IPageView
         bindings.Switch(enabled, rule, nameof(RuleViewModel.Enabled), () => rule.Enabled, value => rule.Enabled = value);
         var general = Form.Section(null,
             Form.Row(L("Name"), name, L("ID: {0}", rule.Id)),
-            Form.Row(L("Enabled"), enabled, L("Routing skips a rule that is turned off.")));
+            Form.Row(L("Enabled"), enabled, L("Disabled rules are skipped during routing.")));
 
         return Form.Page(
             header,
@@ -277,7 +277,7 @@ internal sealed class RulesPage : IPageView
                 view.RemoveFromSuperview();
             }
             var views = actions.Items.Count == 0
-                ? [Form.Group(Form.Row(Ui.Label(L("No actions yet: a rule needs at least one."), color: NSColor.SystemRed), null))]
+                ? [Form.Group(Form.Row(Ui.Label(L("No actions yet: a rule needs at least one action."), color: NSColor.SystemRed), null))]
                 : actions.Items.Select(action => ActionGroup(action, itemBindings)).ToArray();
             foreach (var view in views)
             {
@@ -340,7 +340,7 @@ internal sealed class RulesPage : IPageView
         {
             0 => L("None checked: the default profile opens the URL."),
             1 => L("The checked profile opens the URL."),
-            _ => L("The picker offers the checked profiles, in the order of the Profiles page."),
+            _ => L("The picker shows the checked profiles."),
         }, nameof(OpenActionViewModel.UsesDefaultProfile));
         return Form.Row(Ui.Label(L("Profiles")), checks, note);
     }

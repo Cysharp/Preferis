@@ -43,7 +43,7 @@ Preferis.Core.Hosting.IRoutingLog             Write(level, message)
 | `Windows.WindowsSystemOpener` | Windows | 既定ハンドラーの ProgId (`AssocQueryString`) が `PreferisURL` かを見る。委譲は `ShellExecute` |
 | `Windows.WindowsDefaultBrowserRegistrar` | Windows | HKCU への登録と解除、`ms-settings:defaultapps` を開く (§2.2) |
 | `Windows.WindowsUserNotifier` | Windows | `MessageBoxW`。「はい」で URL をクリップボードにコピー |
-| `Windows.WindowsApplicationIcons` | Windows | `SHDefExtractIcon` → `GetDIBits` → PNG (自前の `PngEncoder`)。System.Drawing を使わない |
+| `Windows.WindowsApplicationIcons` | Windows | `SHDefExtractIcon` → `GetDIBits` → PNG (自前の `PngEncoder`)。System.Drawing を使わない。`LoadApplicationIcon` は自分の exe のアイコン (リソース 32512) を `LoadImage` で読む (§2.7) |
 | `Windows.WindowsProcess` | Windows | Router のコンソール接続、標準ハンドルの継承止め、`AllowSetForegroundWindow` |
 | `Windows.CommandLine` | Windows | `--single-argument` の後ろを生のコマンドラインから取り出す (§2.2) |
 | `Windows.IRegistry` / `IUrlAssociations` | Windows | レジストリと関連付けの薄い抽象。テストはフェイクで検出と登録を検証する |
@@ -311,8 +311,18 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
   ターミナルのコンソールに出力する。標準出力が既にパイプやファイルなら (設定 UI が実行した場合など) 接続しない。
 - `app.manifest` で PerMonitorV2 DPI 対応と `longPathAware` を宣言する。Router は最終フォールバックのメッセージボックスの
   ためにコモンコントロール v6 も宣言する。
-- アイコンは未作成 (macOS と同じく M5 まで)。レジストリの `DefaultIcon` は `Preferis.exe,0` を指しており、アイコンを
-  `ApplicationIcon` で埋め込めばそのまま使われる。
+- アプリアイコンは `src/Preferis.Router/Windows/Preferis.ico` (16・20・24・32・40・48・64・128 px の 32 bit DIB と 256 px の
+  PNG の 9 エントリ)。元絵は `src/Preferis.Router/Preferis.png` (256 px) で、.ico はそれを縮小して作る (ImageMagick なら
+  `magick Preferis.png -define icon:auto-resize=256,128,64,48,40,32,24,20,16 Windows/Preferis.ico`)。Router・ピッカー・設定 UI の
+  3 プロジェクトが `ApplicationIcon` で同じファイルを埋め込む (NativeAOT の exe にもリソースとして残る)。レジストリの
+  `DefaultIcon` と `ApplicationIcon` は `Preferis.exe,0` を指しているので、既定のアプリ一覧もこのアイコンになる。
+  WinUI はウィンドウにアイコンを付けない (`WM_GETICON` もクラスアイコンも 0)。タスクバーのボタンはそれでも exe の
+  アイコンになるが、タスクバーのサムネイルの見出しと Alt+Tab はウィンドウのアイコンを使うので、Windows 既定のアイコンに
+  なっていた。そのためピッカーと設定 UI は、ウィンドウを作る時に `WindowsApplicationIcons.LoadApplicationIcon` で exe の
+  アイコンを 32 DIP (そのモニターの倍率を掛けたピクセル数) で読み、`AppWindow.SetIcon` に渡す。コンパイラーは
+  `ApplicationIcon` をアイコングループ 32512 として書き、NativeAOT もそのまま exe に移すので、.ico を別ファイルとして
+  同梱する必要はない。`SetIcon` は大小のアイコン (`ICON_BIG` / `ICON_SMALL`) に同じものを設定するため、16 DIP の表示は
+  32 DIP の画像の縮小になる。アイコンはプロセスの終了まで保持する。
 - 最終フォールバックのメッセージボックスは `MessageBoxW`。URL がある時は「はい / いいえ」で URL のコピーを尋ねる。
 
 ### 2.8 設定 UI (`Preferis.Settings.exe`, WinUI 3)
@@ -395,7 +405,7 @@ Preferis.app/
         Contents/MacOS/Preferis Settings
         Contents/MonoBundle/         ピッカーと同じ
         Contents/Resources/ja.lproj/InfoPlist.strings   日本語の macOS で表示する名前「Preferis 設定」
-    Resources/                       アイコン (Preferis.icns) は未作成
+    Resources/                       アイコン (Preferis.icns) は未作成。元絵は src/Preferis.Router/Preferis.png (§2.7)
 ```
 
 - ヘルパーに独自の bundle id と Info.plist を持たせることで、Launch Services が URL の配送先を

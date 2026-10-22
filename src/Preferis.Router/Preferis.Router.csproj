@@ -12,6 +12,8 @@
     <PublishAot>true</PublishAot>
     <SelfContained>true</SelfContained>
     <ApplicationManifest>Windows/app.manifest</ApplicationManifest>
+    <!-- The app icon, shared with the picker and the settings; Preferis.png next to this project is its source (docs/Platform.md §2.7). -->
+    <ApplicationIcon Condition="$([MSBuild]::IsOSPlatform('Windows'))">Windows/Preferis.ico</ApplicationIcon>
     <Description>Preferis router: receives URLs, routes them and launches the browser. No UI framework.</Description>
   </PropertyGroup>
 

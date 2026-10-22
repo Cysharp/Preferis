@@ -4,11 +4,27 @@ namespace Preferis.Platform.Windows;
 
 /// <summary>
 /// Program icons as PNG, for the settings view models (shared with macOS, so they cannot hold a platform image) and the
-/// picker. Pure Win32: no System.Drawing, which NativeAOT trims poorly.
+/// picker; and Preferis's own icon for its windows. Pure Win32: no System.Drawing, which NativeAOT trims poorly.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public static unsafe class WindowsApplicationIcons
 {
+    // The compiler writes ApplicationIcon as icon group 32512 (the number of IDI_APPLICATION); NativeAOT copies the
+    // Win32 resources of the assembly over to the executable.
+    private const int ApplicationIconId = 32512;
+
+    /// <summary>
+    /// The icon this program was built with (<c>ApplicationIcon</c>), for its windows: WinUI gives a window no icon, and
+    /// the taskbar thumbnail and Alt+Tab show the window's icon rather than the executable's (docs/Platform.md §2.7).
+    /// </summary>
+    /// <param name="pixelSize">Edge length; the closest image of the icon is picked, and scaled when none matches.</param>
+    /// <returns>An icon handle the caller owns (DestroyIcon), or zero when the program has no icon.</returns>
+    public static IntPtr LoadApplicationIcon(int pixelSize) => LoadApplicationIcon(Native.GetModuleHandle(null), pixelSize);
+
+    /// <param name="module">The executable or library whose icon to load, loaded or mapped as a data file.</param>
+    internal static IntPtr LoadApplicationIcon(IntPtr module, int pixelSize)
+        => Native.LoadImage(module, ApplicationIconId, Native.ImageIcon, pixelSize, pixelSize, 0);
+
     /// <param name="path">An executable (or any file with an icon).</param>
     /// <param name="pixelSize">Edge length of the bitmap; ask for the displayed size times the display scale.</param>
     /// <returns>The PNG bytes, or null when there is no such file or no icon could be extracted.</returns>

@@ -80,6 +80,13 @@ internal sealed class PickerWindow
         presenter.IsAlwaysOnTop = true;
         presenter.SetBorderAndTitleBar(hasBorder: true, hasTitleBar: false);
         _window.AppWindow.SetPresenter(presenter);
+        // WinUI gives the window no icon, so the taskbar thumbnail and Alt+Tab would show the default one rather than
+        // the executable's (docs/Platform.md §2.7). Sized for the monitor the window opens on; kept for the process's life.
+        var icon = WindowsApplicationIcons.LoadApplicationIcon((int)Math.Round(32 * Win32.ScaleAt(Win32.CursorPosition())));
+        if (icon != IntPtr.Zero)
+        {
+            _window.AppWindow.SetIcon(Microsoft.UI.Win32Interop.GetIconIdFromIcon(icon));
+        }
         _window.AppWindow.Closing += (_, args) =>
         {
             // Alt+F4 and the like count as cancelling, and the window goes away as after any answer.

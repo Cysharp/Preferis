@@ -22,6 +22,8 @@
     <SelfContained>true</SelfContained>
     <PublishAot>true</PublishAot>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- The one app icon, kept with the Router (docs/Platform.md §2.7). -->
+    <ApplicationIcon>../Preferis.Router/Windows/Preferis.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Main checks for a running instance before starting WinUI, which the generated Main cannot do. -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>

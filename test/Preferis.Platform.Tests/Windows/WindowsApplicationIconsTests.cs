@@ -58,6 +58,91 @@ public class WindowsApplicationIconsTests
         Assert.Null(WindowsApplicationIcons.GetPng(@"C:\does\not\exist.exe", 32));
     }
 
+    [Theory]
+    [InlineData(16)]
+    [InlineData(24)]
+    [InlineData(48)]
+    public void The_application_icon_is_loaded_at_the_requested_size(int size)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+        // This test assembly embeds Preferis.ico with ApplicationIcon, as the programs do.
+        var module = LoadAsDataFile(typeof(WindowsApplicationIconsTests).Assembly.Location);
+        try
+        {
+            var icon = WindowsApplicationIcons.LoadApplicationIcon(module, size);
+
+            Assert.NotEqual(IntPtr.Zero, icon);
+            try
+            {
+                Assert.Equal((size, size), IconSize(icon));
+            }
+            finally
+            {
+                Native.DestroyIcon(icon);
+            }
+        }
+        finally
+        {
+            FreeLibrary(module);
+        }
+    }
+
+    [Fact]
+    public void Modules_built_without_an_application_icon_have_none()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+        var module = LoadAsDataFile(typeof(WindowsApplicationIcons).Assembly.Location);
+        try
+        {
+            Assert.Equal(IntPtr.Zero, WindowsApplicationIcons.LoadApplicationIcon(module, 32));
+        }
+        finally
+        {
+            FreeLibrary(module);
+        }
+    }
+
+    private static IntPtr LoadAsDataFile(string path)
+    {
+        const uint LoadLibraryAsDatafile = 0x2;
+        const uint LoadLibraryAsImageResource = 0x20;
+        var module = LoadLibraryExW(path, IntPtr.Zero, LoadLibraryAsDatafile | LoadLibraryAsImageResource);
+        Assert.NotEqual(IntPtr.Zero, module);
+        return module;
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static (int Width, int Height) IconSize(IntPtr icon)
+    {
+        Assert.True(Native.GetIconInfo(icon, out var info));
+        try
+        {
+            Assert.NotEqual(0, GetObjectW(info.Color, System.Runtime.InteropServices.Marshal.SizeOf<Native.Bitmap>(), out var bitmap));
+            return (bitmap.Width, bitmap.Height);
+        }
+        finally
+        {
+            Native.DeleteObject(info.Color);
+            Native.DeleteObject(info.Mask);
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern IntPtr LoadLibraryExW(string path, IntPtr file, uint flags);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool FreeLibrary(IntPtr module);
+
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+    private static extern int GetObjectW(IntPtr handle, int size, out Native.Bitmap bitmap);
+
     private static List<(string Type, byte[] Data, uint Crc)> Chunks(byte[] png)
     {
         var chunks = new List<(string, byte[], uint)>();

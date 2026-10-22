@@ -4,6 +4,8 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>Preferis.Platform.Tests</RootNamespace>
+    <!-- The programs' icon, so that the tests read the resource the compiler writes for ApplicationIcon. -->
+    <ApplicationIcon Condition="$([MSBuild]::IsOSPlatform('Windows'))">../../src/Preferis.Router/Windows/Preferis.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

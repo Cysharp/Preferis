@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Preferis.Core.Localization;
+using Preferis.Platform.Windows;
 using Preferis.Settings.ViewModels;
 using Preferis.Settings.Windows.Controls;
 using Preferis.Settings.Windows.Pages;
@@ -40,6 +41,7 @@ internal sealed class SettingsWindow
         presenter.PreferredMinimumWidth = 900;
         presenter.PreferredMinimumHeight = 600;
         Window.AppWindow.SetPresenter(presenter);
+        SetIcon();
         Window.ExtendsContentIntoTitleBar = true;
         Window.SystemBackdrop = new MicaBackdrop();
 
@@ -128,6 +130,19 @@ internal sealed class SettingsWindow
     {
         var scale = Win32Scale();
         return new SizeInt32((int)(DefaultSize.Width * scale), (int)(DefaultSize.Height * scale));
+    }
+
+    /// <summary>
+    /// WinUI gives the window no icon, so the taskbar thumbnail and Alt+Tab would show the default one rather than the
+    /// executable's (docs/Platform.md §2.7). The icon lives as long as the process.
+    /// </summary>
+    private void SetIcon()
+    {
+        var icon = WindowsApplicationIcons.LoadApplicationIcon((int)Math.Round(32 * Win32Scale()));
+        if (icon != IntPtr.Zero)
+        {
+            Window.AppWindow.SetIcon(Microsoft.UI.Win32Interop.GetIconIdFromIcon(icon));
+        }
     }
 
     private double Win32Scale()

@@ -20,6 +20,7 @@ internal static unsafe partial class Native
     public const uint GmemMoveable = 0x2;
     public const int AsfwAny = -1;
     public const int SmCxIcon = 11;
+    public const uint ImageIcon = 1;
     public const int DibRgbColors = 0;
     public const uint MuiLanguageName = 0x8;
 
@@ -68,6 +69,12 @@ internal static unsafe partial class Native
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetIconInfo(IntPtr icon, out IconInfo info);
+
+    [LibraryImport("user32.dll", EntryPoint = "LoadImageW")]
+    public static partial IntPtr LoadImage(IntPtr instance, IntPtr name, uint type, int width, int height, uint flags);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16)]
+    public static partial IntPtr GetModuleHandle(string? moduleName);
 
     [LibraryImport("user32.dll")]
     public static partial IntPtr GetDC(IntPtr window);

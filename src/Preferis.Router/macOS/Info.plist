@@ -20,6 +20,11 @@
   <string>0.1.0</string>
   <key>CFBundleVersion</key>
   <string>1</string>
+  <!-- The app icon in Contents/Resources (build/AppIcon.targets): Assets.car, and Preferis.icns as the fallback. -->
+  <key>CFBundleIconFile</key>
+  <string>Preferis</string>
+  <key>CFBundleIconName</key>
+  <string>Preferis</string>
   <key>LSMinimumSystemVersion</key>
   <string>12.0</string>
   <key>LSApplicationCategoryType</key>

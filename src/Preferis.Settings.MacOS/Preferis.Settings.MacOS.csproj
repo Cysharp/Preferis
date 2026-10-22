@@ -28,5 +28,6 @@
   </ItemGroup>
 
   <Import Project="../../build/AppManifest.targets" />
+  <Import Project="../../build/AppIcon.targets" />
 
 </Project>

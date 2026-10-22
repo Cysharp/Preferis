@@ -1,0 +1,53 @@
+<Project>
+
+  <!--
+    The app icon of the macOS bundles (docs/Platform.md §3.1), imported by the AppKit projects (the picker and the
+    settings) and by Preferis.Build.proj (the Router bundle). src/Preferis.Router/macOS/Preferis.icon is an Icon Composer
+    file; actool (Xcode 26 or later) compiles it into Assets.car (CFBundleIconName), which holds the layers macOS 26 and
+    later render as Liquid Glass and flattened images for the earlier versions, and Preferis.icns (CFBundleIconFile), the
+    fallback Xcode writes as well. Each Info.plist names both.
+    Microsoft.macOS (26.5) cannot do it: its ImageAsset items are .xcassets only, and given the .icon its ACTool task
+    compiled nothing and reported nothing.
+  -->
+  <PropertyGroup>
+    <AppIconSourceDir>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', 'src', 'Preferis.Router', 'macOS', 'Preferis.icon'))</AppIconSourceDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <_AppIconSource Include="$(AppIconSourceDir)**/*" Exclude="$(AppIconSourceDir)**/.DS_Store" />
+  </ItemGroup>
+
+  <!-- Preferis.Build.proj sets AppIconOutputDir; IntermediateOutputPath is only known once the build runs. -->
+  <Target Name="_PrepareAppIcon">
+    <PropertyGroup>
+      <AppIconOutputDir Condition="'$(AppIconOutputDir)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'appicon'))</AppIconOutputDir>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="CompileAppIcon"
+          DependsOnTargets="_PrepareAppIcon"
+          Inputs="@(_AppIconSource)"
+          Outputs="$(AppIconOutputDir)Assets.car;$(AppIconOutputDir)Preferis.icns">
+    <MakeDir Directories="$(AppIconOutputDir)" />
+    <!--
+      12.0 is LSMinimumSystemVersion of the bundles. actool writes its errors in the canonical "file: error: text" form,
+      which Exec reports as build errors.
+    -->
+    <Exec Command="xcrun actool &quot;$(AppIconSourceDir.TrimEnd('/'))&quot; --compile &quot;$(AppIconOutputDir.TrimEnd('/'))&quot; --app-icon Preferis --platform macosx --target-device mac --minimum-deployment-target 12.0 --output-partial-info-plist &quot;$(AppIconOutputDir)partial.plist&quot; --errors --warnings --output-format human-readable-text"
+          StandardOutputImportance="low" />
+    <!-- actool succeeds without writing the icon when the name passed to &#45;&#45;app-icon is not the .icon file's. -->
+    <Error Condition="!Exists('$(AppIconOutputDir)Assets.car') Or !Exists('$(AppIconOutputDir)Preferis.icns')" Text="actool did not write the app icon into $(AppIconOutputDir)." />
+    <ItemGroup>
+      <FileWrites Include="$(AppIconOutputDir)Assets.car;$(AppIconOutputDir)Preferis.icns;$(AppIconOutputDir)partial.plist" />
+    </ItemGroup>
+  </Target>
+
+  <!-- The AppKit projects: Microsoft.macOS copies BundleResource items into Contents/Resources. -->
+  <Target Name="AddAppIconBundleResources" BeforeTargets="_CollectBundleResources" DependsOnTargets="CompileAppIcon">
+    <ItemGroup>
+      <BundleResource Include="$(AppIconOutputDir)Assets.car" LogicalName="Assets.car" />
+      <BundleResource Include="$(AppIconOutputDir)Preferis.icns" LogicalName="Preferis.icns" />
+    </ItemGroup>
+  </Target>
+
+</Project>

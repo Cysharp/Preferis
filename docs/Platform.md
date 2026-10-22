@@ -400,12 +400,14 @@ Preferis.app/
         Contents/Info.plist          Microsoft.macOS が生成 (src/Preferis.Picker.MacOS/Info.plist をマージ)
         Contents/MacOS/Preferis Picker
         Contents/MonoBundle/         NativeAOT でも .NET のネイティブライブラリ数個と runtimeconfig.bin が置かれる
+        Contents/Resources/          Assets.car と Preferis.icns (アプリアイコン。Router と同じもの)
       Preferis Settings.app/         bundle id: net.mayuki.Preferis.Settings。CFBundleURLTypes なし。通常のアプリ (Dock に出る)
         Contents/Info.plist          Microsoft.macOS が生成 (src/Preferis.Settings.MacOS/Info.plist をマージ)
         Contents/MacOS/Preferis Settings
         Contents/MonoBundle/         ピッカーと同じ
+        Contents/Resources/          ピッカーと同じアイコン
         Contents/Resources/ja.lproj/InfoPlist.strings   日本語の macOS で表示する名前「Preferis 設定」
-    Resources/                       アイコン (Preferis.icns) は未作成。元絵は src/Preferis.Router/Preferis.png (§2.7)
+    Resources/                       Assets.car と Preferis.icns (アプリアイコン。下記)
 ```
 
 - ヘルパーに独自の bundle id と Info.plist を持たせることで、Launch Services が URL の配送先を
@@ -420,6 +422,20 @@ Preferis.app/
   `SigningIdentity` プロパティで Developer ID に切り替え、公証 (と hardened runtime) を追加する。
 - 同じ bundle id のバンドルが複数登録されていると URL の配送先が不定になるため、テスト中は `artifacts/`
   の 1 つだけを登録しておく。古い登録は `lsregister -u <path>` で解除する。
+- アプリアイコンは `src/Preferis.Router/macOS/Preferis.icon` (Icon Composer のファイル。星・窓・窓のタイトルバーの
+  3 レイヤー)。`build/AppIcon.targets` が Xcode 26 の `actool` でコンパイルし、`Assets.car` (macOS 26 以降が Liquid Glass
+  として描くレイヤーと、それより前の macOS 向けに焼き込んだ 16〜1024 px の画像。ダークと色付きの外観も含む) と、
+  Xcode も書く予備の `Preferis.icns` (16〜256 px) を作る。3 つのバンドルの `Contents/Resources` に同じものを置き、各
+  `Info.plist` に `CFBundleIconName` と `CFBundleIconFile` (どちらも `Preferis`) を書く。Router のバンドルには
+  `PublishMacOS` がコピーし、ピッカーと設定 UI には `BundleResource` として Microsoft.macOS が入れる。
+  - Microsoft.macOS (26.5) の `ImageAsset` は `.xcassets` だけが対象で、`.icon` を渡しても ACTool タスクは何も出力せず
+    警告も出さないため、`actool` を直接呼ぶ。27.0 の SDK は `.icon` も `ImageAsset` に含めるので、移行後は SDK に任せられる
+    見込み。
+  - `actool` は `--app-icon` の名前が `.icon` のファイル名と違うと、成功を返してアイコンを書かない。出力が無ければ
+    ビルドエラーにする。
+  - `Assets.car` は 1.6 MB で、3 つのバンドルで計 5 MB ほど増える。ピッカーは `LSUIElement` でアイコンが見える場面は
+    ほぼ無いが、Finder やアクティビティモニタで汎用のアイコンにならないよう同じものを入れる。
+  - Windows の `Preferis.png` (§2.7) とは別のデータで、どちらかを変えたらもう一方も合わせる。
 
 Router の `Info.plist` の要点:
 

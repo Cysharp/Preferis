@@ -9,6 +9,11 @@
   <true/>
   <key>LSMinimumSystemVersion</key>
   <string>12.0</string>
+  <!-- The app icon in Contents/Resources (build/AppIcon.targets): Assets.car, and Preferis.icns as the fallback. -->
+  <key>CFBundleIconFile</key>
+  <string>Preferis</string>
+  <key>CFBundleIconName</key>
+  <string>Preferis</string>
   <!-- Deliberately no CFBundleURLTypes: Launch Services must route URLs only to the main Preferis bundle. -->
   <!--
     The languages of the UI (docs/Design.md §9.4). Without them AppKit shows its own texts (such as the accessibility

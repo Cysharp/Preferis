@@ -9,6 +9,11 @@
   <string>public.app-category.utilities</string>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <!-- The app icon in Contents/Resources (build/AppIcon.targets): Assets.car, and Preferis.icns as the fallback. -->
+  <key>CFBundleIconFile</key>
+  <string>Preferis</string>
+  <key>CFBundleIconName</key>
+  <string>Preferis</string>
   <!--
     The languages of the UI (docs/Design.md §9.4). Without them AppKit shows its own texts (the open panel, the compound
     rows of the condition editor) in English whatever the system language.

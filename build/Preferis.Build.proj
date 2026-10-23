@@ -32,7 +32,11 @@
     <PublishProperties>Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier)</PublishProperties>
     <PickerBuiltBundle>$(RepoRoot)src/Preferis.Picker.MacOS/bin/$(Configuration)/net10.0-macos/$(RuntimeIdentifier)/Preferis Picker.app</PickerBuiltBundle>
     <SettingsBuiltBundle>$(RepoRoot)src/Preferis.Settings.MacOS/bin/$(Configuration)/net10.0-macos/$(RuntimeIdentifier)/Preferis Settings.app</SettingsBuiltBundle>
+    <!-- The Router bundle's icon, compiled by AppIcon.targets. -->
+    <AppIconOutputDir>$(ArtifactsDir)appicon/</AppIconOutputDir>
   </PropertyGroup>
+
+  <Import Project="AppIcon.targets" />
 
   <!-- `dotnet build` implies a restore of this project; there is nothing to restore here. -->
   <Target Name="Restore" />
@@ -64,7 +68,7 @@
     <Error Condition="!Exists('$(SettingsBuiltBundle)/Contents/MacOS/Preferis Settings')" Text="The settings bundle was not found at $(SettingsBuiltBundle)." />
   </Target>
 
-  <Target Name="PublishMacOS" DependsOnTargets="PublishRouter;PublishPicker;PublishSettings" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+  <Target Name="PublishMacOS" DependsOnTargets="PublishRouter;PublishPicker;PublishSettings;CompileAppIcon" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
     <PropertyGroup>
       <PickerBundle>$(HelpersDir)Preferis Picker.app</PickerBundle>
       <SettingsBundle>$(HelpersDir)Preferis Settings.app</SettingsBundle>
@@ -76,6 +80,7 @@
     <!-- Router: the main executable and the only bundle that claims http/https (docs/Platform.md §3.1). -->
     <Copy SourceFiles="$(PublishRoot)Router/Preferis" DestinationFolder="$(BundleDir)Contents/MacOS" />
     <Copy SourceFiles="$(RepoRoot)src/Preferis.Router/macOS/Info.plist" DestinationFolder="$(BundleDir)Contents" />
+    <Copy SourceFiles="$(AppIconOutputDir)Assets.car;$(AppIconOutputDir)Preferis.icns" DestinationFolder="$(BundleDir)Contents/Resources" />
     <WriteLinesToFile File="$(BundleDir)Contents/PkgInfo" Lines="APPL????" Overwrite="true" />
 
     <!-- Picker and settings: copied as built. `cp -R` keeps the bundles' symlinks and permissions intact. -->

@@ -85,7 +85,7 @@ internal sealed class GeneralPage : IPageView
     {
         var position = Ui.ComboBox();
         _bindings.Choice(position, page, nameof(GeneralPageViewModel.PickerPosition),
-            [(PickerPosition.Cursor, L("Near the pointer")), (PickerPosition.Center, L("Center of the screen"))],
+            new[] { (PickerPosition.Cursor, L("Near the pointer")), (PickerPosition.Center, L("Center of the screen")) },
             () => page.PickerPosition, value => page.PickerPosition = value);
 
         var seconds = new NumberBox { Minimum = 0, Maximum = 60, SmallChange = 1, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline, MinWidth = 120 };

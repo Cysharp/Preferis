@@ -21,6 +21,11 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <SelfContained>true</SelfContained>
     <PublishAot>true</PublishAot>
+    <!--
+      .NET 11 RC2 runs WinUI XAML compilation before reference resolution (WMC1007) during optimized AOT publish.
+      Remove this workaround once builds use SDKs containing https://github.com/dotnet/sdk/pull/56649.
+    -->
+    <UseOptimizedPublish>false</UseOptimizedPublish>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- The one app icon, kept with the Router (docs/Platform.md §2.7). -->
     <ApplicationIcon>../Preferis.Router/Windows/Preferis.ico</ApplicationIcon>

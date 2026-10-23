@@ -212,7 +212,7 @@ internal sealed class ProfilesPage : IPageView
 
         var target = Ui.ComboBox(160);
         bindings.Choice(target, profile, nameof(ProfileViewModel.TargetKind),
-            [(ProfileTargetKind.Browser, L("Browser")), (ProfileTargetKind.Command, L("Command")), (ProfileTargetKind.EachComputer, L("Set on each computer"))],
+            new[] { (ProfileTargetKind.Browser, L("Browser")), (ProfileTargetKind.Command, L("Command")), (ProfileTargetKind.EachComputer, L("Set on each computer")) },
             () => profile.TargetKind, value => profile.TargetKind = value);
 
         var general = Form.Section(null,
@@ -368,7 +368,7 @@ internal sealed class ProfilesPage : IPageView
     {
         var kind = Ui.ComboBox(160);
         bindings.Choice(kind, target, nameof(LocalTargetViewModel.TargetKind),
-            [(ProfileTargetKind.Browser, L("Browser")), (ProfileTargetKind.Command, L("Command"))],
+            new[] { (ProfileTargetKind.Browser, L("Browser")), (ProfileTargetKind.Command, L("Command")) },
             () => target.TargetKind, value => target.TargetKind = value);
         var browser = Ui.ComboBox(260);
         bindings.Popup(browser, target, nameof(LocalTargetViewModel.Browser), () => target.BrowserChoices, () => target.Browser, value => target.Browser = value, c => c.Title, c => c.IconPng);

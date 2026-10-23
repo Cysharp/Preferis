@@ -202,7 +202,7 @@ internal sealed class ConditionEditor
         var condition = new MenuFlyoutItem { Text = L("Add Condition") };
         condition.Click += (_, _) => Insert(group, insertAfter, Node.Comparison(PredicateField.Host, MatchKind.Exact, ""));
         var nested = new MenuFlyoutItem { Text = L("Add Group") };
-        nested.Click += (_, _) => Insert(group, insertAfter, Node.Group(CompoundKind.Any, [Node.Comparison(PredicateField.Host, MatchKind.Exact, "")]));
+        nested.Click += (_, _) => Insert(group, insertAfter, Node.Group(CompoundKind.Any, new[] { Node.Comparison(PredicateField.Host, MatchKind.Exact, "") }));
         menu.Items.Add(condition);
         menu.Items.Add(nested);
         button.Flyout = menu;

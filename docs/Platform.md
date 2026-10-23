@@ -94,6 +94,11 @@ Windows は `WindowsSettingsPlatform`、§2.8)。
   コマンドプロンプトから実行する。
 - WinUI のプロジェクトには `EnableMsixTooling=true` が要る (非パッケージでも)。無いと publish に `<名前>.pri` が入らず、
   コントロールが Fluent のスタイルを失う (microsoft/WindowsAppSDK#3451)。
+- .NET 11 RC2 の NativeAOT publish は参照解決より先に XAML をコンパイルして WMC1007 になるため、WinUI の 2 プロジェクトで
+  一時的に `UseOptimizedPublish=false` を設定する。[dotnet/sdk#56649](https://github.com/dotnet/sdk/pull/56649) を含む SDK に
+  ビルド環境が移行したら解除する。
+- WinRT の AOT 互換性チェック (CsWinRT1032) に対応するため、`IEnumerable<T>` や `IReadOnlyList<T>` の引数へ直接渡す
+  コレクション式は、`new[] { ... }` で具体的な配列型を明示する。
 - `Microsoft.WindowsAppSDK.WinUI` 2.3.9 は存在しない `InteractiveExperiences` 2.1.8 を指すため、2.1.9 を直接参照して NU1603 を避ける。
 
 ### 2.2 既定ブラウザーとして登録する

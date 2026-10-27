@@ -18,11 +18,11 @@
       "layers" : [
         {
           "fill" : "none",
-          "glass" : true,
+          "glass" : false,
           "image-name" : "Star 1.png",
           "name" : "Star 1",
           "position" : {
-            "scale" : 3,
+            "scale" : 2.5,
             "translation-in-points" : [
               0,
               0
@@ -43,11 +43,19 @@
       "blur-material" : null,
       "layers" : [
         {
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "extended-gray:0.25000,1.00000"
+              }
+            }
+          ],
           "glass" : false,
           "image-name" : "Rectangle 3.png",
           "name" : "Rectangle 3",
           "position" : {
-            "scale" : 3,
+            "scale" : 2.5,
             "translation-in-points" : [
               0,
               0
@@ -59,7 +67,7 @@
           "image-name" : "Rectangle 2 2.png",
           "name" : "Rectangle 2 2",
           "position" : {
-            "scale" : 3,
+            "scale" : 2.5,
             "translation-in-points" : [
               0,
               -23.50341796875

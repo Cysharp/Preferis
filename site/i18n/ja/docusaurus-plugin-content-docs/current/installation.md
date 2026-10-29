@@ -18,5 +18,5 @@ Preferis は以下の手順でインストールできます。
 3. ターミナルで `xattr -cr /Applications/Preferis.app` を実行して、ダウンロード時のセキュリティ属性を削除します
 
 :::caution
-現在 macOS 版の Preferis は署名や Nortarization が行われていないため、ダウンロード後に上記の手順を行う必要があります。これは将来的に解消される可能性があります。
+現在 macOS 版の Preferis は署名や Apple による公証 (Notarization) が行われていないため、ダウンロード後に上記の手順を行う必要があります。これは将来的に解消される可能性があります。
 :::

@@ -18,5 +18,5 @@ Follow these steps to install Preferis.
 3. In Terminal, run `xattr -cr /Applications/Preferis.app` to remove the security attributes applied when the app was downloaded.
 
 :::caution
-The macOS version of Preferis is not currently signed or notarized, so you need to follow the steps above after downloading it. This may change in the future.
+The macOS version of Preferis is not currently signed or notarized by Apple, so you need to follow the steps above after downloading it. This may change in the future.
 :::

@@ -14,7 +14,7 @@ For example, when you click a link in Slack, Preferis can open https://work.exam
 ```mermaid
 flowchart TD
     A["Apps \nSlack, Teams, ChatGPT, Claude..."]
-    A --> P{Preferis}
+    A -->|Open a URL| P{Preferis}
     P -->|https://www.xbox.com/| EdgeP["Microsoft Edge (Personal)"]
     P -->|https://m365.cloud.microsoft/| EdgeW["Microsoft Edge (Work)"]
     P -->|https://www.google.com/| Chrome[Google Chrome]

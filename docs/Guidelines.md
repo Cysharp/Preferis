@@ -20,6 +20,11 @@ inside them.
   - Exceptions may be granted for proprietary licenses such as the Windows SDK,
     or for LGPL packages that come in as a direct or transitive dependency of a
     development tool. Ask the user whenever one of those is needed
+  - The following exceptions were approved for transitive
+    dependencies of the Docusaurus documentation site under `site/`:
+    - `argparse` 2.0.1: Python-2.0
+    - `caniuse-lite` 1.0.30001819: CC-BY-4.0
+    - `sax` 1.6.1: BlueOak-1.0.0
 
 ## Documentation
 - When the implementation and the docs disagree, write the change back into the

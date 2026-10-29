@@ -1,0 +1,3 @@
+allowBuilds:
+  # The core-js postinstall only prints a funding notice.
+  core-js: false

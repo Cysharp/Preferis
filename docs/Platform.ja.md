@@ -86,6 +86,29 @@ Windows は `WindowsSettingsPlatform`、§2.8)。
 に生成します (Design.md §4.4)。ローカルテストではそのフォルダーの `Preferis.exe --register` を実行し、
 再ビルド後も同じパスに出力されることで登録を維持します。
 
+配布 (Design.md §4.4、`PackageWindows` ターゲット): ポータブル版はこのフォルダーを `Preferis/` ごと zip にしたもので、
+展開した場所の `Preferis.exe --register` (または設定 UI) で登録します。インストーラーは Velopack
+(`Preferis-win-x64-Setup.exe` / `Preferis-win-arm64-Setup.exe`) で、管理者権限なしに `%LocalAppData%\Preferis\` に入れます。
+
+```
+%LocalAppData%\Preferis\
+  Preferis.exe              Velopack のスタブ。current\Preferis.exe を起動する (スタートメニューのショートカットの先)
+  Update.exe                Velopack の更新ツール
+  current\                  上記のフォルダー一式。更新では中身だけが置き換わり、パスは変わらない
+```
+
+- 登録 (§2.2) は Router が自分の実際のパス (`current\Preferis.exe`) で行うため、更新後も有効なまま。
+- アーキテクチャごとに Velopack のチャネル (`win-x64` / `win-arm64`) を分け、x64 のインストールが arm64 の更新を拾わないようにする。
+  `--runtime` でアーキテクチャを宣言するので Setup はそのアーキテクチャのネイティブ実行ファイルになり、合わないマシンでは
+  インストールを断る。
+- Velopack はインストール・更新・アンインストールの時に `Preferis.exe --veloapp-install <version>` のようなフックの引数で
+  Router を起動する (30 秒以内に終了すればよい)。Router は未知のオプションとして使い方を出して終了するので害はない。
+  Velopack ライブラリ (`VelopackApp.Build().Run()`、AOT 互換) はまだ組み込んでおらず、アプリ内からの更新チェック
+  (`UpdateManager` + `GithubSource`: 最新の公開リリースの `releases.<channel>.json` を読む) も未実装。組み込む時は
+  3 つの実行ファイルすべての `Main` の先頭で `Run()` を呼び、更新チェックは設定 UI に置く。
+- インストールの最後に `Preferis.exe` が引数なしで起動され (設定 UI が開く)、ショートカットはスタートメニューにだけ作る。
+- Setup.exe と実行ファイルはコード署名していない (SmartScreen の警告)。署名は `VelopackPackArgs` で `vpk pack` に渡す。
+
 ビルドの注意:
 
 - NativeAOT のリンクに Visual Studio の C++ ツール (「C++ によるデスクトップ開発」) が要る。ILCompiler は
@@ -423,8 +446,9 @@ Preferis.app/
   として一式を生成し、ローカルテストはこれを `open` して Launch Services に登録して行う。
   NativeAOT ではユニバーサルバイナリが作れない既知の問題があるため、arm64 と x64 を別々に publish する。
 - 署名は内側から順に行い、`--deep` は使わない: ヘルパー内の `.dylib` → 各ヘルパー → `Preferis.app`。最後に
-  `codesign --verify --strict` で確かめる。開発中は ad-hoc 署名 (`codesign -s -`)、リリース (M5) では
-  `SigningIdentity` プロパティで Developer ID に切り替え、公証 (と hardened runtime) を追加する。
+  `codesign --verify --strict` で確かめる。開発中は ad-hoc 署名 (`codesign -s -`)。リリースは `SigningIdentity`
+  プロパティで Developer ID に切り替え、その時は公証の要件である hardened runtime とタイムスタンプ (`--options runtime
+  --timestamp`) を付ける。公証は `PackageMacOS` の `Notarize=true` (下記「配布」)。
 - 同じ bundle id のバンドルが複数登録されていると URL の配送先が不定になるため、テスト中は `artifacts/`
   の 1 つだけを登録しておく。古い登録は `lsregister -u <path>` で解除する。
 - アプリアイコンは `src/Preferis.Router/macOS/Preferis.icon` (Icon Composer のファイル。星・窓・窓のタイトルバーの
@@ -474,8 +498,19 @@ Router の `Info.plist` の要点:
 ヘルパーの `Info.plist`: ピッカーは一瞬だけ表示されるダイアログなので `LSUIElement=true` とし、
 ウィンドウ表示時に `NSApp.activate` で前面化する。設定 UI は通常のアプリとして `LSUIElement=false`。
 
-配布: Developer ID による署名と公証 (notarization) がないと Gatekeeper に止められます。
-これはリリース段階 (M5) の作業であり、開発中の ad-hoc 署名でもローカルでは問題なく動作します。
+配布 (Design.md §4.4、`PackageMacOS` ターゲット): `Preferis.app` と `/Applications` へのリンクを入れた圧縮 dmg
+(`Preferis-<version>-osx-arm64.dmg`) を `hdiutil` で作り、`SigningIdentity` が ad-hoc 以外ならバンドルと同じ identity で
+dmg にも署名します。Developer ID による署名と公証 (notarization) がないと Gatekeeper に止められます。開発中の ad-hoc
+署名でもローカルでは問題なく動作します。
+
+- 公証は `-p:Notarize=true` と App Store Connect API キー (`NotaryKeyPath` = .p8、`NotaryKeyId`、`NotaryIssuerId`) で、
+  `xcrun notarytool submit --wait` に dmg を送り (中のバンドルも対象になる)、`xcrun stapler staple` でチケットを dmg に
+  添付し、`spctl --assess --type open` で Gatekeeper の判定を確かめる。
+- リリースワークフローはシークレット `APPLE_CERTIFICATE_P12` (Developer ID Application 証明書の .p12 を base64 にしたもの) と
+  `APPLE_CERTIFICATE_PASSWORD` があれば一時キーチェーンに証明書を入れて `security find-identity` で identity を見つけ、
+  `APPLE_NOTARY_KEY` (.p8 の base64)、`APPLE_NOTARY_KEY_ID`、`APPLE_NOTARY_ISSUER_ID` があれば公証する。無ければ ad-hoc 署名の
+  dmg を作る (配布には向かない)。
+- `hdiutil create` は負荷の高いマシンで "Resource busy" になることがあるため 3 回まで試す。
 
 ### 3.2 既定ブラウザーとして登録する
 

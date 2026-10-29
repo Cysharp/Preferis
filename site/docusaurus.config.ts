@@ -4,13 +4,13 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'Preferis',
-  tagline: 'Open every link in the right browser.',
-  favicon: 'img/favicon.svg',
+  tagline: 'A cross-platform browser switcher that opens URLs based on rules.',
+  favicon: 'img/favicon.ico',
   url: 'https://cysharp.github.io',
   baseUrl: '/Preferis/',
   organizationName: 'Cysharp',
   projectName: 'Preferis',
-  trailingSlash: true,
+  trailingSlash: false,
   onBrokenLinks: 'throw',
   i18n: {
     defaultLocale: 'en',

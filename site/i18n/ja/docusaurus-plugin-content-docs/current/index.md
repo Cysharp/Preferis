@@ -5,25 +5,46 @@ title: Preferis
 description: Windows と macOS で、リンクを適切なブラウザーやブラウザープロファイルで開きます。
 ---
 
-Preferis はルールに従って、リンクをブラウザー、ブラウザープロファイル、または任意のアプリケーションに振り分けます。既定のブラウザーとして登録することで、HTTP・HTTPS のリンクごとに開く先を選べます。
+Preferis はルールに従ってリンクをブラウザーやブラウザープロファイルに振り分けるクロスプラットフォームなアプリケーションです。OS の既定のブラウザーとして登録しておくことで URL を開くブラウザーを柔軟にコントロールできます。
 
-## 仕組み
+![Windows と macOS での動作イメージ](/img/docs/app-cross.png)
 
-1. 利用するブラウザー、ブラウザープロファイル、コマンドを **プロファイル** として定義します。
-2. URL の条件とアクションを組み合わせた **ルール** を追加します。ルールは上から順に評価され、最初に一致したルールが適用されます。
-3. 候補が複数ある場合は、OS ネイティブの **ピッカー** で開く先を選択します。どのルールにも一致しない URL は、末尾のキャッチオールルールで処理します。
+例えば Slack でリンクをクリックした際、https://work.example は仕事用のプロファイルで開き、https://sns.example は個人用のプロファイルで開く、他にも特定の SaaS にログインするにはこのブラウザープロファイルで開きたいといったユースケースを Preferis で解決できます。
 
-Preferis は Windows と macOS に対応しています。リンクをすばやく処理するために、ルーティングエンジンを設定画面やピッカーから分離しています。
+```mermaid
+flowchart TD
+    A["Apps \nSlack, Teams, ChatGPT, Claude..."]
+    A --> P{Preferis}
+    P -->|https://www.xbox.com/| EdgeP["Microsoft Edge (Personal)"]
+    P -->|https://m365.cloud.microsoft/| EdgeW["Microsoft Edge (Work)"]
+    P -->|https://www.google.com/| Chrome[Google Chrome]
+    P -->|https://www.apple.com/| Safari[Apple Safari]
+```
 
-## 設定
+## 特徴
+Preferis は以下の特徴を持っています。
 
-共有する設定は `config.json`、マシン固有の設定は `local.json` に保存します。`config.json` をクラウドストレージに置き、各マシンの `local.json` から参照できます。
+- Windows と macOS のクロスプラットフォームの対応
+- OS ネイティブな設定とブラウザー選択 UI
+- OneDrive、iCloud 等のクラウドストレージによるデバイス間の設定同期のサポート
+- ブラウザーとプロファイルの自動検出
+- 正規表現などを用いた柔軟なルールの定義
 
-詳細な仕様は、リポジトリ内のドキュメントを参照してください。
+「クラウドストレージによるデバイス間の設定同期のサポート」は複数のデバイスで同じルールを適用したい場合には役立つ機能です。例えばデスクトップの Windows とラップトップの macOS 上で設定を共有し、ルールは共通に扱うユースケースを前提として設計されています。
 
-- [設定ファイル仕様](https://github.com/Cysharp/Preferis/blob/main/docs/Configuration.ja.md): プロファイル、ルーティングルール、設定ファイル。
-- [設計ドキュメント](https://github.com/Cysharp/Preferis/blob/main/docs/Design.ja.md): コンポーネント構成と設計判断。
-- [プラットフォーム仕様](https://github.com/Cysharp/Preferis/blob/main/docs/Platform.ja.md): OS ごとのブラウザー登録、検出、起動方法。
+## 用語と動作の流れ
+
+1. 利用するブラウザーやブラウザープロファイル、コマンドを **プロファイル** として定義します
+2. URL の条件とアクションを組み合わせた **ルール** を定義します。ルールは上から順に評価され、最初に一致したルールが適用されます
+3. 一致したルールでプロファイル候補が複数ある場合は **ピッカー** で開く先を選択します
+4. どのルールにも一致しない URL は既定のプロファイルで処理します
+
+## 動作環境
+
+Preferis は以下の環境で動作確認を行っています:
+
+- Windows 11 以降
+- macOS Tahoe 26 以降
 
 ## ソースコード
 

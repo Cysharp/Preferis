@@ -1,0 +1,10 @@
+{
+  "sidebar.docsSidebar.category.profile": {
+    "message": "プロファイル",
+    "description": "The label for category Profile in sidebar docsSidebar"
+  },
+  "sidebar.docsSidebar.category.rule": {
+    "message": "ルール",
+    "description": "The label for category Rule in sidebar docsSidebar"
+  }
+}

@@ -84,6 +84,7 @@ public static class UrlRewriter
         return (null, L("Query parameter '{0}' not found.", action.Parameter));
     }
 
+    // The candidate comes from the URL, so it may carry the URL's token; the error ends up in the log, which is on by default.
     private static (RoutingUrl?, string?) Finish(string candidate)
-        => RoutingUrl.TryParse(candidate, out var url) ? (url, null) : (null, L("Rewrite produced an invalid URL: '{0}'", candidate));
+        => RoutingUrl.TryParse(candidate, out var url) ? (url, null) : (null, L("Rewrite produced an invalid URL: '{0}'", UrlRedaction.Redact(candidate)));
 }

@@ -217,6 +217,17 @@ public class RouterTests
     }
 
     [Fact]
+    public void The_reason_of_an_invalid_rewrite_masks_the_query_of_what_it_produced()
+    {
+        var config = Config("edge", RuleFor("bad", Host("bad.example.com"),
+            new RewriteAction { Mode = RewriteMode.Regex, Pattern = "^https://", Replacement = "" }, new OpenAction()));
+
+        var failed = Assert.IsType<RoutingDecision.Failed>(Route(config, "https://bad.example.com/?token=secret").Decision);
+        Assert.DoesNotContain("secret", failed.Reason);
+        Assert.Contains("bad.example.com/?***", failed.Reason);
+    }
+
+    [Fact]
     public void A_missing_query_parameter_fails_the_rewrite()
     {
         var config = Config("edge", RuleFor("unwrap", Host("wrap.example.com"),

@@ -1,0 +1,7 @@
+allowBuilds:
+  # The core-js postinstall only prints a funding notice.
+  core-js: false
+
+overrides:
+  # Mermaid 12 adds elkjs (EPL-2.0), outside the repository's allowed licenses.
+  '@docusaurus/theme-mermaid>mermaid': 11.17.2

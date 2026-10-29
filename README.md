@@ -34,6 +34,20 @@ See the [installation guide](https://cysharp.github.io/Preferis/installation) fo
 
 After installing Preferis, follow the [Quick Start](https://cysharp.github.io/Preferis/quickstart) to get started.
 
+## Build & Development
+
+To build the project, run the following command:
+
+```bash
+# on Windows
+dotnet build .\build\Preferis.Build.proj
+.\artifacts\win-x64\Preferis\Preferis.exe
+
+# on macOS
+dotnet build .\build\Preferis.Build.proj
+./artifacts/osx-arm64/Preferis/Preferis.app/Contents/MacOS/Preferis
+```
+
 ## License
 
 ```

@@ -34,6 +34,19 @@ Preferis は以下の特徴を持っています。
 
 インストール後、[利用を始めるにはクイックスタート](https://cysharp.github.io/Preferis/ja/quickstart)を参照してください。
 
+## ビルドと開発
+
+プロジェクトをビルドして実行するには以下のコマンドを使用します:
+
+```bash
+# on Windows
+dotnet build .\build\Preferis.Build.proj
+.\artifacts\win-x64\Preferis\Preferis.exe
+
+# on macOS
+dotnet build .\build\Preferis.Build.proj
+./artifacts/osx-arm64/Preferis/Preferis.app/Contents/MacOS/Preferis
+```
 
 ## ライセンス
 

@@ -10,7 +10,7 @@ title: プロファイルの高度な設定
 ![](/img/docs/settings-profile-adv-01.png)
 
 :::tip
-ほとんどのケースでは「[複数のデバイスで設定を共有する](../../share-config-across-devices)」にある設定で十分カバーできます。
+ほとんどのケースでは「[複数のデバイスで設定を共有する](../share-config-across-devices.md)」にある設定で十分カバーできます。
 :::
 
 ## プロファイルの ID

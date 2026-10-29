@@ -53,6 +53,19 @@ pnpm write-translations --locale ja
 
 リポジトリ直下の `docs/` は既存の設計・仕様ドキュメントです。公開サイトのコンテンツは `site/docs/` 以下で管理します。
 
+## Mermaid の図
+
+Markdown に `mermaid` コードブロックを書くと、図として表示されます。
+
+````md
+```mermaid
+flowchart LR
+  URL --> Preferis --> Browser
+```
+````
+
+`@docusaurus/theme-mermaid` を使用し、英語・日本語の両方で有効です。詳しい構文は [Docusaurus のドキュメント](https://docusaurus.io/docs/markdown-features/diagrams)を参照してください。
+
 ## GitHub Pages への公開
 
 [ワークフロー](../.github/workflows/publish-docs.yml)が以下を実行します。

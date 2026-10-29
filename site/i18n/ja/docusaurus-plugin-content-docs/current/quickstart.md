@@ -1,6 +1,6 @@
 ---
 title: クイックスタート
-sidebar_position: 2
+sidebar_position: 3
 ---
 
 ここでは Preferis をインストールした後、実際に使えるようにするための設定と簡単なルールの設定と動作の確認方法を説明します。

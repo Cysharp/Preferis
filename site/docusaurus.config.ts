@@ -42,6 +42,7 @@ const config: Config = {
       } satisfies Preset.Options,
     ],
   ],
+  themes: ['@docusaurus/theme-mermaid'],
   themeConfig: {
     navbar: {
       title: 'Preferis',
@@ -71,6 +72,7 @@ const config: Config = {
     },
   } satisfies Preset.ThemeConfig,
   markdown: {
+    mermaid: true,
     hooks: {
       onBrokenMarkdownLinks: 'throw',
     },

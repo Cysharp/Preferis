@@ -226,7 +226,8 @@ artifacts/                 出力先 (.gitignore 対象)
 - 実行ファイルの NativeAOT publish は `-p:Version` だけで済むため、`update-packagejson` でバージョンをコミットする
   MagicOnion 方式は採らず、NativeCompressions と同じく実行中のコミットにタグを打ちます。
 - Velopack の更新フィードは「最新の (ドラフトでない) リリースの `releases.<channel>.json`」なので、ドラフトを公開した時点で
-  利用者に更新が見えます。アプリ内からの更新チェックはまだ組み込んでいません (Platform.md §2.1)。
+  利用者に更新が見えます。アプリ内からの更新チェックは設定 UI の一般ページの「更新」カードにあり、Velopack でインストール
+  された時だけ出ます (Platform.md §2.1)。
 - Windows の実行ファイルとインストーラーはコード署名していません (SmartScreen の警告が出る)。`VelopackPackArgs`
   プロパティで `vpk pack` に `--azureTrustedSignFile` などを渡せるようにしてあります。
 
@@ -536,7 +537,7 @@ Windows: WinUI 3 (M4))、ViewModel とサービス (`Preferis.Settings.Core`) �
 
 | ページ | 内容 |
 | --- | --- |
-| 一般 | 設定ファイルの場所 (「クラウドストレージへ移動」)、OS への登録状態と「既定のブラウザーに設定」ボタン、ピッカーの動作、ログと履歴の有無、言語 |
+| 一般 | 設定ファイルの場所 (「クラウドストレージへ移動」)、OS への登録状態と「既定のブラウザーに設定」ボタン、ピッカーの動作、ログと履歴の有無、言語、更新 (Windows の Velopack インストールのみ: 確認 → ダウンロード → 再起動。Platform.md §2.1) |
 | プロファイル | プロファイル一覧 / 追加・編集・削除 / デフォルト指定。一覧の「+」メニューに並ぶ検出したブラウザーから 1 クリックでプロファイル化。ブラウザープロファイルは検出結果のドロップダウンから選択。プライベートモード、追加引数、OS 別上書き、フォールバック |
 | ルール | 順序付きリスト (ドラッグ並べ替え、有効/無効トグル、複製)。ルールエディターは条件ツリー (macOS は NSPredicateEditor) とアクション列エディター。末尾にキャッチオールルール (固定)。「…」メニューの「Import from CSV…」で CSV からルールを作る (Configuration.md §2.12) |
 | テスト | URL を入力すると、評価の過程 (どのルールがどう判定され、どの URL に書き換わり、どのプロファイルに解決されたか) を表示する。`--dry-run` と同じエンジンを使う |
@@ -942,6 +943,7 @@ Windows のスパイクは使い捨てのコードではなく、M4 の製品コ
 | 2026-10-03 | Windows のピッカーの背景を Mica にする。内容は ContentDialog の不透明な色の代わりに `LayerFillColorDefaultBrush` に置き、フッターは Mica のまま | 利用者の要望。設定 UI と同じく Windows 11 の WinUI のウィンドウらしく見せる。ContentDialog の色は不透明で Mica を隠すため、Mica のウィンドウの標準の半透明のレイヤーで「上が明るく下が素材」の階層を保つ |
 | 2026-10-03 | Windows のピッカーの見出しによる移動は、見出しを `InputNonClientPointerSource` でタイトルバーの領域にして OS に任せる。コピーボタンと URL は Passthrough | `PointerPressed` から `WM_NCLBUTTONDOWN` を送る方法では、ボタンを離したことが移動のループに届かず、クリックしただけでウィンドウがポインターに付いて動いた (利用者の報告)。タイトルバーの領域なら、アクティブ化、ドラッグの判定、離した時の終了がすべて普通のタイトルバーと同じになる |
 | 2026-10-29 | 配布は Windows がポータブル zip と Velopack のインストーラー (x64 / arm64 を別チャネル)、macOS が Apple Silicon の dmg。リリースは `build-release.yaml` (workflow_dispatch、dry-run あり) で Cysharp/Actions の `validate-release` / `create-release` を使い、パッケージ作成は `Preferis.Build.proj` の `PackageWindows` / `PackageMacOS` に置く。バージョンは `-p:Version` で渡し、コミットしない | Velopack は管理者権限なしのインストール、GitHub Release をそのまま更新フィードにできること、差分更新、NativeAOT との相性で選んだ。パッケージ作成を MSBuild に置くのは §4.4 の方針 (`dotnet` だけで完結、ローカルでも同じコマンド) に合わせるため。org のワークフローはライブラリー向けなので、NuGet の部分を成果物のアップロードに置き換えた。arm64 は公開リポジトリ限定の `windows-11-arm` ランナーが使えないため x64 でクロスコンパイルする |
+| 2026-10-29 | アプリ側の Velopack 統合: 3 つの実行ファイルは `Main` の先頭で `VelopackInstallation.Start` を呼び、親フォルダーに `Update.exe` がある時だけ `VelopackApp.Build().Run()` を実行する。ダウンロード済みで未適用の更新の自動適用は設定 UI だけが許す。更新チェックは設定 UI の一般ページの「更新」カードで、`ISettingsPlatform.Updater` が null (ポータブル zip、ローカルビルド、macOS) なら出さない。Velopack のライブラリは `Preferis.Platform` が Windows でビルドする時だけ参照する (Platform.md §2.1) | Velopack の `Run()` はインストールされていなくてもインストール先を探し `%LocalAppData%\velopack` にログを書くため、ポータブル版のリンクのクリックにその起動コストと副作用を乗せない。リンクを開く Router とピッカーが更新の適用で待つのは §5.2 の方針に反し、設定 UI なら開き直すだけで済む。macOS は dmg 配布で Velopack を使わないので、ライブラリをバンドルに持ち込まない。更新の ViewModel をページでなくセッションに持たせるのは、Router の「記憶する」による読み直しでページが作り直されても進行中のダウンロードを失わないため |
 
 ## 14. マイルストーンと現在の状態
 
@@ -957,7 +959,7 @@ Windows 対応で追加するのは Platform の Windows 実装、Router の Win
 | M2 | macOS Platform + Router 高速経路: Launch Services 検出、プロファイル列挙、LaunchPlan 実行、既定ブラウザー登録、Apple Event 受信。**`PublishMacOS` ターゲットで ad-hoc 署名済みの `Preferis.app` 一式を生成** | `artifacts/` の `Preferis.app` を既定ブラウザーにし、単一候補のルールで日常利用できる | 完了 (2026-10-01)。`open -a` 経由と argv 経由で Chrome / Edge Dev への振り分けを確認。既定ブラウザー化は `--register` をユーザーが実行して確認する。ピッカー不在時は既定プロファイルへフォールバック。Platform.md §5 に計測値 |
 | M3 | macOS ピッカー (AppKit, ヘルパーバンドル) + 設定 UI (AppKit)。両者を `Preferis.app` に同梱 | macOS で全機能が揃い、設定ファイルを手で編集せずに運用できる | 実装完了、目視確認待ち (2026-10-02)。`Preferis Picker.app` (6.8 MB) と `Preferis Settings.app` (8.7 MB。Avalonia 版 26 MB から AppKit に置き換え) はどちらも AppKit + NativeAOT で、`Contents/Helpers/` に同梱し内側から署名 (`Preferis.app` 全体で 20 MB)。Router 経由でピッカー表示まで 120 ms、「記憶する」、オプトイン履歴、`Preferis.app` を直接開くと設定 UI。テスト 367 件 (Core 221, Platform 35, Settings.Core 111)。描画はウィンドウのキャプチャで確認済みだが、実際のリンククリックからのピッカーの前面表示と設定 UI の手操作は開発者の目視確認が必要。アプリアイコンは 2026-10-23 に追加 (Platform.md §3.1) |
 | M4 | Windows: スパイク (§12 の 6〜9)、Platform の Windows 実装、Router の Windows 経路、WinUI 3 ピッカー、WinUI 3 の設定 UI (`Preferis.Settings.Core` の ViewModel を使う)。**`PublishWindows` ターゲットで exe 一式のフォルダーを生成** | `artifacts/` の `Preferis.exe` を既定ブラウザーにし、M3 と同等の機能が揃う。同一の設定ファイルを両 OS で共有できる | 実装完了、目視確認待ち (2026-10-02)。`dotnet build build/Preferis.Build.proj` で `artifacts/win-x64/Preferis/` (82 MB: Router 4.9 MB、ピッカー 7.6 MB、設定 10 MB と Windows App SDK) を生成。3 つとも NativeAOT。レジストリからのブラウザー検出、HKCU への登録、`--single-argument`、ピッカー (Router 起動から表示まで約 270 ms)、設定 UI (Windows 11 の設定アプリ風、条件は行のエディター)、テストページからの Router 実行を確認。テスト 424 件 (Core 221, Platform 80, Settings.Core 123)。macOS 側の変更 (ViewModel、`RouterProcess`) は Windows ではビルドとテストのみで、AppKit の 2 プロジェクトは macOS での確認が必要。未確認: 既定ブラウザーにしてのリンククリック (前面表示、スパイク 6)、既定のアプリ一覧への表示 (スパイク 8)、起動中ブラウザーへの受け渡し (スパイク 9)、Firefox。アプリアイコンは 2026-10-22 に追加 (Platform.md §2.7) |
-| M5 | リリース: Developer ID 署名と公証、インストーラー (macOS: dmg / Homebrew cask、Windows: zip / winget 等)、ベンチ結果の記録、利用者向けドキュメント | 配布物を第三者が導入できる | 進行中 (2026-10-29)。ビルド・パッケージ・リリースのワークフロー `build-release.yaml` と `PackageWindows` / `PackageMacOS` ターゲット (§4.4) を追加: Windows x64 / arm64 のポータブル zip と Velopack インストーラー、macOS (Apple Silicon) の dmg を作ってドラフトリリースに添付する。Developer ID 署名と公証はシークレットがあれば行う (証明書は未取得)。ローカルで確認したのは Windows x64 の `PackageWindows` (zip、Setup.exe、nupkg、フィード) と 881 件のテストで、arm64 のクロスコンパイルと macOS の dmg / 署名 / 公証はワークフローの初回実行 (dry-run) で確認する。残り: アプリ側の Velopack 統合 (`VelopackApp.Build().Run()`、更新チェック)、Windows のコード署名、winget / Homebrew cask、利用者向けドキュメント、ベンチ結果 |
+| M5 | リリース: Developer ID 署名と公証、インストーラー (macOS: dmg / Homebrew cask、Windows: zip / winget 等)、ベンチ結果の記録、利用者向けドキュメント | 配布物を第三者が導入できる | 進行中 (2026-10-29)。ビルド・パッケージ・リリースのワークフロー `build-release.yaml` と `PackageWindows` / `PackageMacOS` ターゲット (§4.4) を追加: Windows x64 / arm64 のポータブル zip と Velopack インストーラー、macOS (Apple Silicon) の dmg を作ってドラフトリリースに添付する。Developer ID 署名と公証はシークレットがあれば行う (証明書は未取得)。ローカルで確認したのは Windows x64 の `PackageWindows` (zip、Setup.exe、nupkg、フィード) と 881 件のテストで、arm64 のクロスコンパイルと macOS の dmg / 署名 / 公証はワークフローの初回実行 (dry-run) で確認する。アプリ側の Velopack 統合 (3 つの実行ファイルの `Main` での `VelopackInstallation.Start`、設定 UI の「更新」カード。Platform.md §2.1) は同日に追加し、テストは 892 件 (Core 571, Platform 84, Settings.Core 237)。インストーラーからの実際の更新 (公開リリースが 2 つ以上必要) は未確認。残り: Windows のコード署名、winget / Homebrew cask、利用者向けドキュメント、ベンチ結果 |
 
 M3・M4 の後、UI を英語と日本語の 2 言語にした (§9.4、2026-10-02)。Windows では設定 UI とピッカーを NativeAOT で発行し、
 日本語の表示をスナップショットで確認した。AppKit の 2 プロジェクト (メニューバー、`CFBundleLocalizations`、NSPredicateEditor の

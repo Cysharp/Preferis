@@ -102,10 +102,30 @@ Windows は `WindowsSettingsPlatform`、§2.8)。
   `--runtime` でアーキテクチャを宣言するので Setup はそのアーキテクチャのネイティブ実行ファイルになり、合わないマシンでは
   インストールを断る。
 - Velopack はインストール・更新・アンインストールの時に `Preferis.exe --veloapp-install <version>` のようなフックの引数で
-  Router を起動する (30 秒以内に終了すればよい)。Router は未知のオプションとして使い方を出して終了するので害はない。
-  Velopack ライブラリ (`VelopackApp.Build().Run()`、AOT 互換) はまだ組み込んでおらず、アプリ内からの更新チェック
-  (`UpdateManager` + `GithubSource`: 最新の公開リリースの `releases.<channel>.json` を読む) も未実装。組み込む時は
-  3 つの実行ファイルすべての `Main` の先頭で `Run()` を呼び、更新チェックは設定 UI に置く。
+  Router を起動し、30 秒以内の終了を期待する。3 つの実行ファイルは `Main` の先頭で `VelopackInstallation.Start`
+  (`Preferis.Platform.Windows`) を呼ぶ。これは親フォルダーに `Update.exe` がある時 (Velopack でインストールされている時)
+  だけ `VelopackApp.Build().Run()` を実行し、フックの引数ならそこで終了する。ポータブル zip や `artifacts/` のローカルビルドでは
+  何もしない: Velopack の `Run()` はインストールされていなくてもインストール先を探し `%LocalAppData%\velopack\` にログを
+  書くので、その分をリンクのクリックに乗せない。インストール配置では `Run()` (マニフェストの読み込み、`packages\` の確認、
+  ログ) が Router の起動 1 回あたり約 2 ms (`Preferis --version` の中央値 11.7 → 13.9 ms、2026-10-29)。Velopack のライブラリ
+  (MIT、AOT 互換) は `Preferis.Platform` が Windows でビルドする時だけ参照し (`VELOPACK` シンボル)、macOS のバンドルには
+  入らない。
+- ダウンロード済みで未適用の更新があれば `Run()` はそれを適用して Preferis を再起動する (`SetAutoApplyOnStartup`)。これを
+  許すのは設定 UI だけで、Router とピッカーは許さない (リンクを開くのを更新で待たせない。§5.2)。
+- アプリ内からの更新チェックは設定 UI の一般ページの「更新」カード (§2.8): `UpdateManager` + `GithubSource`
+  (`https://github.com/Cysharp/Preferis`。チャネルは指定せず、インストールのマニフェストにあるビルド時の `win-x64` / `win-arm64`
+  を使う) で、最新の公開リリースの `releases.<channel>.json` を読み (`CheckForUpdatesAsync`)、「ダウンロード」
+  (`DownloadUpdatesAsync`、進捗バー)、「再起動して更新」(保存待ちの編集を書いてから `ApplyUpdatesAndRestart`。`Update.exe` が
+  `current\` を置き換えて `Preferis.exe` を引数なしで起動するので、設定 UI が開き直す) の順。カードは Velopack でインストール
+  されている時だけ出す (`ISettingsPlatform.Updater` が null なら出さない: ポータブル zip、ローカルビルド、macOS)。
+- リポジトリが非公開の間は GitHub の API がトークン無しの読み取りを拒むため、更新の確認は「404 (Not Found)」で失敗する。公開
+  すれば動く (認証なしの制限は IP あたり 60 回/時)。
+- Velopack のライブラリのログは `%LocalAppData%\velopack\velopack_Preferis.log`。
+- インストールせずにインストール配置を試すには、`artifacts/win-x64/Preferis/` を任意の `current\` にコピーし、
+  `Preferis-<version>-win-x64-full.nupkg` の `lib/app/sq.version` (マニフェスト) を `current\` に置き、親フォルダーに
+  `Update.exe` という名前のファイル (中身は何でもよい。更新を適用しない限り実行されない) を置く。`current\Preferis.exe
+  --veloapp-install 0.0.1` が何も出さずに 0 で終了し、`current\Preferis.Settings.exe` に「更新」カードが出る
+  (`PREFERIS_SETTINGS_SNAPSHOT` の `general-end.png`、§2.8)。
 - インストールの最後に `Preferis.exe` が引数なしで起動され (設定 UI が開く)、ショートカットはスタートメニューにだけ作る。
 - Setup.exe と実行ファイルはコード署名していない (SmartScreen の警告)。署名は `VelopackPackArgs` で `vpk pack` に渡す。
 
@@ -371,6 +391,10 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
   プロファイルとルールの編集画面は幅 490 DIP ほどなので、入力欄のカードは折り返す。
 - 「+」のメニューは検出したブラウザーごとのサブメニュー (ブラウザー自体と各ブラウザープロファイル)。条件は
   `ConditionEditor` (Design.md §9.1)。幅が狭いときはパターンの入力欄を次の行に回す。
+- 一般ページの最後は、Velopack でインストールされていれば「更新」カード (バージョン、状態の行、「更新を確認」→「ダウンロード」
+  (進捗バー) →「再起動して更新」のボタンを 1 つずつ)、そうでなければバージョンのフッター (§2.1 の配布)。ViewModel は
+  `AppUpdateViewModel` で、ページではなくセッション (`SettingsViewModel.Updates`) が持つ: Router の「記憶する」で `config.json`
+  が読み直されるとページの ViewModel は作り直されるが、進行中のダウンロードは失われない。
 - 自分と同じフォルダーに `Preferis.exe` があれば、それを登録先として状態を表示し、「既定にする」では
   `Preferis.exe --register` を実行する。無ければ (デバッグ実行) 登録できない旨を表示する。テストページの「Open」も
   `Preferis.exe <url>` を実行し、Router の終了までの出力を表示する (`RouterProcess`)。
@@ -389,7 +413,7 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
 - `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で各ページ (とルール・プロファイル画面のいくつかの状態) を PNG に書き出して
   終了する。ウィンドウはアクティブにせず画面外に出し、`RenderTargetBitmap` で描く (Mica の代わりにテーマの背景色)。
   大きさは通常の起動と同じ既定サイズ (DIP)。`PREFERIS_SETTINGS_SNAPSHOT_WIDTH=<DIP>` で幅を変えて狭いウィンドウを確かめられる
-  (最小幅は 900)。長いプロファイルの編集画面は末尾までスクロールした状態も書き出す。`PREFERIS_SETTINGS_SNAPSHOT_URL`、
+  (最小幅は 900)。長いプロファイルの編集画面と一般ページ (末尾に「更新」カードかバージョン) は末尾までスクロールした状態も書き出す。`PREFERIS_SETTINGS_SNAPSHOT_URL`、
   `PREFERIS_SETTINGS_SNAPSHOT_APPEARANCE=dark`、`PREFERIS_SETTINGS_SNAPSHOT_CONFIG` は macOS と同じ。チェックボックスの
   チェックは `RenderTargetBitmap` では「−」に写る (実際の状態は UI Automation で確認した)。PNG の名前はページ (`general`、
   `profiles` など) で表示言語によらない。日本語の画面は `PREFERIS_SETTINGS_SNAPSHOT_CONFIG` の `config.json` に

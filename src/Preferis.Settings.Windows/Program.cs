@@ -1,5 +1,6 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Preferis.Platform.Windows;
 using Preferis.Settings.Localization;
 using static Preferis.Settings.Localization.SettingsText;
 
@@ -15,6 +16,10 @@ internal static class Program
     [STAThread]
     private static int Main()
     {
+        // Velopack's start-up code (docs/Platform.md §2.1). An update that was downloaded but not installed (the window
+        // was closed instead of restarted) is installed now, which restarts Preferis and opens the settings again.
+        VelopackInstallation.Start(applyPendingUpdate: true);
+
         // One window edits the files; a second start (the Router's --settings, the Start menu) brings it forward instead.
         using var instance = new Mutex(initiallyOwned: true, @"Local\Preferis.Settings", out var isFirst);
         if (!isFirst && !IsSnapshot)

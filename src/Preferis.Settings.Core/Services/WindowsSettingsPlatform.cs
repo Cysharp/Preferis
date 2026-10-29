@@ -24,14 +24,18 @@ public sealed class WindowsSettingsPlatform : ISettingsPlatform
     private readonly BrowserProfileEnumerator _profiles = new();
     private readonly WindowsDefaultBrowserRegistrar _registrar;
 
-    public WindowsSettingsPlatform(LocalConfig local)
+    /// <param name="updater">The Velopack updates of an installation (docs/Platform.md §2.1); null outside one.</param>
+    public WindowsSettingsPlatform(LocalConfig local, IAppUpdater? updater = null)
     {
         HomeDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _detector = new WindowsBrowserDetector(local.BrowserOverrides);
         _registrar = new WindowsDefaultBrowserRegistrar(RouterPath ?? Path.Combine(AppContext.BaseDirectory, "Preferis.exe"));
+        Updater = updater;
     }
 
     public HostPlatform Platform => HostPlatform.Windows;
+
+    public IAppUpdater? Updater { get; }
 
     public IBrowserLocator BrowserLocator => _detector;
 

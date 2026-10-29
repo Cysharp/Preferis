@@ -30,6 +30,9 @@ public sealed class MacSettingsPlatform : ISettingsPlatform
 
     public HostPlatform Platform => HostPlatform.MacOS;
 
+    /// <summary>macOS is distributed as a dmg, without an installer that could update it (docs/Platform.md §3.1).</summary>
+    public IAppUpdater? Updater => null;
+
     public IBrowserLocator BrowserLocator => _detector;
 
     public IBrowserProfileEnumerator BrowserProfiles => _profiles;

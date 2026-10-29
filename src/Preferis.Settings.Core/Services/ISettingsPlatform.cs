@@ -53,4 +53,7 @@ public interface ISettingsPlatform
 
     /// <summary>Shows a file or folder in Finder / Explorer.</summary>
     void Reveal(string path);
+
+    /// <summary>In-app updates when an installer manages this installation; null for the portable zip, a local build and macOS.</summary>
+    IAppUpdater? Updater { get; }
 }

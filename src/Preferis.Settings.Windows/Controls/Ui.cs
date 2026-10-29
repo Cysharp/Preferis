@@ -212,6 +212,7 @@ internal static class Ui
         public const string Folder = "\uE838";
         public const string Next = "\uE76C";
         public const string Shield = "\uE83D";
+        public const string Sync = "\uE895";
     }
 }
 

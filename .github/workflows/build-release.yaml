@@ -51,8 +51,9 @@ jobs:
           dotnet-version: |
             10.0.x
             11.0.x
-      # The tests do not depend on the target architecture; one run is enough.
-      - run: dotnet test Preferis.Windows.slnf -c Release
+      # The tests do not depend on the target architecture; one run is enough. The Platform must be named: the solution
+      # lists only x64 and ARM64, and without a choice MSBuild takes ARM64, which the WinUI projects reject on x64 (NETSDK1032).
+      - run: dotnet test Preferis.Windows.slnf -c Release -p:Platform=x64
         if: ${{ matrix.rid == 'win-x64' }}
       # Portable zip and Velopack installer (vpk is a local dotnet tool, dotnet-tools.json).
       - run: dotnet build build/Preferis.Build.proj -t:PackageWindows -p:RuntimeIdentifier=${{ matrix.rid }} -p:Version="$env:VERSION" -p:VelopackRepoUrl="$env:REPO_URL"

@@ -135,7 +135,10 @@ docs/
 
 `Preferis.slnx` はすべてのプロジェクトを含み、OS ごとにソリューションフィルター (`Preferis.MacOS.slnf`,
 `Preferis.Windows.slnf`) でビルド可能なものだけを対象にします (`dotnet test Preferis.MacOS.slnf`)。
-`Preferis.Windows.slnf` は AppKit の 2 つを除き、WinUI 3 のピッカーと設定 UI を含みます (`dotnet test Preferis.Windows.slnf`)。
+`Preferis.Windows.slnf` は AppKit の 2 つを除き、WinUI 3 のピッカーと設定 UI を含みます
+(`dotnet test Preferis.Windows.slnf -p:Platform=x64`)。Windows ではプラットフォームの指定が必要です: ソリューションの
+プラットフォームは x64 と ARM64 だけで、指定しないと MSBuild は ARM64 を選び、WinUI の 2 プロジェクトが
+RID (既定はホストの `win-x64`) と合わずに NETSDK1032 で失敗します。
 これにより Guidelines の「常にビルドできる状態を保つ」を OS ごとに満たします。
 
 NuGet パッケージは [Central Package Management](https://learn.microsoft.com/en-us/nuget/consume-packages/central-package-management)
@@ -174,6 +177,7 @@ build/
   Preferis.Build.proj     MSBuild オーケストレーションプロジェクト。追加ツールのインストール不要
 dotnet-tools.json          ローカルツール: vpk (Velopack CLI)。PackageWindows が `dotnet tool restore` で入れる
 .github/workflows/
+  build-debug.yaml         push / PR ごとのビルドとテストのワークフロー (下記)
   build-release.yaml       ビルド・パッケージ・リリースのワークフロー (下記)
 artifacts/                 出力先 (.gitignore 対象)
   osx-arm64/Preferis.app
@@ -219,7 +223,7 @@ artifacts/                 出力先 (.gitignore 対象)
 | ジョブ | 内容 |
 | --- | --- |
 | `validate-release` | タグの構文と、最新リリースより新しいことの検証。`version` (先頭の `v` を除いたもの) を後続に渡す |
-| `build-windows` (matrix: `win-x64`, `win-arm64`) | `windows-2025` (x64)。arm64 は NativeAOT のクロスコンパイル (イメージに ARM64 の C++ ツールが入っている)。x64 で `dotnet test Preferis.Windows.slnf` を実行し、`PackageWindows` の `release/` フォルダーを成果物 `Preferis-<rid>` にアップロードする。差分パッケージのための `vpk download github` には `GITHUB_TOKEN` を渡す |
+| `build-windows` (matrix: `win-x64`, `win-arm64`) | `windows-2025` (x64)。arm64 は NativeAOT のクロスコンパイル (イメージに ARM64 の C++ ツールが入っている)。x64 で `dotnet test Preferis.Windows.slnf -p:Platform=x64` を実行し、`PackageWindows` の `release/` フォルダーを成果物 `Preferis-<rid>` にアップロードする。差分パッケージのための `vpk download github` には `GITHUB_TOKEN` を渡す |
 | `build-macos` | `macos-26` (Apple Silicon、Xcode 26 の `actool`)。`dotnet workload install macos`、`dotnet test Preferis.MacOS.slnf`、`PackageMacOS`。シークレット `APPLE_CERTIFICATE_P12` / `APPLE_CERTIFICATE_PASSWORD` (Developer ID Application 証明書の .p12 の base64 とパスワード) があれば一時キーチェーンに入れて署名し、さらに `APPLE_NOTARY_KEY` / `APPLE_NOTARY_KEY_ID` / `APPLE_NOTARY_ISSUER_ID` (App Store Connect API キーの .p8 の base64、キー ID、発行者 ID) があれば公証する。無ければ ad-hoc 署名のまま |
 | `create-release` | 成果物をすべて集め、タグを打ってドラフトリリースを作り、`release/` の全ファイルを添付する。dry-run では作ったものを最後に消す。公開 (ドラフトの解除) はリリースノートを確認した人が GitHub 上で行う |
 
@@ -229,6 +233,15 @@ artifacts/                 出力先 (.gitignore 対象)
   利用者に更新が見えます。アプリ内からの更新チェックはまだ組み込んでいません (Platform.md §2.1)。
 - Windows の実行ファイルとインストーラーはコード署名していません (SmartScreen の警告が出る)。`VelopackPackArgs`
   プロパティで `vpk pack` に `--azureTrustedSignFile` などを渡せるようにしてあります。
+
+`.github/workflows/build-debug.yaml` は `main` への push と `main` 向けの PR (と手動実行) で動くビルドとテストの
+ワークフローで、リリースと同じランナー (`windows-2025` の `win-x64` / `win-arm64` matrix、`macos-26`) と同じコマンドを
+使います。Windows x64 と macOS で `dotnet build` / `dotnet test` をソリューションフィルターに対して Debug と Release の
+両方で実行し (Windows は `-p:Platform=x64` 付き)、続けて `PackageWindows` / `PackageMacOS` を `Version` 0.1.0 のまま
+実行して NativeAOT publish とパッケージ作成が通ることを確かめます。差分パッケージの取得 (`VelopackRepoUrl`) と
+Developer ID の署名・公証はリリース側だけです。`release/` フォルダーは成果物 `Preferis-<rid>` として 3 日間残るので、
+PR の変更はリリースを作らずに試せます。同じブランチへの新しい push は実行中のビルドを打ち切ります。最後に
+Cysharp/Actions の `actions-timeline` がジョブのタイムラインをサマリーに出します。
 
 ## 5. Router 高速経路
 
@@ -957,7 +970,7 @@ Windows 対応で追加するのは Platform の Windows 実装、Router の Win
 | M2 | macOS Platform + Router 高速経路: Launch Services 検出、プロファイル列挙、LaunchPlan 実行、既定ブラウザー登録、Apple Event 受信。**`PublishMacOS` ターゲットで ad-hoc 署名済みの `Preferis.app` 一式を生成** | `artifacts/` の `Preferis.app` を既定ブラウザーにし、単一候補のルールで日常利用できる | 完了 (2026-10-01)。`open -a` 経由と argv 経由で Chrome / Edge Dev への振り分けを確認。既定ブラウザー化は `--register` をユーザーが実行して確認する。ピッカー不在時は既定プロファイルへフォールバック。Platform.md §5 に計測値 |
 | M3 | macOS ピッカー (AppKit, ヘルパーバンドル) + 設定 UI (AppKit)。両者を `Preferis.app` に同梱 | macOS で全機能が揃い、設定ファイルを手で編集せずに運用できる | 実装完了、目視確認待ち (2026-10-02)。`Preferis Picker.app` (6.8 MB) と `Preferis Settings.app` (8.7 MB。Avalonia 版 26 MB から AppKit に置き換え) はどちらも AppKit + NativeAOT で、`Contents/Helpers/` に同梱し内側から署名 (`Preferis.app` 全体で 20 MB)。Router 経由でピッカー表示まで 120 ms、「記憶する」、オプトイン履歴、`Preferis.app` を直接開くと設定 UI。テスト 367 件 (Core 221, Platform 35, Settings.Core 111)。描画はウィンドウのキャプチャで確認済みだが、実際のリンククリックからのピッカーの前面表示と設定 UI の手操作は開発者の目視確認が必要。アプリアイコンは 2026-10-23 に追加 (Platform.md §3.1) |
 | M4 | Windows: スパイク (§12 の 6〜9)、Platform の Windows 実装、Router の Windows 経路、WinUI 3 ピッカー、WinUI 3 の設定 UI (`Preferis.Settings.Core` の ViewModel を使う)。**`PublishWindows` ターゲットで exe 一式のフォルダーを生成** | `artifacts/` の `Preferis.exe` を既定ブラウザーにし、M3 と同等の機能が揃う。同一の設定ファイルを両 OS で共有できる | 実装完了、目視確認待ち (2026-10-02)。`dotnet build build/Preferis.Build.proj` で `artifacts/win-x64/Preferis/` (82 MB: Router 4.9 MB、ピッカー 7.6 MB、設定 10 MB と Windows App SDK) を生成。3 つとも NativeAOT。レジストリからのブラウザー検出、HKCU への登録、`--single-argument`、ピッカー (Router 起動から表示まで約 270 ms)、設定 UI (Windows 11 の設定アプリ風、条件は行のエディター)、テストページからの Router 実行を確認。テスト 424 件 (Core 221, Platform 80, Settings.Core 123)。macOS 側の変更 (ViewModel、`RouterProcess`) は Windows ではビルドとテストのみで、AppKit の 2 プロジェクトは macOS での確認が必要。未確認: 既定ブラウザーにしてのリンククリック (前面表示、スパイク 6)、既定のアプリ一覧への表示 (スパイク 8)、起動中ブラウザーへの受け渡し (スパイク 9)、Firefox。アプリアイコンは 2026-10-22 に追加 (Platform.md §2.7) |
-| M5 | リリース: Developer ID 署名と公証、インストーラー (macOS: dmg / Homebrew cask、Windows: zip / winget 等)、ベンチ結果の記録、利用者向けドキュメント | 配布物を第三者が導入できる | 進行中 (2026-10-29)。ビルド・パッケージ・リリースのワークフロー `build-release.yaml` と `PackageWindows` / `PackageMacOS` ターゲット (§4.4) を追加: Windows x64 / arm64 のポータブル zip と Velopack インストーラー、macOS (Apple Silicon) の dmg を作ってドラフトリリースに添付する。Developer ID 署名と公証はシークレットがあれば行う (証明書は未取得)。ローカルで確認したのは Windows x64 の `PackageWindows` (zip、Setup.exe、nupkg、フィード) と 881 件のテストで、arm64 のクロスコンパイルと macOS の dmg / 署名 / 公証はワークフローの初回実行 (dry-run) で確認する。残り: アプリ側の Velopack 統合 (`VelopackApp.Build().Run()`、更新チェック)、Windows のコード署名、winget / Homebrew cask、利用者向けドキュメント、ベンチ結果 |
+| M5 | リリース: Developer ID 署名と公証、インストーラー (macOS: dmg / Homebrew cask、Windows: zip / winget 等)、ベンチ結果の記録、利用者向けドキュメント | 配布物を第三者が導入できる | 進行中 (2026-10-29)。ビルド・パッケージ・リリースのワークフロー `build-release.yaml` と `PackageWindows` / `PackageMacOS` ターゲット (§4.4) を追加: Windows x64 / arm64 のポータブル zip と Velopack インストーラー、macOS (Apple Silicon) の dmg を作ってドラフトリリースに添付する。Developer ID 署名と公証はシークレットがあれば行う (証明書は未取得)。push / PR ごとのビルドとテストは `build-debug.yaml` (2026-10-30) が同じコマンドで回す。ローカルで確認したのは Windows x64 の `PackageWindows` (zip、Setup.exe、nupkg、フィード) と 881 件のテストで、arm64 のクロスコンパイルと macOS の dmg / 署名 / 公証はワークフローの初回実行 (dry-run) で確認する。残り: アプリ側の Velopack 統合 (`VelopackApp.Build().Run()`、更新チェック)、Windows のコード署名、winget / Homebrew cask、利用者向けドキュメント、ベンチ結果 |
 
 M3・M4 の後、UI を英語と日本語の 2 言語にした (§9.4、2026-10-02)。Windows では設定 UI とピッカーを NativeAOT で発行し、
 日本語の表示をスナップショットで確認した。AppKit の 2 プロジェクト (メニューバー、`CFBundleLocalizations`、NSPredicateEditor の

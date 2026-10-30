@@ -12,7 +12,9 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <Version>0.1.0</Version>
-    <Authors>Mayuki Sawatari</Authors>
+    <Authors>Cysharp, Inc.</Authors>
+    <Company>Cysharp, Inc.</Company>
+    <Copyright>Copyright © Cysharp, Inc.</Copyright>
     <Product>Preferis</Product>
   </PropertyGroup>
 

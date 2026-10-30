@@ -15,13 +15,17 @@ Before editing the JSON files directly, make sure Preferis is not running. Other
 
 ### Default path for **config.json**
 
-- Windows: `%APPDATA%\Preferis\config.json`
+- Windows: `%APPDATA%\Cysharp\Preferis\config.json`
 - macOS: `~/Library/Application Support/Preferis/config.json`
 
 ### Default path for **local.json**
 
-- Windows: `%LOCALAPPDATA%\Preferis\local.json`
+- Windows: `%LOCALAPPDATA%\Cysharp\Preferis\local.json`
 - macOS: `~/Library/Application Support/Preferis/local.json`
+
+:::note
+Builds of Preferis from before 2026-10-30 kept these files in `%APPDATA%\Preferis` and `%LOCALAPPDATA%\Preferis` on Windows. The first time a newer version starts, it moves the files to the new locations and removes the old folders. Nothing needs to be done by hand.
+:::
 
 ## Backing up **config.json**
 

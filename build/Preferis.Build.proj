@@ -8,7 +8,15 @@
       dotnet build build/Preferis.Build.proj -t:PublishMacOS -p:RuntimeIdentifier=osx-arm64
       dotnet build build/Preferis.Build.proj -t:PublishMacOS -p:SigningIdentity="Developer ID Application: ..."
       dotnet build build/Preferis.Build.proj -t:PublishWindows -p:RuntimeIdentifier=win-x64
+
+    The release packages (what a GitHub release carries; .github/workflows/build-release.yaml):
+
+      dotnet build build/Preferis.Build.proj -t:PackageWindows -p:RuntimeIdentifier=win-x64 -p:Version=1.2.3
+      dotnet build build/Preferis.Build.proj -t:PackageMacOS -p:RuntimeIdentifier=osx-arm64 -p:Version=1.2.3
   -->
+
+  <!-- The version (and the authors) of the executables; `-p:Version=` on the command line overrides it. -->
+  <Import Project="$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..'))Directory.Build.props" />
 
   <PropertyGroup>
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
@@ -22,8 +30,23 @@
     <BundleDir>$(ArtifactsDir)Preferis.app/</BundleDir>
     <HelpersDir>$(BundleDir)Contents/Helpers/</HelpersDir>
     <WindowsDir>$(ArtifactsDir)Preferis/</WindowsDir>
+    <!-- The files a release carries, and nothing else: the release workflow uploads this folder as it is. -->
+    <ReleaseDir>$(ArtifactsDir)release/</ReleaseDir>
     <!-- "-" is ad-hoc signing for local testing; release builds pass a Developer ID (M5). -->
     <SigningIdentity Condition="'$(SigningIdentity)' == ''">-</SigningIdentity>
+    <!-- Notarization requires the hardened runtime and a secure timestamp; an ad-hoc signature can carry neither. -->
+    <CodesignOptions Condition="'$(SigningIdentity)' != '-'">--options runtime --timestamp</CodesignOptions>
+    <!--
+      CFBundleShortVersionString and CFBundleVersion take period-separated integers only: the numbers of a
+      prerelease such as 1.2.3-beta.1 (the full version stays in the executables, see `Preferis &#45;&#45;version`).
+    -->
+    <BundleVersion>$(Version.Split('-')[0].Split('+')[0])</BundleVersion>
+    <!-- Notarize=true submits the dmg with an App Store Connect API key: NotaryKeyPath (.p8), NotaryKeyId and NotaryIssuerId. -->
+    <Notarize Condition="'$(Notarize)' == ''">false</Notarize>
+    <!-- The GitHub repository whose latest release seeds Velopack's delta package. Empty (local builds) packs without one. -->
+    <VelopackRepoUrl Condition="'$(VelopackRepoUrl)' == ''"></VelopackRepoUrl>
+    <!-- Extra `vpk pack` arguments, such as code signing (&#45;&#45;azureTrustedSignFile, &#45;&#45;signParams). -->
+    <VelopackPackArgs Condition="'$(VelopackPackArgs)' == ''"></VelopackPackArgs>
     <RouterProject>$(RepoRoot)src/Preferis.Router/Preferis.Router.csproj</RouterProject>
     <PickerProject>$(RepoRoot)src/Preferis.Picker.MacOS/Preferis.Picker.MacOS.csproj</PickerProject>
     <SettingsProject>$(RepoRoot)src/Preferis.Settings.MacOS/Preferis.Settings.MacOS.csproj</SettingsProject>
@@ -34,6 +57,13 @@
     <SettingsBuiltBundle>$(RepoRoot)src/Preferis.Settings.MacOS/bin/$(Configuration)/net10.0-macos/$(RuntimeIdentifier)/Preferis Settings.app</SettingsBuiltBundle>
     <!-- The Router bundle's icon, compiled by AppIcon.targets. -->
     <AppIconOutputDir>$(ArtifactsDir)appicon/</AppIconOutputDir>
+    <!-- The disk image (docs/Platform.md §3.1): Preferis.app next to a link to /Applications. -->
+    <DmgStagingDir>$(ArtifactsDir)dmg/</DmgStagingDir>
+    <DmgPath>$(ReleaseDir)Preferis-$(Version)-$(RuntimeIdentifier).dmg</DmgPath>
+    <!-- The portable zip (docs/Platform.md §2.1) and the Velopack packages (installer and update feed). -->
+    <ZipStagingDir>$(ArtifactsDir)zip/</ZipStagingDir>
+    <ZipPath>$(ReleaseDir)Preferis-$(Version)-$(RuntimeIdentifier).zip</ZipPath>
+    <VelopackDir>$(ArtifactsDir)velopack/</VelopackDir>
   </PropertyGroup>
 
   <Import Project="AppIcon.targets" />
@@ -80,6 +110,9 @@
     <!-- Router: the main executable and the only bundle that claims http/https (docs/Platform.md §3.1). -->
     <Copy SourceFiles="$(PublishRoot)Router/Preferis" DestinationFolder="$(BundleDir)Contents/MacOS" />
     <Copy SourceFiles="$(RepoRoot)src/Preferis.Router/macOS/Info.plist" DestinationFolder="$(BundleDir)Contents" />
+    <!-- The checked-in Info.plist carries a placeholder version; the build's is written over it. -->
+    <Exec Command="plutil -replace CFBundleShortVersionString -string &quot;$(BundleVersion)&quot; &quot;$(BundleDir)Contents/Info.plist&quot;" />
+    <Exec Command="plutil -replace CFBundleVersion -string &quot;$(BundleVersion)&quot; &quot;$(BundleDir)Contents/Info.plist&quot;" />
     <Copy SourceFiles="$(AppIconOutputDir)Assets.car;$(AppIconOutputDir)Preferis.icns" DestinationFolder="$(BundleDir)Contents/Resources" />
     <WriteLinesToFile File="$(BundleDir)Contents/PkgInfo" Lines="APPL????" Overwrite="true" />
 
@@ -91,12 +124,39 @@
     <ItemGroup>
       <_NestedLibrary Include="$(HelpersDir)**/*.dylib" />
     </ItemGroup>
-    <Exec Command="codesign --force --sign &quot;$(SigningIdentity)&quot; &quot;%(_NestedLibrary.FullPath)&quot;" />
-    <Exec Command="codesign --force --sign &quot;$(SigningIdentity)&quot; &quot;$(PickerBundle)&quot;" />
-    <Exec Command="codesign --force --sign &quot;$(SigningIdentity)&quot; &quot;$(SettingsBundle)&quot;" />
-    <Exec Command="codesign --force --sign &quot;$(SigningIdentity)&quot; &quot;$(BundleDir)&quot;" />
+    <Exec Command="codesign --force --sign &quot;$(SigningIdentity)&quot; $(CodesignOptions) &quot;%(_NestedLibrary.FullPath)&quot;" />
+    <Exec Command="codesign --force --sign &quot;$(SigningIdentity)&quot; $(CodesignOptions) &quot;$(PickerBundle)&quot;" />
+    <Exec Command="codesign --force --sign &quot;$(SigningIdentity)&quot; $(CodesignOptions) &quot;$(SettingsBundle)&quot;" />
+    <Exec Command="codesign --force --sign &quot;$(SigningIdentity)&quot; $(CodesignOptions) &quot;$(BundleDir)&quot;" />
     <Exec Command="codesign --verify --strict &quot;$(BundleDir)&quot;" />
     <Message Importance="high" Text="Preferis.app: $(BundleDir)" />
+  </Target>
+
+  <!--
+    The macOS release package: Preferis.app in a compressed disk image, signed with the same identity as the bundle.
+    Notarize=true then has Apple notarize the image and staples the ticket to it, so that Gatekeeper accepts it offline.
+  -->
+  <Target Name="PackageMacOS" DependsOnTargets="PublishMacOS" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <RemoveDir Directories="$(DmgStagingDir)" />
+    <MakeDir Directories="$(DmgStagingDir);$(ReleaseDir)" />
+    <Delete Files="$(DmgPath)" />
+    <!-- Without the trailing slash: `cp -R dir/ dest` would copy the bundle's contents, not the bundle. -->
+    <Exec Command="cp -R &quot;$(BundleDir.TrimEnd('/'))&quot; &quot;$(DmgStagingDir)&quot;" />
+    <Exec Command="ln -s /Applications &quot;$(DmgStagingDir)Applications&quot;" />
+    <!-- hdiutil now and then fails with "Resource busy" on a loaded machine (CI); a retry is the usual remedy. -->
+    <Exec Command="for i in 1 2 3; do hdiutil create -volname Preferis -srcfolder &quot;$(DmgStagingDir.TrimEnd('/'))&quot; -ov -format UDZO &quot;$(DmgPath)&quot; &amp;&amp; exit 0; sleep 10; done; exit 1" />
+    <Exec Condition="'$(SigningIdentity)' != '-'" Command="codesign --force --sign &quot;$(SigningIdentity)&quot; --timestamp &quot;$(DmgPath)&quot;" />
+    <Message Importance="high" Text="Release files: $(ReleaseDir)" />
+  </Target>
+
+  <Target Name="NotarizeMacOS" AfterTargets="PackageMacOS" Condition="'$(Notarize)' == 'true'">
+    <Error Condition="'$(SigningIdentity)' == '-'" Text="Notarization needs a Developer ID Application signature: pass SigningIdentity." />
+    <Error Condition="'$(NotaryKeyPath)' == '' or '$(NotaryKeyId)' == '' or '$(NotaryIssuerId)' == ''" Text="Notarize=true needs NotaryKeyPath, NotaryKeyId and NotaryIssuerId (an App Store Connect API key)." />
+    <!-- Notarizing the image covers the bundle inside it; the ticket is stapled to the image. -->
+    <Exec Command="xcrun notarytool submit &quot;$(DmgPath)&quot; --key &quot;$(NotaryKeyPath)&quot; --key-id &quot;$(NotaryKeyId)&quot; --issuer &quot;$(NotaryIssuerId)&quot; --wait" />
+    <Exec Command="xcrun stapler staple &quot;$(DmgPath)&quot;" />
+    <!-- What Gatekeeper will decide when a user opens the image. -->
+    <Exec Command="spctl --assess --type open --context context:primary-signature -v &quot;$(DmgPath)&quot;" />
   </Target>
 
   <!-- The WinUI executables publish self-contained: each brings the Windows App SDK runtime it was built with. -->
@@ -119,6 +179,42 @@
     <Copy SourceFiles="@(_WindowsAppFile)" DestinationFiles="@(_WindowsAppFile->'$(WindowsDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="false" />
     <Error Condition="!Exists('$(WindowsDir)Preferis.Picker.exe') or !Exists('$(WindowsDir)Preferis.Settings.exe')" Text="The WinUI executables were not published." />
     <Message Importance="high" Text="Preferis: $(WindowsDir)" />
+  </Target>
+
+  <!--
+    The Windows release packages (docs/Platform.md §2.1): the folder zipped as the portable distribution, and the
+    Velopack installer with its update feed. Velopack (`vpk`, dotnet-tools.json) gets one channel per architecture,
+    so that an installation only ever updates to its own architecture.
+  -->
+  <Target Name="PackageWindows" DependsOnTargets="PublishWindows" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <ItemGroup>
+      <_WindowsReleaseFile Include="$(WindowsDir)**/*" />
+    </ItemGroup>
+    <RemoveDir Directories="$(ZipStagingDir);$(VelopackDir);$(ReleaseDir)" />
+    <MakeDir Directories="$(ZipStagingDir)Preferis;$(VelopackDir);$(ReleaseDir)" />
+
+    <!-- Portable: the folder inside a Preferis folder, so that extracting next to other downloads stays tidy. -->
+    <Copy SourceFiles="@(_WindowsReleaseFile)" DestinationFiles="@(_WindowsReleaseFile->'$(ZipStagingDir)Preferis/%(RecursiveDir)%(Filename)%(Extension)')" />
+    <ZipDirectory SourceDirectory="$(ZipStagingDir)" DestinationFile="$(ZipPath)" Overwrite="true" />
+
+    <!-- Installer: the previous release's full package, when there is one to fetch, lets vpk add a delta package. -->
+    <Exec Command="dotnet tool restore" WorkingDirectory="$(RepoRoot)" />
+    <Exec Condition="'$(VelopackRepoUrl)' != ''"
+          Command="dotnet vpk --skip-updates --legacyConsole download github --repoUrl &quot;$(VelopackRepoUrl)&quot; --channel $(RuntimeIdentifier) --outputDir &quot;$(VelopackDir.TrimEnd('/'))&quot;"
+          WorkingDirectory="$(RepoRoot)" ContinueOnError="WarnAndContinue" />
+    <!--
+      Preferis.exe does not run VelopackApp yet (and the executables are NativeAOT, which vpk cannot inspect anyway):
+      the install hooks it receives (&#45;&#45;veloapp-install and the like) end in its usage message, which is harmless.
+    -->
+    <Exec Command="dotnet vpk --skip-updates --legacyConsole --yes pack --packId Preferis --packVersion &quot;$(Version)&quot; --packDir &quot;$(WindowsDir.TrimEnd('/'))&quot; --mainExe Preferis.exe --packTitle Preferis --packAuthors &quot;$(Authors)&quot; --channel $(RuntimeIdentifier) --runtime $(RuntimeIdentifier) --icon &quot;$(RepoRoot)src/Preferis.Router/Windows/Preferis.ico&quot; --shortcuts StartMenuRoot --noPortable --outputDir &quot;$(VelopackDir.TrimEnd('/'))&quot; $(VelopackPackArgs)"
+          WorkingDirectory="$(RepoRoot)" />
+
+    <!-- The feed the app reads (releases.<channel>.json) and the packages it names; RELEASES-* and assets.*.json are vpk's own. -->
+    <ItemGroup>
+      <_VelopackReleaseFile Include="$(VelopackDir)*.nupkg;$(VelopackDir)*-Setup.exe;$(VelopackDir)releases.*.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_VelopackReleaseFile)" DestinationFolder="$(ReleaseDir)" />
+    <Message Importance="high" Text="Release files: $(ReleaseDir)" />
   </Target>
 
 </Project>

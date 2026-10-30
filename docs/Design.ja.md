@@ -250,8 +250,10 @@ artifacts/                 出力先 (.gitignore 対象)
 両方で実行し (Windows は `-p:Platform=x64` 付き)、続けて `PackageWindows` / `PackageMacOS` を `Version` 0.1.0 のまま
 実行して NativeAOT publish とパッケージ作成が通ることを確かめます。差分パッケージの取得 (`VelopackRepoUrl`) と
 Developer ID の署名・公証はリリース側だけです。`release/` フォルダーは成果物 `Preferis-<rid>` として 3 日間残るので、
-PR の変更はリリースを作らずに試せます。同じブランチへの新しい push は実行中のビルドを打ち切ります。最後に
-Cysharp/Actions の `actions-timeline` がジョブのタイムラインをサマリーに出します。
+PR の変更はリリースを作らずに試せます。同じブランチへの新しい push は実行中のビルドを打ち切ります。
+MagicOnion が使う Cysharp/Actions の `actions-timeline` は入れていません: タイムラインの取得に使う workflow run API は
+非公開リポジトリでは `GITHUB_TOKEN` に `actions: read` が必要ですが、再利用ワークフロー側がジョブの権限を
+`contents: read` だけに絞っていて呼び出し側から広げられないため、このリポジトリでは失敗します (2026-10-30)。
 
 ## 5. Router 高速経路
 

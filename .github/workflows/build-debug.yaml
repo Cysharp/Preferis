@@ -105,13 +105,3 @@ jobs:
           name: Preferis-osx-arm64
           path: ./artifacts/osx-arm64/release/
           retention-days: 3
-
-  # Gantt chart of the jobs in the run summary; runs even when a build failed.
-  actions-timeline:
-    needs: [build-windows, build-macos]
-    if: ${{ !cancelled() }}
-    permissions:
-      contents: read
-    uses: Cysharp/Actions/.github/workflows/actions-timeline.yaml@main
-    secrets:
-      github-token: ${{ secrets.GITHUB_TOKEN }}

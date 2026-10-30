@@ -317,7 +317,7 @@ public sealed class TestPageOpenTests : IDisposable
     }
 
     [Fact]
-    public async Task Opening_waits_for_an_in_flight_save_after_the_edit_is_undone()
+    public Task Opening_waits_for_an_in_flight_save_after_the_edit_is_undone() => UiThread.RunAsync(async () =>
     {
         var settings = _harness.WithSample().Create();
         var original = settings.Profiles.Profiles[0].Name;
@@ -350,7 +350,7 @@ public sealed class TestPageOpenTests : IDisposable
         Assert.Equal(original, nameWhenOpened);
         Assert.Equal(original, _harness.SavedConfig().Profiles[0].Name);
         Assert.False(settings.HasPendingChanges);
-    }
+    });
 
     [Fact]
     public async Task Edits_that_cannot_be_saved_leave_the_choice_to_open_anyway()

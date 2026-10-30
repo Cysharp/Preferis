@@ -23,24 +23,18 @@ internal static class RouterProcess
         }
 
         var lines = new List<string>();
+        var collecting = true;
         try
         {
             using var process = new Process { StartInfo = info };
-            DataReceivedEventHandler collect = (_, e) =>
-            {
-                if (e.Data is { } line && line.Trim().Length > 0)
-                {
-                    lock (lines)
-                    {
-                        lines.Add(line.Trim());
-                    }
-                }
-            };
-            process.OutputDataReceived += collect;
-            process.ErrorDataReceived += collect;
             process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
+            // Not BeginOutputReadLine: it reads the pipes on the thread pool, and a read blocks its thread until output
+            // arrives, so a browser holding the output would hold two pool threads for as long as it runs, and the Exited
+            // and Drain callbacks below could wait behind them for a free one.
+            foreach (var output in (StreamReader[])[process.StandardOutput, process.StandardError])
+            {
+                new Thread(() => Collect(output)) { IsBackground = true }.Start();
+            }
 
             // WaitForExitAsync also waits for the end of the output; Exited does not.
             var exited = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -52,17 +46,41 @@ internal static class RouterProcess
             }
             await exited.Task.ConfigureAwait(false);
             await Task.Delay(Drain).ConfigureAwait(false);
-            process.CancelOutputRead();
-            process.CancelErrorRead();
 
             lock (lines)
             {
+                collecting = false;
                 return new RouterRunResult(process.ExitCode, [.. lines]);
             }
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
             return new RouterRunResult(2, [L("Could not run Preferis: {0}", ex.Message)]);
+        }
+
+        // Reads to the end even after the result is in, so that a browser writing more never fills the pipe and blocks.
+        void Collect(StreamReader output)
+        {
+            using (output)
+            {
+                try
+                {
+                    while (output.ReadLine() is { } line)
+                    {
+                        lock (lines)
+                        {
+                            if (collecting && line.Trim().Length > 0)
+                            {
+                                lines.Add(line.Trim());
+                            }
+                        }
+                    }
+                }
+                catch (IOException)
+                {
+                    // The pipe broke: there is nothing more to read.
+                }
+            }
         }
     }
 }

@@ -14,12 +14,12 @@ JSON ファイルを直接操作する場合には Preferis が動作中でな�
 ## 設定ファイルのパス
 ### **config.json** のデフォルトパス
 
-- Windows: `%APPDATA%\Preferis\config.json`
+- Windows: `%APPDATA%\Cysharp\Preferis\config.json`
 - macOS: `~/Library/Application Support/Preferis/config.json`
 
 ### **local.json** のデフォルトパス
 
-- Windows: `%LOCALAPPDATA%\Preferis\local.json`
+- Windows: `%LOCALAPPDATA%\Cysharp\Preferis\local.json`
 - macOS: `~/Library/Application Support/Preferis/local.json`
 
 ## **config.json** 設定ファイルのバックアップ

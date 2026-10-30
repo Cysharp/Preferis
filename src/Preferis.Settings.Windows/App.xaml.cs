@@ -29,7 +29,7 @@ public partial class App : Application
     {
         var loader = SettingsConfigLoader.Create();
         SettingsConfigLoader.UseConfiguredLanguage(loader);
-        _settings = new SettingsViewModel(loader, new WindowsSettingsPlatform(loader.LoadLocal()), new WinUIDialogService(() => _window?.Window), new DispatcherSaveScheduler());
+        _settings = new SettingsViewModel(loader, new WindowsSettingsPlatform(loader.LoadLocal(), VelopackUpdater.TryCreate()), new WinUIDialogService(() => _window?.Window), new DispatcherSaveScheduler());
         _window = new SettingsWindow(_settings);
 
         if (Environment.GetEnvironmentVariable("PREFERIS_SETTINGS_SNAPSHOT") is { Length: > 0 } directory)

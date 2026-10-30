@@ -38,6 +38,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         Platform = platform;
         Dialogs = dialogs;
         Browsers = platform.DetectBrowsers();
+        // Restarting for an update exits the process, so the edits go to disk first, as when the window closes.
+        Updates = platform.Updater is { } updater ? new AppUpdateViewModel(updater, CanCloseAsync) : null;
         _session.ModelsReplaced += () => ApplySession(scheduleSave: false);
         ApplySession();
     }
@@ -45,6 +47,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     public ISettingsPlatform Platform { get; }
 
     public IDialogService Dialogs { get; }
+
+    /// <summary>In-app updates, when an installer manages this installation (Velopack on Windows); null otherwise.</summary>
+    public AppUpdateViewModel? Updates { get; }
 
     public ConfigLoader Loader => _session.Loader;
 

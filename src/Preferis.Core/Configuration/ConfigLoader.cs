@@ -32,11 +32,21 @@ public sealed class ConfigLoader : IConfigStore
         _time = time ?? TimeProvider.System;
     }
 
-    public static ConfigLoader ForCurrentMachine() => new(
-        ConfigPaths.ForCurrentPlatform(),
-        PlatformInfo.Current,
-        Environment.GetEnvironmentVariable,
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+    public static ConfigLoader ForCurrentMachine()
+    {
+        if (PlatformInfo.Current == HostPlatform.Windows)
+        {
+            // The folders of versions before 2026-10-30; two directory checks once nothing is left there.
+            ConfigPaths.MoveFromLegacyWindowsFolders(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
+        }
+        return new(
+            ConfigPaths.ForCurrentPlatform(),
+            PlatformInfo.Current,
+            Environment.GetEnvironmentVariable,
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+    }
 
     public ConfigPaths Paths => _paths;
 

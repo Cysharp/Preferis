@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml;
 using Preferis.Core.Localization;
 using Preferis.Core.Picker;
 using Preferis.Platform;
+using Preferis.Platform.Windows;
 
 namespace Preferis.Picker.Windows;
 
@@ -22,6 +23,8 @@ internal static partial class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // Velopack's start-up code (docs/Platform.md §2.1); a downloaded update waits for the settings, not for a link.
+        VelopackInstallation.Start(applyPendingUpdate: false);
         Mark("main");
         string json;
         try

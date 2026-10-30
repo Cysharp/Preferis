@@ -1,0 +1,176 @@
+name: Build-Release
+
+# Builds, packages and releases the application (docs/Design.md §4.4):
+#   Windows (x64, arm64)  portable zip + Velopack installer, updatable from the GitHub release (docs/Platform.md §2.1)
+#   macOS (Apple Silicon) Preferis.app in a dmg (docs/Platform.md §3.1)
+# The release is created as a draft with the packages attached; publish it on GitHub once the notes are reviewed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "tag: git tag you want create. (sample 1.0.0)"
+        required: true
+      dry-run:
+        description: "dry-run: true will never create release."
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  validate-release:
+    permissions:
+      contents: read
+    uses: Cysharp/Actions/.github/workflows/validate-release.yaml@main
+    with:
+      tag: ${{ inputs.tag }}
+
+  build-windows:
+    needs: [validate-release]
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [win-x64, win-arm64]
+    # x64 image with the ARM64 C++ build tools: NativeAOT cross-compiles between Windows architectures.
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      VERSION: ${{ needs.validate-release.outputs.version }}
+    steps:
+      - uses: Cysharp/Actions/.github/actions/checkout@main
+        with:
+          ref: ${{ github.sha }}
+      - uses: Cysharp/Actions/.github/actions/setup-dotnet@main
+        with:
+          dotnet-version: |
+            10.0.x
+            11.0.x
+      # The tests do not depend on the target architecture; one run is enough. The Platform must be named: the solution
+      # lists only x64 and ARM64, and without a choice MSBuild takes ARM64, which the WinUI projects reject on x64 (NETSDK1032).
+      - run: dotnet test Preferis.Windows.slnf -c Release -p:Platform=x64
+        if: ${{ matrix.rid == 'win-x64' }}
+      # Portable zip and Velopack installer (vpk is a local dotnet tool, dotnet-tools.json).
+      - run: dotnet build build/Preferis.Build.proj -t:PackageWindows -p:RuntimeIdentifier=${{ matrix.rid }} -p:Version="$env:VERSION" -p:VelopackRepoUrl="$env:REPO_URL"
+        env:
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          # vpk download github reads the previous release for the delta package; the repository may be private.
+          VPK_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: Cysharp/Actions/.github/actions/upload-artifact@main
+        with:
+          name: Preferis-${{ matrix.rid }}
+          path: ./artifacts/${{ matrix.rid }}/release/
+          retention-days: 1
+
+  build-macos:
+    needs: [validate-release]
+    permissions:
+      contents: read
+    # Apple Silicon, with the Xcode 26 actool that compiles the app icon (build/AppIcon.targets).
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      VERSION: ${{ needs.validate-release.outputs.version }}
+      # Developer ID signing and notarization run only when these secrets are set; otherwise the bundle is ad-hoc signed.
+      APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+    steps:
+      - uses: Cysharp/Actions/.github/actions/checkout@main
+        with:
+          ref: ${{ github.sha }}
+      - uses: Cysharp/Actions/.github/actions/setup-dotnet@main
+        with:
+          dotnet-version: |
+            10.0.x
+            11.0.x
+      # The picker and the settings are Microsoft.macOS (AppKit) projects.
+      - run: dotnet workload install macos
+      # .NET for macOS accepts only the Xcode (major.minor) it was built with, and the image's default Xcode is newer than
+      # the one the pack installed for net10.0-macos wants; select the matching Xcode among those on the image. Packs
+      # built before July 2026 (dotnet/macios#26097) expose the version only as the private _RecommendedXcodeVersion.
+      - run: |
+          project=src/Preferis.Picker.MacOS/Preferis.Picker.MacOS.csproj
+          version="$(dotnet msbuild "$project" -getProperty:RecommendedXcodeVersion)"
+          if [[ -z "$version" ]]; then
+            version="$(dotnet msbuild "$project" -getProperty:_RecommendedXcodeVersion)"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+ ]]; then
+            echo "::error::Could not read the Xcode version that .NET for macOS requires (got '$version')."
+            exit 1
+          fi
+          version="${BASH_REMATCH[0]}"
+          # Xcode_<major.minor>.app is a symlink; xcodebuild cannot locate the SDKs through it (actions/runner-images#13743).
+          xcode="$(realpath "/Applications/Xcode_${version}.app")"
+          echo "Required Xcode: $version -> $xcode"
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+      - run: dotnet test Preferis.MacOS.slnf -c Release
+      - name: Import the Developer ID certificate
+        id: signing
+        if: ${{ env.APPLE_CERTIFICATE_P12 != '' }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(uuidgen)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$APPLE_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm "$RUNNER_TEMP/certificate.p12"
+          # Lets codesign use the key without a UI prompt.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity="$(security find-identity -v -p codesigning "$keychain" | grep -o '"Developer ID Application: [^"]*"' | head -n 1 | tr -d '"')"
+          if [[ -z "$identity" ]]; then
+            echo "::error::The certificate holds no Developer ID Application identity."
+            exit 1
+          fi
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+      - name: Write the notary API key
+        if: ${{ steps.signing.outcome == 'success' && env.APPLE_NOTARY_KEY != '' }}
+        run: echo "$APPLE_NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+      # Preferis.app in a dmg; signed and notarized when the secrets allow it.
+      - run: |
+          args=(-p:RuntimeIdentifier=osx-arm64 -p:Version="$VERSION")
+          if [[ -n "$SIGNING_IDENTITY" ]]; then
+            args+=(-p:SigningIdentity="$SIGNING_IDENTITY")
+          fi
+          if [[ -n "$SIGNING_IDENTITY" && -n "$APPLE_NOTARY_KEY" ]]; then
+            args+=(-p:Notarize=true -p:NotaryKeyPath="$RUNNER_TEMP/AuthKey.p8" -p:NotaryKeyId="$APPLE_NOTARY_KEY_ID" -p:NotaryIssuerId="$APPLE_NOTARY_ISSUER_ID")
+          fi
+          dotnet build build/Preferis.Build.proj -t:PackageMacOS "${args[@]}"
+        env:
+          SIGNING_IDENTITY: ${{ steps.signing.outputs.identity }}
+      - uses: Cysharp/Actions/.github/actions/upload-artifact@main
+        with:
+          name: Preferis-osx-arm64
+          path: ./artifacts/osx-arm64/release/
+          retention-days: 1
+      - name: Remove the signing keychain
+        if: ${{ always() && steps.signing.outcome == 'success' }}
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db"
+
+  # release
+  create-release:
+    needs: [validate-release, build-windows, build-macos]
+    permissions:
+      contents: write
+    uses: Cysharp/Actions/.github/workflows/create-release.yaml@main
+    with:
+      commit-id: ${{ github.sha }}
+      dry-run: ${{ inputs.dry-run }}
+      tag: ${{ needs.validate-release.outputs.tag }}
+      release-upload: true
+      # One artifact per runtime, downloaded into a folder of its name; the whole folder is the release's files.
+      release-asset-path: |
+        ./Preferis-win-x64/*
+        ./Preferis-win-arm64/*
+        ./Preferis-osx-arm64/*

@@ -15,12 +15,12 @@ Before editing the JSON files directly, make sure Preferis is not running. Other
 
 ### Default path for **config.json**
 
-- Windows: `%APPDATA%\Preferis\config.json`
+- Windows: `%APPDATA%\Cysharp\Preferis\config.json`
 - macOS: `~/Library/Application Support/Preferis/config.json`
 
 ### Default path for **local.json**
 
-- Windows: `%LOCALAPPDATA%\Preferis\local.json`
+- Windows: `%LOCALAPPDATA%\Cysharp\Preferis\local.json`
 - macOS: `~/Library/Application Support/Preferis/local.json`
 
 ## Backing up **config.json**

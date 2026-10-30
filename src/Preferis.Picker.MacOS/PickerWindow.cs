@@ -310,7 +310,9 @@ internal sealed class PickerWindow
             spring.Mass = 1;
             spring.Stiffness = 320;
             spring.Damping = 24;
-            spring.Duration = spring.SettlingDuration;
+            // The binding marks SettlingDuration as macOS 14+ (CA1416); older systems get about the value it computes for
+            // these parameters (decay rate 12/s settles below 0.1 % in roughly 0.6 s).
+            spring.Duration = OperatingSystem.IsMacOSVersionAtLeast(14) ? spring.SettlingDuration : 0.6;
             layer.AddAnimation(spring, "appear");
         }
     }

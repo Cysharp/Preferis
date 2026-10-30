@@ -11,6 +11,18 @@
     <ProjectReference Include="../Preferis.Core/Preferis.Core.csproj" />
   </ItemGroup>
 
+  <!--
+    Velopack installs and updates Preferis on Windows (docs/Platform.md §2.1). It is referenced only when building on
+    Windows, which is the only place the executables that call it are built (NativeAOT builds for the host OS): the
+    macOS bundle, a dmg, never carries it. VELOPACK marks the code that uses it (Windows/VelopackInstallation.cs).
+  -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <PackageReference Include="Velopack" />
+  </ItemGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <DefineConstants>$(DefineConstants);VELOPACK</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Preferis.Platform.Tests" />
   </ItemGroup>

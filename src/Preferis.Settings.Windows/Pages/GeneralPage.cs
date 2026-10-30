@@ -13,15 +13,19 @@ internal sealed class GeneralPage : IPageView
 
     public GeneralPage(GeneralPageViewModel page)
     {
-        var version = Form.Footer($"Preferis {page.Version}");
-        version.Margin = new Thickness(1, 28, 0, 0);
-        View = Form.Page(
-            DefaultBrowser(page),
-            ConfigurationFile(page),
-            Picker(page),
-            Language(page),
-            ThisPC(page),
-            version);
+        var sections = new List<UIElement> { DefaultBrowser(page), ConfigurationFile(page), Picker(page), Language(page), ThisPC(page) };
+        if (page.Settings.Updates is { } updates)
+        {
+            sections.Add(Updates(updates));
+        }
+        else
+        {
+            // Without an installer the version has no card to sit in; it ends the page as a footer.
+            var version = Form.Footer($"Preferis {page.Version}");
+            version.Margin = new Thickness(1, 28, 0, 0);
+            sections.Add(version);
+        }
+        View = Form.Page([.. sections]);
     }
 
     public UIElement View { get; }
@@ -124,5 +128,35 @@ internal sealed class GeneralPage : IPageView
             Form.Card(L("Log level"), Ui.HStack(8, level, logs)),
             Form.Card(L("Keep a history of opened links"), history, L("Records the URL of every link Preferis receives. The Test page shows the history to route them again.")),
             Form.Card(L("Links to keep"), size));
+    }
+
+    /// <summary>The installed version with the step the update is at: check, download, restart (one button at a time).</summary>
+    private UIElement Updates(AppUpdateViewModel updates)
+    {
+        var status = Ui.Wrapping("");
+        var checking = new ProgressRing { Width = 20, Height = 20 };
+        var progress = new ProgressBar { Width = 120, Minimum = 0, Maximum = 100 };
+        var check = Ui.Button(L("Check for Updates"));
+        _bindings.Command(check, updates.CheckCommand);
+        var download = Ui.AccentButton(L("Download"));
+        _bindings.Command(download, updates.DownloadCommand);
+        var restart = Ui.AccentButton(L("Restart to Update"));
+        _bindings.Command(restart, updates.RestartCommand);
+        _bindings.Observe(updates, () =>
+        {
+            status.Text = updates.StatusText;
+            Ui.Show(status, updates.StatusText.Length > 0);
+            checking.IsActive = updates.State == AppUpdateState.Checking;
+            Ui.Show(checking, checking.IsActive);
+            progress.Value = updates.DownloadPercent;
+            Ui.Show(progress, updates.State == AppUpdateState.Downloading);
+            Ui.Show(check, updates.State is not (AppUpdateState.Available or AppUpdateState.Downloading or AppUpdateState.Ready));
+            Ui.Show(download, updates.State == AppUpdateState.Available);
+            Ui.Show(restart, updates.State == AppUpdateState.Ready);
+        }, nameof(AppUpdateViewModel.State), nameof(AppUpdateViewModel.StatusText), nameof(AppUpdateViewModel.DownloadPercent));
+
+        return Form.Section(L("Updates"),
+            L("Updates come from the releases of Preferis on GitHub and replace the files of this installation. The settings and the registration as the default browser stay as they are."),
+            Form.Card(Ui.Label($"Preferis {updates.CurrentVersion}"), Ui.HStack(8, checking, progress, check, download, restart), status, Ui.Glyph(Ui.Glyphs.Sync, 20, Ui.Brush("TextFillColorSecondaryBrush"))));
     }
 }

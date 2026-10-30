@@ -13,10 +13,11 @@ public class ConfigPathsTests
 
         var paths = ConfigPaths.ForWindows(local, roaming);
 
-        Assert.Equal(Path.Combine(local, "Preferis", "local.json"), paths.LocalConfigPath);
-        Assert.Equal(Path.Combine(roaming, "Preferis", "config.json"), paths.DefaultConfigPath);
-        Assert.Equal(Path.Combine(local, "Preferis", "Logs"), paths.LogDirectory);
-        Assert.Equal(Path.Combine(local, "Preferis", "config.lock"), paths.LockPath);
+        // Company\Product, as Windows has it; %LocalAppData%\Preferis alone is the installer's (docs/Platform.md §2.1).
+        Assert.Equal(Path.Combine(local, "Cysharp", "Preferis", "local.json"), paths.LocalConfigPath);
+        Assert.Equal(Path.Combine(roaming, "Cysharp", "Preferis", "config.json"), paths.DefaultConfigPath);
+        Assert.Equal(Path.Combine(local, "Cysharp", "Preferis", "Logs"), paths.LogDirectory);
+        Assert.Equal(Path.Combine(local, "Cysharp", "Preferis", "config.lock"), paths.LockPath);
     }
 
     [Fact]

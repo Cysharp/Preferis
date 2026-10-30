@@ -86,6 +86,54 @@ Windows は `WindowsSettingsPlatform`、§2.8)。
 に生成します (Design.md §4.4)。ローカルテストではそのフォルダーの `Preferis.exe --register` を実行し、
 再ビルド後も同じパスに出力されることで登録を維持します。
 
+配布 (Design.md §4.4、`PackageWindows` ターゲット): ポータブル版はこのフォルダーを `Preferis/` ごと zip にしたもので、
+展開した場所の `Preferis.exe --register` (または設定 UI) で登録します。インストーラーは Velopack
+(`Preferis-win-x64-Setup.exe` / `Preferis-win-arm64-Setup.exe`) で、管理者権限なしに `%LocalAppData%\Preferis\` に入れます。
+
+```
+%LocalAppData%\Preferis\
+  Preferis.exe              Velopack のスタブ。current\Preferis.exe を起動する (スタートメニューのショートカットの先)
+  Update.exe                Velopack の更新ツール
+  current\                  上記のフォルダー一式。更新では中身だけが置き換わり、パスは変わらない
+```
+
+- このフォルダーはインストーラーだけのもの: Setup は「空でないフォルダー = インストール済み」としか判定せず (マニフェストの有無は
+  見ない)、Repair と更新とアンインストールはフォルダーごと置き換える・消す。Preferis 自身のファイルは `%LocalAppData%\Cysharp\Preferis`
+  (`local.json`、ログ) と `%AppData%\Cysharp\Preferis` (`config.json`) にあり (Configuration.md §1)、重ならない。2026-10-30 より前は
+  `%LocalAppData%\Preferis` に `local.json` を置いていたため、ポータブル版や開発ビルドを使った PC では Setup が「Preferis is already
+  installed」と誤検出した。その時代のファイルは起動時に新しいフォルダーへ移す (`ConfigPaths.MoveFromLegacyWindowsFolders`)。
+- 登録 (§2.2) は Router が自分の実際のパス (`current\Preferis.exe`) で行うため、更新後も有効なまま。
+- アーキテクチャごとに Velopack のチャネル (`win-x64` / `win-arm64`) を分け、x64 のインストールが arm64 の更新を拾わないようにする。
+  `--runtime` でアーキテクチャを宣言するので Setup はそのアーキテクチャのネイティブ実行ファイルになり、合わないマシンでは
+  インストールを断る。
+- Velopack はインストール・更新・アンインストールの時に `Preferis.exe --veloapp-install <version>` のようなフックの引数で
+  Router を起動し、30 秒以内の終了を期待する。3 つの実行ファイルは `Main` の先頭で `VelopackInstallation.Start`
+  (`Preferis.Platform.Windows`) を呼ぶ。これは親フォルダーに `Update.exe` がある時 (Velopack でインストールされている時)
+  だけ `VelopackApp.Build().Run()` を実行し、フックの引数ならそこで終了する。ポータブル zip や `artifacts/` のローカルビルドでは
+  何もしない: Velopack の `Run()` はインストールされていなくてもインストール先を探し `%LocalAppData%\velopack\` にログを
+  書くので、その分をリンクのクリックに乗せない。インストール配置では `Run()` (マニフェストの読み込み、`packages\` の確認、
+  ログ) が Router の起動 1 回あたり約 2 ms (`Preferis --version` の中央値 11.7 → 13.9 ms、2026-10-29)。Velopack のライブラリ
+  (MIT、AOT 互換) は `Preferis.Platform` が Windows でビルドする時だけ参照し (`VELOPACK` シンボル)、macOS のバンドルには
+  入らない。
+- ダウンロード済みで未適用の更新があれば `Run()` はそれを適用して Preferis を再起動する (`SetAutoApplyOnStartup`)。これを
+  許すのは設定 UI だけで、Router とピッカーは許さない (リンクを開くのを更新で待たせない。§5.2)。
+- アプリ内からの更新チェックは設定 UI の一般ページの「更新」カード (§2.8): `UpdateManager` + `GithubSource`
+  (`https://github.com/Cysharp/Preferis`。チャネルは指定せず、インストールのマニフェストにあるビルド時の `win-x64` / `win-arm64`
+  を使う) で、最新の公開リリースの `releases.<channel>.json` を読み (`CheckForUpdatesAsync`)、「ダウンロード」
+  (`DownloadUpdatesAsync`、進捗バー)、「再起動して更新」(保存待ちの編集を書いてから `ApplyUpdatesAndRestart`。`Update.exe` が
+  `current\` を置き換えて `Preferis.exe` を引数なしで起動するので、設定 UI が開き直す) の順。カードは Velopack でインストール
+  されている時だけ出す (`ISettingsPlatform.Updater` が null なら出さない: ポータブル zip、ローカルビルド、macOS)。
+- リポジトリが非公開の間は GitHub の API がトークン無しの読み取りを拒むため、更新の確認は「404 (Not Found)」で失敗する。公開
+  すれば動く (認証なしの制限は IP あたり 60 回/時)。
+- Velopack のライブラリのログは `%LocalAppData%\velopack\velopack_Preferis.log`。
+- インストールせずにインストール配置を試すには、`artifacts/win-x64/Preferis/` を任意の `current\` にコピーし、
+  `Preferis-<version>-win-x64-full.nupkg` の `lib/app/sq.version` (マニフェスト) を `current\` に置き、親フォルダーに
+  `Update.exe` という名前のファイル (中身は何でもよい。更新を適用しない限り実行されない) を置く。`current\Preferis.exe
+  --veloapp-install 0.0.1` が何も出さずに 0 で終了し、`current\Preferis.Settings.exe` に「更新」カードが出る
+  (`PREFERIS_SETTINGS_SNAPSHOT` の `general-end.png`、§2.8)。
+- インストールの最後に `Preferis.exe` が引数なしで起動され (設定 UI が開く)、ショートカットはスタートメニューにだけ作る。
+- Setup.exe と実行ファイルはコード署名していない (SmartScreen の警告)。署名は `VelopackPackArgs` で `vpk pack` に渡す。
+
 ビルドの注意:
 
 - NativeAOT のリンクに Visual Studio の C++ ツール (「C++ によるデスクトップ開発」) が要る。ILCompiler は
@@ -348,6 +396,10 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
   プロファイルとルールの編集画面は幅 490 DIP ほどなので、入力欄のカードは折り返す。
 - 「+」のメニューは検出したブラウザーごとのサブメニュー (ブラウザー自体と各ブラウザープロファイル)。条件は
   `ConditionEditor` (Design.md §9.1)。幅が狭いときはパターンの入力欄を次の行に回す。
+- 一般ページの最後は、Velopack でインストールされていれば「更新」カード (バージョン、状態の行、「更新を確認」→「ダウンロード」
+  (進捗バー) →「再起動して更新」のボタンを 1 つずつ)、そうでなければバージョンのフッター (§2.1 の配布)。ViewModel は
+  `AppUpdateViewModel` で、ページではなくセッション (`SettingsViewModel.Updates`) が持つ: Router の「記憶する」で `config.json`
+  が読み直されるとページの ViewModel は作り直されるが、進行中のダウンロードは失われない。
 - 自分と同じフォルダーに `Preferis.exe` があれば、それを登録先として状態を表示し、「既定にする」では
   `Preferis.exe --register` を実行する。無ければ (デバッグ実行) 登録できない旨を表示する。テストページの「Open」も
   `Preferis.exe <url>` を実行し、Router の終了までの出力を表示する (`RouterProcess`)。
@@ -366,7 +418,7 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
 - `PREFERIS_SETTINGS_SNAPSHOT=<フォルダー>` で各ページ (とルール・プロファイル画面のいくつかの状態) を PNG に書き出して
   終了する。ウィンドウはアクティブにせず画面外に出し、`RenderTargetBitmap` で描く (Mica の代わりにテーマの背景色)。
   大きさは通常の起動と同じ既定サイズ (DIP)。`PREFERIS_SETTINGS_SNAPSHOT_WIDTH=<DIP>` で幅を変えて狭いウィンドウを確かめられる
-  (最小幅は 900)。長いプロファイルの編集画面は末尾までスクロールした状態も書き出す。`PREFERIS_SETTINGS_SNAPSHOT_URL`、
+  (最小幅は 900)。長いプロファイルの編集画面と一般ページ (末尾に「更新」カードかバージョン) は末尾までスクロールした状態も書き出す。`PREFERIS_SETTINGS_SNAPSHOT_URL`、
   `PREFERIS_SETTINGS_SNAPSHOT_APPEARANCE=dark`、`PREFERIS_SETTINGS_SNAPSHOT_CONFIG` は macOS と同じ。チェックボックスの
   チェックは `RenderTargetBitmap` では「−」に写る (実際の状態は UI Automation で確認した)。PNG の名前はページ (`general`、
   `profiles` など) で表示言語によらない。日本語の画面は `PREFERIS_SETTINGS_SNAPSHOT_CONFIG` の `config.json` に
@@ -380,13 +432,13 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
 オブジェクトの違いを検出できないため別に実行する。
 
 設定がまだない使い捨ての Windows VM で、同じフォルダーの `Reordering.config.json` を
-`%APPDATA%/Preferis/config.json` に配置する (`local.json` もない状態)。通常権限でビルド済みの
+`%APPDATA%/Cysharp/Preferis/config.json` に配置する (`local.json` もない状態)。通常権限でビルド済みの
 `Preferis.Settings.exe` を開き、VM の対話セッションから次を実行する。管理者権限で起動したアプリでは WinUI のドラッグを検証できない。
 
 ```powershell
 ./test/Preferis.Settings.Windows.Tests/Reordering.ps1 `
     -AppPid (Get-Process Preferis.Settings).Id `
-    -ConfigPath "$env:APPDATA/Preferis/config.json"
+    -ConfigPath "$env:APPDATA/Cysharp/Preferis/config.json"
 ```
 
 ## 3. macOS
@@ -423,8 +475,9 @@ Preferis.app/
   として一式を生成し、ローカルテストはこれを `open` して Launch Services に登録して行う。
   NativeAOT ではユニバーサルバイナリが作れない既知の問題があるため、arm64 と x64 を別々に publish する。
 - 署名は内側から順に行い、`--deep` は使わない: ヘルパー内の `.dylib` → 各ヘルパー → `Preferis.app`。最後に
-  `codesign --verify --strict` で確かめる。開発中は ad-hoc 署名 (`codesign -s -`)、リリース (M5) では
-  `SigningIdentity` プロパティで Developer ID に切り替え、公証 (と hardened runtime) を追加する。
+  `codesign --verify --strict` で確かめる。開発中は ad-hoc 署名 (`codesign -s -`)。リリースは `SigningIdentity`
+  プロパティで Developer ID に切り替え、その時は公証の要件である hardened runtime とタイムスタンプ (`--options runtime
+  --timestamp`) を付ける。公証は `PackageMacOS` の `Notarize=true` (下記「配布」)。
 - 同じ bundle id のバンドルが複数登録されていると URL の配送先が不定になるため、テスト中は `artifacts/`
   の 1 つだけを登録しておく。古い登録は `lsregister -u <path>` で解除する。
 - アプリアイコンは `src/Preferis.Router/macOS/Preferis.icon` (Icon Composer のファイル。星・窓・窓のタイトルバーの
@@ -474,8 +527,19 @@ Router の `Info.plist` の要点:
 ヘルパーの `Info.plist`: ピッカーは一瞬だけ表示されるダイアログなので `LSUIElement=true` とし、
 ウィンドウ表示時に `NSApp.activate` で前面化する。設定 UI は通常のアプリとして `LSUIElement=false`。
 
-配布: Developer ID による署名と公証 (notarization) がないと Gatekeeper に止められます。
-これはリリース段階 (M5) の作業であり、開発中の ad-hoc 署名でもローカルでは問題なく動作します。
+配布 (Design.md §4.4、`PackageMacOS` ターゲット): `Preferis.app` と `/Applications` へのリンクを入れた圧縮 dmg
+(`Preferis-<version>-osx-arm64.dmg`) を `hdiutil` で作り、`SigningIdentity` が ad-hoc 以外ならバンドルと同じ identity で
+dmg にも署名します。Developer ID による署名と公証 (notarization) がないと Gatekeeper に止められます。開発中の ad-hoc
+署名でもローカルでは問題なく動作します。
+
+- 公証は `-p:Notarize=true` と App Store Connect API キー (`NotaryKeyPath` = .p8、`NotaryKeyId`、`NotaryIssuerId`) で、
+  `xcrun notarytool submit --wait` に dmg を送り (中のバンドルも対象になる)、`xcrun stapler staple` でチケットを dmg に
+  添付し、`spctl --assess --type open` で Gatekeeper の判定を確かめる。
+- リリースワークフローはシークレット `APPLE_CERTIFICATE_P12` (Developer ID Application 証明書の .p12 を base64 にしたもの) と
+  `APPLE_CERTIFICATE_PASSWORD` があれば一時キーチェーンに証明書を入れて `security find-identity` で identity を見つけ、
+  `APPLE_NOTARY_KEY` (.p8 の base64)、`APPLE_NOTARY_KEY_ID`、`APPLE_NOTARY_ISSUER_ID` があれば公証する。無ければ ad-hoc 署名の
+  dmg を作る (配布には向かない)。
+- `hdiutil create` は負荷の高いマシンで "Resource busy" になることがあるため 3 回まで試す。
 
 ### 3.2 既定ブラウザーとして登録する
 

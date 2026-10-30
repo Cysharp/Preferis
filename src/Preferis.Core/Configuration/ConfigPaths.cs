@@ -27,67 +27,6 @@ public sealed record ConfigPaths(string LocalConfigPath, string DefaultConfigPat
         Path.Combine(roamingAppData, Company, AppFolder, "config.json"),
         Path.Combine(localAppData, Company, AppFolder, "Logs"));
 
-    /// <summary>
-    /// Moves what Preferis kept in <c>%LocalAppData%\Preferis</c> and <c>%AppData%\Preferis</c> until 2026-10-30 into
-    /// the folders of <see cref="ForWindows"/>, once, and removes the old folders. The old local folder is the one the
-    /// installer owns: files left in it made Setup take Preferis for already installed, and its Repair deleted them.
-    /// A file that already exists at the new place stays where it is, and so does one that cannot be moved (open in
-    /// another process), for the next start to try again. Never throws: starting Preferis must not depend on this.
-    /// </summary>
-    public static void MoveFromLegacyWindowsFolders(string localAppData, string roamingAppData)
-    {
-        MoveFolder(Path.Combine(localAppData, AppFolder), Path.Combine(localAppData, Company, AppFolder));
-        MoveFolder(Path.Combine(roamingAppData, AppFolder), Path.Combine(roamingAppData, Company, AppFolder));
-    }
-
-    private static void MoveFolder(string oldFolder, string newFolder)
-    {
-        if (!Directory.Exists(oldFolder))
-        {
-            return;
-        }
-        try
-        {
-            foreach (var entry in Directory.EnumerateFileSystemEntries(oldFolder).ToList())
-            {
-                var name = Path.GetFileName(entry);
-                var target = Path.Combine(newFolder, name);
-                try
-                {
-                    // The lock file is empty and made on demand; a temp file of an interrupted atomic write is nothing to keep.
-                    if (string.Equals(name, "config.lock", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
-                    {
-                        File.Delete(entry);
-                    }
-                    else if (!File.Exists(target) && !Directory.Exists(target))
-                    {
-                        Directory.CreateDirectory(newFolder);
-                        if (Directory.Exists(entry))
-                        {
-                            Directory.Move(entry, target);
-                        }
-                        else
-                        {
-                            File.Move(entry, target);
-                        }
-                    }
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    // Left for the next start.
-                }
-            }
-            if (!Directory.EnumerateFileSystemEntries(oldFolder).Any())
-            {
-                Directory.Delete(oldFolder);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // The folder could not be read or removed; the files that moved are in place either way.
-        }
-    }
-
     public static ConfigPaths ForMacOS(string homeDirectory)
     {
         var support = Path.Combine(homeDirectory, "Library", "Application Support", AppFolder);

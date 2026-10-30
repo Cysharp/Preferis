@@ -101,7 +101,8 @@ Windows は `WindowsSettingsPlatform`、§2.8)。
   見ない)、Repair と更新とアンインストールはフォルダーごと置き換える・消す。Preferis 自身のファイルは `%LocalAppData%\Cysharp\Preferis`
   (`local.json`、ログ) と `%AppData%\Cysharp\Preferis` (`config.json`) にあり (Configuration.md §1)、重ならない。2026-10-30 より前は
   `%LocalAppData%\Preferis` に `local.json` を置いていたため、ポータブル版や開発ビルドを使った PC では Setup が「Preferis is already
-  installed」と誤検出した。その時代のファイルは起動時に新しいフォルダーへ移す (`ConfigPaths.MoveFromLegacyWindowsFolders`)。
+  installed」と誤検出した。その時代のファイルは移さない (リリース前で移すべきデータがなく、このフォルダーの中身を移すと
+  `Update.exe` や `current\` まで動かしてインストールを壊す。Configuration.md §1)。残っていれば手で消す。
 - 登録 (§2.2) は Router が自分の実際のパス (`current\Preferis.exe`) で行うため、更新後も有効なまま。
 - アーキテクチャごとに Velopack のチャネル (`win-x64` / `win-arm64`) を分け、x64 のインストールが arm64 の更新を拾わないようにする。
   `--runtime` でアーキテクチャを宣言するので Setup はそのアーキテクチャのネイティブ実行ファイルになり、合わないマシンでは

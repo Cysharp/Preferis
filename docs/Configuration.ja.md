@@ -11,8 +11,15 @@ Preferis の設定は 2 つの JSON ファイルに分かれます。
 
 | OS | `local.json` の場所 (固定) | `config.json` の既定の場所 |
 | --- | --- | --- |
-| Windows | `%LOCALAPPDATA%\Preferis\local.json` | `%APPDATA%\Preferis\config.json` |
+| Windows | `%LOCALAPPDATA%\Cysharp\Preferis\local.json` | `%APPDATA%\Cysharp\Preferis\config.json` |
 | macOS | `~/Library/Application Support/Preferis/local.json` | `~/Library/Application Support/Preferis/config.json` |
+
+Windows は「会社名\製品名」の慣習に従います。2026-10-30 より前は `%LOCALAPPDATA%\Preferis` と `%APPDATA%\Preferis` でしたが、
+前者はインストーラー (Velopack) がプログラムを置くフォルダーそのものであり、インストーラーはそのフォルダーを丸ごと自分のものとして
+扱います (空でなければ「インストール済み」と判定し、再インストールで消す。Platform.md §2.1)。起動時に古いフォルダーがあれば、
+中のファイル (`local.json`、ログ、`config.json`、`config.old.json`) を新しいフォルダーに移して古いフォルダーを消します
+(`ConfigPaths.MoveFromLegacyWindowsFolders`)。移動先に同名のファイルが既にあるものと、他のプロセスが開いていて動かせない
+ものはそのまま残し、次の起動でもう一度試します。
 
 `local.json` の `configPath` が設定されていればそちらを `config.json` として読みます
 (例: OneDrive や Google Drive 配下)。シンボリックリンクはクラウドストレージとの相性が悪いため、
@@ -40,7 +47,7 @@ Preferis の設定は 2 つの JSON ファイルに分かれます。
 - 「Move To…」はロックの中で読み直した `config.json` が読めなくなっていれば (同期クライアントが壊れたコピーを持ち込んだ
   など) 移動しない。読めないファイルは既定の設定として表示されるため、そのまま移すと既定の設定を書き出して元のファイルを
   消すことになる。
-- ロックは `local.json` と同じフォルダーの `config.lock` (Windows: `%LOCALAPPDATA%\Preferis\config.lock`、macOS:
+- ロックは `local.json` と同じフォルダーの `config.lock` (Windows: `%LOCALAPPDATA%\Cysharp\Preferis\config.lock`、macOS:
   `~/Library/Application Support/Preferis/config.lock`)。`config.json` の隣に置かないのは、クラウドストレージに置いた
   場合にロックファイルが同期されるだけで、他のマシンにとっては意味がないため。ファイルは空で、消さずに残す。
 - ロックは `config.lock` を他から開けない形で開いて取る (OS ごとの仕組みは Platform.md §1)。プロセスが終われば OS が

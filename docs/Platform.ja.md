@@ -97,6 +97,11 @@ Windows は `WindowsSettingsPlatform`、§2.8)。
   current\                  上記のフォルダー一式。更新では中身だけが置き換わり、パスは変わらない
 ```
 
+- このフォルダーはインストーラーだけのもの: Setup は「空でないフォルダー = インストール済み」としか判定せず (マニフェストの有無は
+  見ない)、Repair と更新とアンインストールはフォルダーごと置き換える・消す。Preferis 自身のファイルは `%LocalAppData%\Cysharp\Preferis`
+  (`local.json`、ログ) と `%AppData%\Cysharp\Preferis` (`config.json`) にあり (Configuration.md §1)、重ならない。2026-10-30 より前は
+  `%LocalAppData%\Preferis` に `local.json` を置いていたため、ポータブル版や開発ビルドを使った PC では Setup が「Preferis is already
+  installed」と誤検出した。その時代のファイルは起動時に新しいフォルダーへ移す (`ConfigPaths.MoveFromLegacyWindowsFolders`)。
 - 登録 (§2.2) は Router が自分の実際のパス (`current\Preferis.exe`) で行うため、更新後も有効なまま。
 - アーキテクチャごとに Velopack のチャネル (`win-x64` / `win-arm64`) を分け、x64 のインストールが arm64 の更新を拾わないようにする。
   `--runtime` でアーキテクチャを宣言するので Setup はそのアーキテクチャのネイティブ実行ファイルになり、合わないマシンでは
@@ -427,13 +432,13 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
 オブジェクトの違いを検出できないため別に実行する。
 
 設定がまだない使い捨ての Windows VM で、同じフォルダーの `Reordering.config.json` を
-`%APPDATA%/Preferis/config.json` に配置する (`local.json` もない状態)。通常権限でビルド済みの
+`%APPDATA%/Cysharp/Preferis/config.json` に配置する (`local.json` もない状態)。通常権限でビルド済みの
 `Preferis.Settings.exe` を開き、VM の対話セッションから次を実行する。管理者権限で起動したアプリでは WinUI のドラッグを検証できない。
 
 ```powershell
 ./test/Preferis.Settings.Windows.Tests/Reordering.ps1 `
     -AppPid (Get-Process Preferis.Settings).Id `
-    -ConfigPath "$env:APPDATA/Preferis/config.json"
+    -ConfigPath "$env:APPDATA/Cysharp/Preferis/config.json"
 ```
 
 ## 3. macOS

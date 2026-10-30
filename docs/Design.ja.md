@@ -211,6 +211,9 @@ artifacts/                 出力先 (.gitignore 対象)
   実行ファイルのバージョン情報と `Preferis --version`、Velopack のパッケージ名、Router の `Info.plist`
   (`CFBundleShortVersionString` / `CFBundleVersion` は `1.2.3-beta.1` の数字部分 `1.2.3`) に入ります。
   `Preferis.Build.proj` は SDK 形式ではないので `Directory.Build.props` を明示的に読み込みます。
+- 作者と会社 (`Authors` / `Company`) は `Cysharp, Inc.`、著作権表示 (`Copyright`) は `Copyright © Cysharp, Inc.` で、
+  同じく `Directory.Build.props` にあります。Windows の実行ファイルのバージョン情報 (会社名、著作権) と
+  Velopack のパッケージの作者 (`--packAuthors`、インストール済みアプリの一覧の発行元) に入ります。
 - Windows のインストーラーに [Velopack](https://velopack.io/) (MIT) を使うのは、管理者権限なしの `%LocalAppData%` への
   インストール、GitHub Release をそのまま更新フィードにできること、差分更新、.NET の NativeAOT と相性がよいこと
   (`vpk` はパッケージングだけで、アプリ側のライブラリも AOT 互換) のためです。`vpk` はローカルツール

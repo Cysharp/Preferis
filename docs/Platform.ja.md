@@ -140,7 +140,10 @@ Windows は `WindowsSettingsPlatform`、§2.8)。
 - NativeAOT のリンクに Visual Studio の C++ ツール (「C++ によるデスクトップ開発」) が要る。ILCompiler は
   `%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe` でそれを探すが、Git Bash から `dotnet` を起動すると
   括弧を含む環境変数 `ProgramFiles(x86)` が子に渡らず、「'vswhere.exe' is not recognized」でリンクが失敗する。PowerShell か
-  コマンドプロンプトから実行する。
+  コマンドプロンプトから実行する。環境変数 `NoDefaultCurrentDirectoryInExePath` が設定されている環境 (Claude Code など) でも
+  同じエラーになる: Visual Studio 18 の `VsDevCmd.bat` は Installer フォルダーに `pushd` して `vswhere.exe` を名前だけで
+  呼ぶが、この変数があると cmd はカレントフォルダーの実行ファイルを探さない。`%ProgramFiles(x86)%\Microsoft Visual Studio\Installer`
+  を PATH に足すと通る (2026-10-31)。
 - WinUI のプロジェクトには `EnableMsixTooling=true` が要る (非パッケージでも)。無いと publish に `<名前>.pri` が入らず、
   コントロールが Fluent のスタイルを失う (microsoft/WindowsAppSDK#3451)。
 - .NET 11 RC2 の NativeAOT publish は参照解決より先に XAML をコンパイルして WMC1007 になるため、WinUI の 2 プロジェクトで
@@ -778,6 +781,26 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 計測結果は本書末尾に記録し、Design.md §5.2 の目標値と比較します。
 
 ## 5. 計測記録
+
+### 2026-10-31 スパイク 10: Windows の送信元アプリの判定 (`spikes/SourceApp`)
+
+環境: Windows 11 Pro (10.0.26200), x64, .NET 10.0.401, NativeAOT。`spikes/SourceApp/measure.ps1` を 3 回と、改修前の
+ビルドで 2 回実行した。独自スキーム `preferis-probe:` のハンドラーにしたプローブを、ストア版 PowerShell 7 (MSIX
+パッケージ) から各経路で起動した。前面には Edge のウィンドウがあった。
+
+| 経路 | 親プロセスのチェーン | 推定 |
+| --- | --- | --- |
+| `Start-Process` (ShellExecuteEx) | pwsh.exe (呼び出し元) → … | 呼び出し元 (5/5) |
+| `cmd /c start "" <url>` | cmd.exe が終了済み (4/5)。1 回はスナップショットに残っていて、そこから pwsh.exe へたどれた | 不明 (4/5) |
+| `rundll32 url.dll,FileProtocolHandler <url>` | rundll32.exe が終了済み | 不明 (5/5) |
+| `explorer.exe <url>` | explorer.exe (この時に起動された別プロセス) → svchost.exe → services.exe | 仲介プロセスのため不明 (5/5) |
+| Windows PowerShell 5.1 から `Windows.System.Launcher.LaunchUriAsync` | powershell.exe (呼び出し元) → … | 呼び出し元 (5/5) |
+
+- プローブが前面ウィンドウを読むのはプロセス起動から 17〜43 ms 後で、親のチェーンを調べるのはその直後。
+  `cmd /c start` と `rundll32` は、ハンドラーを起動した直後に終了するため、ほとんど間に合わない。
+- MSIX パッケージの pwsh.exe が親でも、プローブ自身はパッケージの ID を持たなかった (`GetCurrentPackageFullName` が失敗)。
+- 前面ウィンドウはどの経路でも Edge だった (起動元とは無関係)。リンクをクリックした場合の前面は未確認。
+- svchost.exe、services.exe、wininit.exe は通常のユーザーからは開けない (名前と親の ID はスナップショットから分かる)。
 
 ### 2026-10-03 設定 UI: 1,000 条件のルールの編集 (Design.md §9.1)
 

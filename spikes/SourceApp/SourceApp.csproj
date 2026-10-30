@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- A GUI program: a console window would appear, and take the foreground, before Main could read it. -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RuntimeIdentifier>$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <!-- NativeAOT like the Router, so that the probe reads the foreground as soon after the click as the Router would. -->
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>Preferis.Spikes.SourceApp</RootNamespace>
+    <AssemblyName>SourceApp</AssemblyName>
+    <!-- Spike code: no XML docs. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Output: artifacts/spikes/SourceApp/ (gitignored). The log and forward.txt are written next to the executable. -->
+    <PublishDir>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', '..', 'artifacts', 'spikes', 'SourceApp'))</PublishDir>
+  </PropertyGroup>
+
+</Project>

@@ -902,7 +902,7 @@ macOS:
 
 Windows:
 
-Windows のスパイクは使い捨てのコードではなく、M4 の製品コード (`artifacts/win-x64/Preferis/`) で行った。
+Windows のスパイク 6〜9 は使い捨てのコードではなく、M4 の製品コード (`artifacts/win-x64/Preferis/`) で行った。
 
 6. **子プロセスのピッカーへのフォーカス移譲** — `AllowSetForegroundWindow` によりピッカーが前面に来るか。
    **結果 (2026-10-02, 一部)**: Router はピッカーの起動直後にそのプロセス ID で `AllowSetForegroundWindow` を呼び、ピッカーは
@@ -923,13 +923,24 @@ Windows のスパイクは使い捨てのコードではなく、M4 の製品コ
    **結果 (2026-10-02, 未確認)**: 利用中のブラウザーにウィンドウを開くため実施していない。手元には Edge と Edge Dev がある。
    Chromium のプロセスシングルトンは Windows でも同じ方式 (引数を起動中のプロセスに渡して終了) なので、macOS と同じ結果を
    見込んでいる。
+10. **送信元アプリの判定 (Windows)** — macOS の Apple Event と違い、Windows は URL ハンドラーにコマンドラインしか渡さない。
+    残る手がかり (親プロセスのチェーン、起動直後の前面ウィンドウ) で、URL を開いたアプリをどこまで判定できるか。
+    **結果 (2026-10-31, 一部, `spikes/SourceApp`)**: シェルの起動経路はスクリプトで計測した (Platform.md §5)。
+    ShellExecuteEx と WinRT の `Launcher.LaunchUriAsync` は、呼び出したプロセスが親になった (各 5 回すべて)。呼び出し元が
+    MSIX パッケージのアプリ (ストア版 PowerShell) でも親はそのアプリで、起動されたハンドラーはパッケージの ID を引き継がない。
+    `cmd /c start` と `rundll32 url.dll` を挟むと、中継プロセスはハンドラーの起動直後に終了する。ハンドラーが調べる時点
+    (起動から約 20〜40 ms) には消えていて、チェーンをたどれない (cmd は 5 回中 1 回だけ間に合った、rundll32 は 0 回)。
+    `explorer.exe <url>` は、COM で起動されたエクスプローラーが親になり、送信元は分からない。
+    前面ウィンドウは、スクリプトからの起動では起動元と無関係 (その時に前面にあったウィンドウ) になる。
+    未確認: 実際のアプリでのリンクのクリック (Slack、新しい Teams、新しい Outlook、クラシック Outlook、VS Code、
+    Windows Terminal)。`SourceApp.exe --register-browser` で既定のブラウザーにして開発者が確認する (spikes/README.md)。
 
 ユーザー判断が必要な事項:
 
 - 配布形態の残り: winget と Homebrew cask への登録、Apple Developer ID と Windows のコード署名証明書の取得
   (zip + Velopack インストーラーと dmg は決定済み、§4.4。署名と公証はシークレットを置けば動く)
 - Windows で `.html` 等のファイル関連付けも登録するか (既定は URL のみ)
-- 送信元アプリケーション (どのアプリが URL を開いたか) を条件に加えるか (将来拡張)
+- 送信元アプリケーション (どのアプリが URL を開いたか) を条件に加えるか (将来拡張。Windows での実現性はスパイク 10)
 
 ## 13. 決定事項の記録
 

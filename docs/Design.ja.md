@@ -224,7 +224,7 @@ artifacts/                 出力先 (.gitignore 対象)
 | --- | --- |
 | `validate-release` | タグの構文と、最新リリースより新しいことの検証。`version` (先頭の `v` を除いたもの) を後続に渡す |
 | `build-windows` (matrix: `win-x64`, `win-arm64`) | `windows-2025` (x64)。arm64 は NativeAOT のクロスコンパイル (イメージに ARM64 の C++ ツールが入っている)。x64 で `dotnet test Preferis.Windows.slnf -p:Platform=x64` を実行し、`PackageWindows` の `release/` フォルダーを成果物 `Preferis-<rid>` にアップロードする。差分パッケージのための `vpk download github` には `GITHUB_TOKEN` を渡す |
-| `build-macos` | `macos-26` (Apple Silicon、Xcode 26 の `actool`)。`dotnet workload install macos`、`dotnet test Preferis.MacOS.slnf`、`PackageMacOS`。シークレット `APPLE_CERTIFICATE_P12` / `APPLE_CERTIFICATE_PASSWORD` (Developer ID Application 証明書の .p12 の base64 とパスワード) があれば一時キーチェーンに入れて署名し、さらに `APPLE_NOTARY_KEY` / `APPLE_NOTARY_KEY_ID` / `APPLE_NOTARY_ISSUER_ID` (App Store Connect API キーの .p8 の base64、キー ID、発行者 ID) があれば公証する。無ければ ad-hoc 署名のまま |
+| `build-macos` | `macos-26` (Apple Silicon、Xcode 26 の `actool`)。`dotnet workload install macos`、パックが要求する Xcode への切り替え (下記)、`dotnet test Preferis.MacOS.slnf`、`PackageMacOS`。シークレット `APPLE_CERTIFICATE_P12` / `APPLE_CERTIFICATE_PASSWORD` (Developer ID Application 証明書の .p12 の base64 とパスワード) があれば一時キーチェーンに入れて署名し、さらに `APPLE_NOTARY_KEY` / `APPLE_NOTARY_KEY_ID` / `APPLE_NOTARY_ISSUER_ID` (App Store Connect API キーの .p8 の base64、キー ID、発行者 ID) があれば公証する。無ければ ad-hoc 署名のまま |
 | `create-release` | 成果物をすべて集め、タグを打ってドラフトリリースを作り、`release/` の全ファイルを添付する。dry-run では作ったものを最後に消す。公開 (ドラフトの解除) はリリースノートを確認した人が GitHub 上で行う |
 
 - 実行ファイルの NativeAOT publish は `-p:Version` だけで済むため、`update-packagejson` でバージョンをコミットする
@@ -233,6 +233,12 @@ artifacts/                 出力先 (.gitignore 対象)
   利用者に更新が見えます。アプリ内からの更新チェックはまだ組み込んでいません (Platform.md §2.1)。
 - Windows の実行ファイルとインストーラーはコード署名していません (SmartScreen の警告が出る)。`VelopackPackArgs`
   プロパティで `vpk pack` に `--azureTrustedSignFile` などを渡せるようにしてあります。
+- .NET for macOS は、ビルド時の Xcode の major.minor がパックの `RecommendedXcodeVersion` と一致しないとエラー (E0191)
+  にします。`macos-26` イメージの既定の Xcode (26.6) は、.NET 11 RC の SDK が `net10.0-macos` 向けに入れるパック
+  (26.0.x、Xcode 26.0 を要求) より新しいため、macOS ジョブは `dotnet msbuild -getProperty:RecommendedXcodeVersion` で
+  要求バージョンを読み、イメージに同梱されている `/Applications/Xcode_<major.minor>.app` を `xcode-select` で選びます
+  (`setup-dotnet` の `11.0.x` は RC のビルドごとに動くので、固定せずに追従させる)。検査を `ValidateXcodeVersion=false`
+  で止める手はサポート外なので使いません。
 
 `.github/workflows/build-debug.yaml` は `main` への push と `main` 向けの PR (と手動実行) で動くビルドとテストの
 ワークフローで、リリースと同じランナー (`windows-2025` の `win-x64` / `win-arm64` matrix、`macos-26`) と同じコマンドを

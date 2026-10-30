@@ -93,6 +93,13 @@ jobs:
             11.0.x
       # The picker and the settings are Microsoft.macOS (AppKit) projects.
       - run: dotnet workload install macos
+      # .NET for macOS accepts only the Xcode (major.minor) it was built with, and the image's default Xcode is newer than
+      # the one the pack installed for net10.0-macos wants; select the matching Xcode among those on the image.
+      - run: |
+          version="$(dotnet msbuild src/Preferis.Picker.MacOS/Preferis.Picker.MacOS.csproj -getProperty:RecommendedXcodeVersion -p:ValidateXcodeVersion=false)"
+          echo "RecommendedXcodeVersion=$version"
+          sudo xcode-select -s "/Applications/Xcode_${version}.app"
+          xcodebuild -version
       - run: dotnet test Preferis.MacOS.slnf -c Release
       - name: Import the Developer ID certificate
         id: signing

@@ -173,8 +173,9 @@ public sealed class ConcurrentSaveTests : IDisposable
 
         public Background(Func<Task> action) => _task = Task.Run(action);
 
-        public void Wait(TimeSpan timeout)
-            => Task.WhenAny(_task, Task.Delay(timeout)).GetAwaiter().GetResult();
+        // Not Task.Delay: its timer fires on a thread pool thread, which a busy test run may not have free for seconds,
+        // and the other participant's lock wait then times out before this pause ends.
+        public void Wait(TimeSpan timeout) => SpinWait.SpinUntil(() => _task.IsCompleted, timeout);
 
         public Task FinishAsync() => _task;
     }

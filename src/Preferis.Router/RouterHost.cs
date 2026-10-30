@@ -207,7 +207,8 @@ internal sealed class RouterHost
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         if (!RoutingUrl.TryParse(input, out var url))
         {
-            Log.Write(LogLevel.Error, $"Not an absolute URL or a rooted file path: {input}");
+            // Not necessarily URL-shaped, so the log would not find it in the message to mask it.
+            Log.Write(LogLevel.Error, $"Not an absolute URL or a rooted file path: {UrlRedaction.Redact(input)}");
             return HandleOutcome.Failed;
         }
 

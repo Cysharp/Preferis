@@ -237,7 +237,9 @@ artifacts/                 出力先 (.gitignore 対象)
   にします。`macos-26` イメージの既定の Xcode (26.6) は、.NET 11 RC の SDK が `net10.0-macos` 向けに入れるパック
   (26.0.x、Xcode 26.0 を要求) より新しいため、macOS ジョブは `dotnet msbuild -getProperty:RecommendedXcodeVersion` で
   要求バージョンを読み、イメージに同梱されている `/Applications/Xcode_<major.minor>.app` を `xcode-select` で選びます
-  (`setup-dotnet` の `11.0.x` は RC のビルドごとに動くので、固定せずに追従させる)。公開プロパティ
+  (`setup-dotnet` の `11.0.x` は RC のビルドごとに動くので、固定せずに追従させる)。このパスはシンボリックリンクで、
+  リンク経由だと `xcodebuild` が SDK を見つけられない (actions/runner-images#13743) ため、`realpath` で実体
+  (`Xcode_26.0.1.app` など) に解決してから選びます。公開プロパティ
   `RecommendedXcodeVersion` は 2026-07 以降のパックにしかなく (dotnet/macios#26097)、26.0.x のパックは非公開の
   `_RecommendedXcodeVersion` だけを持つので、空ならそちらを読みます。検査を `ValidateXcodeVersion=false`
   で止める手はサポート外なので使いません。

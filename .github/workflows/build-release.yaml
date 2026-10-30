@@ -107,8 +107,10 @@ jobs:
             exit 1
           fi
           version="${BASH_REMATCH[0]}"
-          echo "Required Xcode: $version"
-          sudo xcode-select -s "/Applications/Xcode_${version}.app"
+          # Xcode_<major.minor>.app is a symlink; xcodebuild cannot locate the SDKs through it (actions/runner-images#13743).
+          xcode="$(realpath "/Applications/Xcode_${version}.app")"
+          echo "Required Xcode: $version -> $xcode"
+          sudo xcode-select -s "$xcode"
           xcodebuild -version
       - run: dotnet test Preferis.MacOS.slnf -c Release
       - name: Import the Developer ID certificate

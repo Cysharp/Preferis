@@ -22,10 +22,6 @@ JSON ファイルを直接操作する場合には Preferis が動作中でな�
 - Windows: `%LOCALAPPDATA%\Cysharp\Preferis\local.json`
 - macOS: `~/Library/Application Support/Preferis/local.json`
 
-:::note
-2026-10-30 より前のビルドの Preferis は、Windows ではこれらのファイルを `%APPDATA%\Preferis` と `%LOCALAPPDATA%\Preferis` に保存していました。新しいバージョンは初回起動時にファイルを新しい場所へ移動し、古いフォルダーを削除します。手作業は必要ありません。
-:::
-
 ## **config.json** 設定ファイルのバックアップ
 
 config.json ファイルは最後に編集されてから24時間が経過すると自動的に1世代バックアップされます。

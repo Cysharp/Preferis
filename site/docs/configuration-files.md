@@ -23,10 +23,6 @@ Before editing the JSON files directly, make sure Preferis is not running. Other
 - Windows: `%LOCALAPPDATA%\Cysharp\Preferis\local.json`
 - macOS: `~/Library/Application Support/Preferis/local.json`
 
-:::note
-Builds of Preferis from before 2026-10-30 kept these files in `%APPDATA%\Preferis` and `%LOCALAPPDATA%\Preferis` on Windows. The first time a newer version starts, it moves the files to the new locations and removes the old folders. Nothing needs to be done by hand.
-:::
-
 ## Backing up **config.json**
 
 Preferis automatically keeps one backup of `config.json` once 24 hours have passed since it was last edited.

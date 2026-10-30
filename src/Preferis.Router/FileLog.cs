@@ -1,10 +1,12 @@
 using Preferis.Core.Hosting;
+using Preferis.Core.Routing;
 
 namespace Preferis.Router;
 
 /// <summary>
 /// Appends to <c>router.log</c> in the local log directory. Off by default except for errors; the level comes from
 /// <c>local.json</c> and <c>PREFERIS_TRACE=1</c> forces everything. Errors in logging itself are swallowed.
+/// URLs in errors have their user info, query and fragment masked (<see cref="UrlRedaction"/>).
 /// </summary>
 internal sealed class FileLog : IRoutingLog
 {
@@ -28,6 +30,12 @@ internal sealed class FileLog : IRoutingLog
 
     public void Write(LogLevel level, string message)
     {
+        if (level == LogLevel.Error)
+        {
+            // Errors are written unless logging is off, so a token in a URL would stay on disk even with the history
+            // off. Here rather than where each error is written: an exception's text may name the URL too.
+            message = UrlRedaction.RedactUrls(message);
+        }
         if (_echoToStderr && level >= LogLevel.Info)
         {
             Console.Error.WriteLine($"[{level}] {message}");

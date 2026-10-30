@@ -8,6 +8,10 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
+        // The installer's hooks (--veloapp-install <version> and the like, docs/Platform.md §2.1) end here. A downloaded
+        // update is installed by the settings, never on a link click.
+        VelopackInstallation.Start(applyPendingUpdate: false);
+
         // Launch Services passes no arguments; URLs arrive as Apple Events (docs/Design.md §5.3).
         var launchedByLaunchServices = OperatingSystem.IsMacOS() && MacUrlActivationSource.IsLaunchedByLaunchServices;
         var urls = args.Where(a => !a.StartsWith("-psn_", StringComparison.Ordinal)).ToList();

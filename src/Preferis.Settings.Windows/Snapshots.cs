@@ -58,13 +58,11 @@ internal static class Snapshots
             settings.Profiles.SelectedProfile = settings.Profiles.Profiles.ElementAtOrDefault(2) ?? settings.Profiles.SelectedProfile;
         }));
         // The end of the long profile editor: this computer's target and the fallback.
-        steps.Add(("profiles-third-end", () =>
-        {
-            foreach (var viewer in Descendants(window.Root).OfType<ScrollViewer>().Where(v => v.ScrollableHeight > 0))
-            {
-                viewer.ChangeView(null, viewer.ScrollableHeight, null, disableAnimation: true);
-            }
-        }));
+        steps.Add(("profiles-third-end", () => ScrollToEnd(window.Root)));
+        // The end of the general page: the updates card of an installation, or the version (a page is laid out one step
+        // after it is selected, so the scroll is a step of its own).
+        steps.Add(("general", () => settings.SelectedPage = settings.General));
+        steps.Add(("general-end", () => ScrollToEnd(window.Root)));
 
         var root = window.Root;
         root.Background = Ui.Brush("SolidBackgroundFillColorBaseBrush");
@@ -101,6 +99,14 @@ internal static class Snapshots
             timer.Start();
         };
         timer.Start();
+    }
+
+    private static void ScrollToEnd(DependencyObject root)
+    {
+        foreach (var viewer in Descendants(root).OfType<ScrollViewer>().Where(v => v.ScrollableHeight > 0))
+        {
+            viewer.ChangeView(null, viewer.ScrollableHeight, null, disableAnimation: true);
+        }
     }
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)

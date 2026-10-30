@@ -203,8 +203,8 @@
           Command="dotnet vpk --skip-updates --legacyConsole download github --repoUrl &quot;$(VelopackRepoUrl)&quot; --channel $(RuntimeIdentifier) --outputDir &quot;$(VelopackDir.TrimEnd('/'))&quot;"
           WorkingDirectory="$(RepoRoot)" ContinueOnError="WarnAndContinue" />
     <!--
-      Preferis.exe does not run VelopackApp yet (and the executables are NativeAOT, which vpk cannot inspect anyway):
-      the install hooks it receives (&#45;&#45;veloapp-install and the like) end in its usage message, which is harmless.
+      The executables run Velopack's start-up code (VelopackInstallation.Start), so the hooks the installer sends
+      (&#45;&#45;veloapp-install and the like) exit at once. vpk cannot see that in a NativeAOT executable and may warn.
     -->
     <Exec Command="dotnet vpk --skip-updates --legacyConsole --yes pack --packId Preferis --packVersion &quot;$(Version)&quot; --packDir &quot;$(WindowsDir.TrimEnd('/'))&quot; --mainExe Preferis.exe --packTitle Preferis --packAuthors &quot;$(Authors)&quot; --channel $(RuntimeIdentifier) --runtime $(RuntimeIdentifier) --icon &quot;$(RepoRoot)src/Preferis.Router/Windows/Preferis.ico&quot; --shortcuts StartMenuRoot --noPortable --outputDir &quot;$(VelopackDir.TrimEnd('/'))&quot; $(VelopackPackArgs)"
           WorkingDirectory="$(RepoRoot)" />

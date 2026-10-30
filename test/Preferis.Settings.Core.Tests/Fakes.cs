@@ -31,6 +31,9 @@ internal sealed class FakeSettingsPlatform : ISettingsPlatform
 
     public HostPlatform Platform { get; set; } = HostPlatform.MacOS;
 
+    /// <summary>Null, as on macOS and for the portable zip, unless a test installs one.</summary>
+    public IAppUpdater? Updater { get; set; }
+
     public IBrowserLocator BrowserLocator => new Locator(this);
 
     public IBrowserProfileEnumerator BrowserProfiles => new Enumerator(this);
@@ -111,6 +114,58 @@ internal sealed class FakeSettingsPlatform : ISettingsPlatform
     {
         public IReadOnlyList<BrowserProfileInfo>? Enumerate(DetectedBrowser browser) => platform.Browsers.FirstOrDefault(b => b.Browser.Id == browser.Id)?.Profiles;
     }
+}
+
+/// <summary>The installer's updates: what the next check finds, and how a download goes.</summary>
+internal sealed class FakeAppUpdater : IAppUpdater
+{
+    public string CurrentVersion { get; set; } = "1.0.0";
+
+    /// <summary>What checking finds; null is "up to date".</summary>
+    public AppUpdate? Available { get; set; }
+
+    public Exception? CheckError { get; set; }
+
+    public Exception? DownloadError { get; set; }
+
+    /// <summary>Holds the check until the test completes it, for what is shown meanwhile.</summary>
+    public TaskCompletionSource? CheckGate { get; set; }
+
+    /// <summary>The percentages a download reports before it completes.</summary>
+    public int[] DownloadSteps { get; set; } = [];
+
+    public int Checks { get; private set; }
+
+    public List<string> Downloaded { get; } = [];
+
+    /// <summary>The version handed to the installer, or null while Preferis keeps running.</summary>
+    public string? Applied { get; private set; }
+
+    public async Task<AppUpdate?> CheckAsync()
+    {
+        Checks++;
+        if (CheckGate is { } gate)
+        {
+            await gate.Task;
+        }
+        if (CheckError is { } error)
+        {
+            throw error;
+        }
+        return Available;
+    }
+
+    public Task DownloadAsync(AppUpdate update, Action<int> progress)
+    {
+        Downloaded.Add(update.Version);
+        foreach (var step in DownloadSteps)
+        {
+            progress(step);
+        }
+        return DownloadError is { } error ? Task.FromException(error) : Task.CompletedTask;
+    }
+
+    public void ApplyAndRestart(AppUpdate update) => Applied = update.Version;
 }
 
 internal sealed class FakeDialogs : IDialogService

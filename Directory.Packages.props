@@ -11,6 +11,8 @@
     <!-- WinUI 2.3.9 names InteractiveExperiences 2.1.8, which was never published; pin the next one (NU1603). -->
     <PackageVersion Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.9" />
     <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.9" />
+    <!-- The library side of the Windows installer; the same version as the vpk tool in dotnet-tools.json. -->
+    <PackageVersion Include="Velopack" Version="1.2.161" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>

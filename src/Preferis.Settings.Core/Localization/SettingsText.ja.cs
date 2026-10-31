@@ -271,6 +271,8 @@ public static partial class SettingsText
         { "{0} conditions", "{0} 個の条件" },
         { "host", "ホスト" },
         { "url", "URL" },
+        { "app ID", "アプリ ID" },
+        { "app path", "アプリのパス" },
         { "{0} is {1}", "{0}が {1} と等しい" },
         { "{0} matches {1}", "{0}が {1} に一致" },
         { "{0} starts with {1}", "{0}が {1} で始まる" },

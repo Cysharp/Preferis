@@ -11,7 +11,8 @@ namespace Preferis.Router;
 /// </summary>
 internal static class DryRunCommand
 {
-    public static int Run(string input, string? configPathOverride, TextWriter output)
+    /// <param name="source">The app to route the URL as if it had opened it (<c>--app-id</c>, <c>--app-path</c>).</param>
+    public static int Run(string input, string? configPathOverride, SourceApp? source, TextWriter output)
     {
         if (!RoutingUrl.TryParse(input, out var url))
         {
@@ -28,11 +29,12 @@ internal static class DryRunCommand
         output.WriteLine($"HostPlatform: {PlatformInfo.Current}");
         output.WriteLine($"URL:      {url.AbsoluteUri}");
         output.WriteLine($"Host:     {url.Host}{(url.IdnHost != url.Host ? $" ({url.IdnHost})" : "")}");
+        output.WriteLine($"App:      {(source is null ? "unknown" : $"id {source.Id ?? "unknown"}, path {source.Path ?? "unknown"}")}");
         output.WriteLine();
 
         // This machine's targets in place of the shared ones, as the Router routes (docs/Design.md §7.4).
         var config = LocalProfileTargets.Apply(loaded.Config, loaded.Local);
-        var result = new RoutingEngine(config).Route(url);
+        var result = new RoutingEngine(config).Route(url, source);
 
         output.WriteLine("Trace:");
         foreach (var entry in result.Trace)

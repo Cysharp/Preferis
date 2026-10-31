@@ -83,6 +83,24 @@ public sealed class UrlCondition : PatternCondition
 }
 
 /// <summary>
+/// Matches against the id of the application that opened the URL: the bundle id on macOS, the application user model id
+/// (AUMID) of a packaged app on Windows. Always case insensitive. Never matches when the app or its id is unknown.
+/// </summary>
+public sealed class AppIdCondition : PatternCondition
+{
+    public override string Type => "appId";
+}
+
+/// <summary>
+/// Matches against the path of the application that opened the URL: the <c>.app</c> bundle on macOS, the executable on
+/// Windows. Always case insensitive. Never matches when the app or its path is unknown.
+/// </summary>
+public sealed class AppPathCondition : PatternCondition
+{
+    public override string Type => "appPath";
+}
+
+/// <summary>
 /// A condition whose <c>type</c> this version does not understand. Never matches, and is written back
 /// verbatim so that a newer Preferis sharing the file keeps its rule.
 /// </summary>

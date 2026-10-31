@@ -160,7 +160,7 @@ Platform 層は単一プロジェクトとし、`OperatingSystem.IsWindows()` �
 | `Preferis` (引数なし、シェルから) | macOS は使い方を表示。Windows は設定 UI を開く (エクスプローラーやスタートメニューのブラウザー項目から開かれるのはこの形で、GUI プログラムなので使い方を表示しても見えない) |
 | `Preferis --settings` | 設定 UI (`Preferis Settings.app` / `Preferis.Settings.exe`) を開く。起動中なら前面に出す |
 | `Preferis --status` | OS への登録状態、既定ブラウザー、設定ファイルの場所を表示 |
-| `Preferis --dry-run <url> [--config <path>]` | 設定を読み、ルーティングの過程 (トレース) と決定、候補プロファイルを標準出力に表示して終了 (起動しない)。デバッグ・テスト用。終了コードは決定できれば 0、失敗なら 2 |
+| `Preferis --dry-run <url> [--config <path>] [--app-id <id>] [--app-path <path>]` | 設定を読み、ルーティングの過程 (トレース) と決定、候補プロファイルを標準出力に表示して終了 (起動しない)。デバッグ・テスト用。`--app-id` / `--app-path` は URL を開いたアプリとして扱う ID とパス (§6.2、省略すると不明)。終了コードは決定できれば 0、失敗なら 2 |
 | `Preferis --register` / `--unregister` | OS への登録/解除 |
 | `Preferis.Picker` | 標準入力からリクエスト JSON を読み、標準出力に応答 JSON を書く (§9.3) |
 | `Preferis.Picker --request <path>` | リクエストをファイルから読む。単体での動作確認用 |
@@ -390,6 +390,8 @@ URL ごとに新しいプロセスが起動します。単一インスタンス�
 | `not` | グループ | 子条件 (1 つ) にマッチしない (追加提案) |
 | `host` | リーフ | `Uri.Host` に対して `match` を適用 |
 | `url` | リーフ | 正規化済み `Uri.AbsoluteUri` に対して `match` を適用 |
+| `appId` | リーフ | URL を開いたアプリの ID (macOS: バンドル ID、Windows: パッケージアプリの AUMID) に対して `match` を適用 |
+| `appPath` | リーフ | URL を開いたアプリのパス (macOS: `.app`、Windows: 実行ファイル) に対して `match` を適用 |
 
 リーフの `match` 種別:
 
@@ -409,6 +411,21 @@ URL ごとに新しいプロセスが起動します。単一インスタンス�
 
 正規化: 入力 URL は `Uri` でパースし、`Host` は小文字化する。IDN ホストは `Uri.IdnHost`
 (punycode) と `Uri.Host` (Unicode) の **両方** に対してマッチを試みる。
+
+URL を開いたアプリ (`appId` / `appPath`):
+
+- Platform 層が URL の受け取り時に判定し、`SourceApp (Id?, Path?)` として Router に渡す。Router はルール評価のたびに
+  これを使い、`rewrite` や `reroute` で URL が変わってもアプリは変わらない (§6.1 の再評価も同じアプリで評価する)。
+- 判定できなかった場合 (アプリが不明、または ID かパスの片方が不明) は、その条件はどのパターンにも一致しない
+  (`wildcard` の `*` にも)。`not` で包むと「そのアプリから開かれた以外」として一致する。Windows のパッケージでない
+  アプリには ID が無い。
+- 大文字小文字は常に区別しない。パスは両 OS の既定のファイルシステムに合わせ、ID もそれに揃える (1 つのルールで
+  両 OS を書けるように)。
+- OS ごとの書き分けは無い。macOS と Windows の ID・パスは形が違い互いに一致しないため、共有する設定では `or` で並べる。
+- 判定の方法: Windows は親プロセスを使い、cmd などの中継を飛ばす。親が sihost.exe や explorer.exe などの仲介プロセス
+  なら、起動直後の前面ウィンドウのアプリを使う (§12 スパイク 10)。macOS は URL を届ける Apple Event の送り主
+  (未実装、要確認)。いずれも Platform 層の作業で、現在の Router は常に「不明」を渡す。`--dry-run` は `--app-id` /
+  `--app-path` で指定できる。
 
 ### 6.3 アクション (Action)
 
@@ -435,9 +452,10 @@ Profile              { Id, Name, Target }     Target = BrowserTarget | CommandTa
 BrowserTarget        { Browser (string | per-OS map), BrowserProfile?, Private, ExtraArgs[] }
 CommandTarget        { Windows?: CommandSpec, MacOS?: CommandSpec }
 Rule                 { Id, Name, Enabled, Condition, Actions[] }
-Condition            = AndCondition | OrCondition | NotCondition | HostCondition | UrlCondition
+Condition            = AndCondition | OrCondition | NotCondition | HostCondition | UrlCondition | AppIdCondition | AppPathCondition
 RoutingAction        = OpenAction | SystemAction | NoneAction | RewriteAction | RerouteAction
-Router               Route(Uri) -> RoutingDecision
+SourceApp            { Id?, Path? }            // URL を開いたアプリ (§6.2)。Platform 層が判定する
+Router               Route(Uri, SourceApp?) -> RoutingDecision
 RoutingDecision      = Open(Uri, ProfileId[]) | System(Uri) | None | Failed(reason)
 ProfileResolver      Resolve(Profile, IBrowserDetector) -> LaunchPlan | ResolveFailure
 LaunchPlan           { ExecutablePath, Arguments[], Kind }   // Platform 層が実行する
@@ -947,7 +965,6 @@ Windows のスパイク 6〜9 は使い捨てのコードではなく、M4 の�
 - 配布形態の残り: winget と Homebrew cask への登録、Apple Developer ID と Windows のコード署名証明書の取得
   (zip + Velopack インストーラーと dmg は決定済み、§4.4。署名と公証はシークレットを置けば動く)
 - Windows で `.html` 等のファイル関連付けも登録するか (既定は URL のみ)
-- 送信元アプリケーション (どのアプリが URL を開いたか) を条件に加えるか (将来拡張。Windows での実現性はスパイク 10)
 
 ## 13. 決定事項の記録
 
@@ -1003,6 +1020,7 @@ Windows のスパイク 6〜9 は使い捨てのコードではなく、M4 の�
 | 2026-10-30 | Windows の設定ファイルの置き場を `%LOCALAPPDATA%\Preferis` / `%APPDATA%\Preferis` から `%LOCALAPPDATA%\Cysharp\Preferis` / `%APPDATA%\Cysharp\Preferis` に移す。古いフォルダーの中身は起動時に一度だけ移し、古いフォルダーを消す (Configuration.md §1)。macOS は変えない | `%LOCALAPPDATA%\Preferis` は Velopack のインストール先 (`%LOCALAPPDATA%\{packId}`) そのもので、Setup は空でないフォルダーを「インストール済み」と判定し、Repair・更新・アンインストールはフォルダーごと扱う。ポータブル版や開発ビルドを先に使った PC で初回インストールが誤検出し、Repair で `local.json` が消えた。Velopack は `current` の 1 つ上に置くデータを認めているが、アンインストールで消え、インストール前に存在すれば誤検出する。多くのアプリ (Discord、VS Code、Teams) と Windows の指針どおり、プログラムとデータを別のフォルダーに分け、データは「会社名\製品名」に置く。packId を変える案 (`Cysharp.Preferis`) は成果物名と AUMID が変わるので採らなかった |
 | 2026-10-30 | (前の行を改める) 古いフォルダーからの移行 (`ConfigPaths.MoveFromLegacyWindowsFolders`) はやめ、古いフォルダーには触れない。開発版の古いファイルが残っていれば手で消す | アプリはリリース前で、移すべき利用者のデータがない。`%LOCALAPPDATA%\Preferis` はインストール先そのものなので、起動時に中身を移すとインストーラーのファイル (`Update.exe`、`current\` など) まで新しいフォルダーへ動かし、インストールを壊した |
 | 2026-10-30 | 設定 UI は Router の出力をスレッドプールではなく専用のスレッドで読む (§9.1)。同時に進む操作の ViewModel テストは UI スレッド相当の単一スレッドで動かし (§11)、ロックを持たせたままの一時停止は `Task.Delay` で待たない | Windows の CI でテストが不定期に失敗した。いずれもスレッドプールが原因: 出力を持ち続ける子のテストが読み取りでプールのスレッドを 2 つ塞ぎ、負荷の高いランナーでは `Exited` と `Task.Delay` のコールバックが空きを待って Router の終了から 6〜7 秒遅れた。同じ枯渇で、Router 役が `Task.Delay` で 0.3 秒ロックを持つはずの待ちが 3 秒のロックのタイムアウトを超えた。また保存と Open の継続が別々のプールのスレッドで並行して走り、UI スレッド専用の `PatternErrorCache` を壊した。負荷をかけたローカルの再現 (12 並列) で 12 回中 10 回の失敗が 36 回中 0 回になった |
+| 2026-10-31 | URL を開いたアプリの条件 `appId` / `appPath` を加える (§6.2)。macOS は ID (バンドル ID) とパス (`.app`)、Windows は ID (パッケージアプリの AUMID) とパス (実行ファイル) で、OS ごとの書き分けは設けず、大文字小文字は区別しない。判定できなければ一致しない。Router はアプリを URL とは別に受け取り、書き換え後も同じアプリで評価する | Windows でもスパイク 10 で、デスクトップアプリは親プロセスから、UWP アプリは前面ウィンドウから判定できた。Windows のパスだけでは、ストア配布のアプリ (`WindowsApps\…_1.24.12741.0_x64__…`) や Squirrel のアプリ (`app-4.x.x`) で更新のたびに変わり、ユーザーのフォルダーに入るアプリは設定の共有で一致しないため、変わらない AUMID も選べるようにした。macOS と Windows の ID・パスは形が違い取り違えないので、プロファイルのような OS ごとの指定は要らない。条件の種類は既存の `host` / `url` と同じく比べる対象ごとに分け、照合方法 (`match`) を共有する |
 
 ## 14. マイルストーンと現在の状態
 

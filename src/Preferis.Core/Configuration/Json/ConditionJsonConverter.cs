@@ -35,6 +35,8 @@ internal sealed class ConditionJsonConverter : JsonConverter<Condition>
             "not" => element.Deserialize(JsonDispatch.TypeInfo<NotCondition>(options)),
             "host" => element.Deserialize(JsonDispatch.TypeInfo<HostCondition>(options)),
             "url" => element.Deserialize(JsonDispatch.TypeInfo<UrlCondition>(options)),
+            "appId" => element.Deserialize(JsonDispatch.TypeInfo<AppIdCondition>(options)),
+            "appPath" => element.Deserialize(JsonDispatch.TypeInfo<AppPathCondition>(options)),
             _ => new UnknownCondition(type ?? "", element.Clone()),
         };
     }
@@ -60,6 +62,12 @@ internal sealed class ConditionJsonConverter : JsonConverter<Condition>
                 break;
             case UrlCondition c:
                 JsonSerializer.Serialize(writer, c, JsonDispatch.TypeInfo<UrlCondition>(options));
+                break;
+            case AppIdCondition c:
+                JsonSerializer.Serialize(writer, c, JsonDispatch.TypeInfo<AppIdCondition>(options));
+                break;
+            case AppPathCondition c:
+                JsonSerializer.Serialize(writer, c, JsonDispatch.TypeInfo<AppPathCondition>(options));
                 break;
             default:
                 throw new JsonException($"Unsupported condition class: {value.GetType().Name}");

@@ -364,6 +364,8 @@ internal static class RuleSummary
         NotCondition not => L("not {0}", DescribeCondition(not.Condition)),
         HostCondition host => Comparison(L("host"), host.Match, host.Pattern),
         UrlCondition url => Comparison(L("url"), url.Match, url.Pattern),
+        AppIdCondition id => Comparison(L("app ID"), id.Match, id.Pattern),
+        AppPathCondition path => Comparison(L("app path"), path.Match, path.Pattern),
         _ => L("{0} (unknown)", condition.Type),
     };
 

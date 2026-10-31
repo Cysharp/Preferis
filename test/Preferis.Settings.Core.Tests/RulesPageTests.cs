@@ -205,6 +205,19 @@ public sealed class RulesPageTests : IDisposable
     }
 
     [Fact]
+    public void App_conditions_are_summarized_by_what_they_compare()
+    {
+        var page = Page(out _);
+        var rule = Rule(page, "google-admin");
+
+        rule.SetCondition(new AppIdCondition { Match = MatchKind.Exact, Pattern = "com.tinyspeck.slackmacgap" });
+        Assert.Equal("app ID is com.tinyspeck.slackmacgap → open Chrome (Work)", rule.Summary);
+
+        rule.SetCondition(new AppPathCondition { Match = MatchKind.EndsWith, Pattern = @"\slack.exe" });
+        Assert.Equal(@"app path ends with \slack.exe → open Chrome (Work)", rule.Summary);
+    }
+
+    [Fact]
     public void Url_rows_can_be_case_sensitive()
     {
         var page = Page(out var settings);

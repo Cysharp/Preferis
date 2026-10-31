@@ -268,9 +268,27 @@ Firefox のプロファイルは `-P <name>` で選ぶため `name` だけを保
 { "type": "not", "condition": Condition }
 { "type": "host" | "url", "match": "regex" | "wildcard" | "startsWith" | "endsWith" | "contains" | "equals",
   "pattern": "...", "ignoreCase": true }
+{ "type": "appId" | "appPath", "match": ..., "pattern": "..." }
 ```
 
-`ignoreCase` は `url` のみ有効 (既定 `true`)。`host` は常に大文字小文字を区別しません。
+`ignoreCase` は `url` のみ有効 (既定 `true`)。`host`、`appId`、`appPath` は常に大文字小文字を区別しません。
+
+`appId` と `appPath` は URL を開いたアプリと照合します。
+
+| type | macOS | Windows |
+| --- | --- | --- |
+| `appId` | バンドル ID (`com.tinyspeck.slackmacgap`) | パッケージアプリの AUMID (`Microsoft.WindowsTerminal_8wekyb3d8bbwe!App`)。パッケージでないアプリには無い |
+| `appPath` | `.app` のパス (`/Applications/Slack.app`) | 実行ファイルのパス (`C:\Users\…\AppData\Local\slack\app-4.41.105\slack.exe`) |
+
+OS ごとの書き分けはありません。両 OS で共有する設定では `or` で並べます (片方の OS の ID やパスはもう一方では一致しない)。
+Windows のパスはバージョンやユーザー名を含むことがあるため、`endsWith` (`\slack.exe`) やワイルドカードを使います。
+
+```json
+{ "type": "or", "conditions": [
+  { "type": "appId",   "match": "equals",   "pattern": "com.tinyspeck.slackmacgap" },
+  { "type": "appPath", "match": "endsWith", "pattern": "\\slack.exe" } ] }
+```
+
 意味論は [Design.md §6.2](Design.md) を参照。
 
 ### 2.8 Action

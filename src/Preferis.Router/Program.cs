@@ -46,7 +46,7 @@ internal static class Program
         switch (urls[0])
         {
             case "--dry-run" when urls.Count >= 2:
-                return DryRunCommand.Run(urls[1], OptionValue(urls, "--config"), Console.Out);
+                return DryRunCommand.Run(urls[1], OptionValue(urls, "--config"), SourceAppOption(urls), Console.Out);
             case "--register":
                 return Report(RouterHost.Create(interactive: true).Registrar.Register());
             case "--unregister":
@@ -72,6 +72,13 @@ internal static class Program
     {
         var index = args.IndexOf(name);
         return index >= 0 && index + 1 < args.Count ? args[index + 1] : null;
+    }
+
+    private static Core.Routing.SourceApp? SourceAppOption(List<string> args)
+    {
+        var id = OptionValue(args, "--app-id");
+        var path = OptionValue(args, "--app-path");
+        return id is null && path is null ? null : new Core.Routing.SourceApp(id, path);
     }
 
     private static int Report(Core.Hosting.RegistrationResult result)
@@ -103,6 +110,7 @@ internal static class Program
             Usage:
               Preferis <url> [<url> ...]                     Route the URLs and open them.
               Preferis --dry-run <url> [--config <path>]     Show how <url> would be routed, without opening anything.
+                       [--app-id <id>] [--app-path <path>]   As if the app with that id or path had opened it.
               Preferis --register | --unregister | --status  Manage the registration as the default browser.
               Preferis --settings                            Open the settings.
               Preferis --version | --help

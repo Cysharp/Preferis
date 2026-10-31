@@ -175,6 +175,27 @@ public class ConfigValidatorTests
         Assert.Equal("r", issue.Id);
     }
 
+    [Theory]
+    [InlineData("appId", "app ID")]
+    [InlineData("appPath", "app path")]
+    public void App_patterns_are_checked_like_the_others(string type, string named)
+    {
+        PatternCondition Leaf(string pattern) => type == "appId"
+            ? new AppIdCondition { Match = MatchKind.Regex, Pattern = pattern }
+            : new AppPathCondition { Match = MatchKind.Regex, Pattern = pattern };
+        var config = WithProfiles(Browser("edge"));
+        config.Rules = [RuleWith("empty", Leaf(""), new OpenAction()), RuleWith("invalid", Leaf("(unclosed"), new OpenAction())];
+
+        var issues = ConfigValidator.Validate(config);
+
+        var empty = Assert.Single(issues, i => i.Id == "empty");
+        var invalid = Assert.Single(issues, i => i.Id == "invalid");
+        Assert.Equal(IssueSeverity.Warning, empty.Severity);
+        Assert.Equal(IssueSeverity.Error, invalid.Severity);
+        Assert.Contains(named, empty.Message, StringComparison.Ordinal);
+        Assert.Contains(named, invalid.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Patterns_are_checked_with_the_case_sensitivity_the_router_compiles_them_with()
     {

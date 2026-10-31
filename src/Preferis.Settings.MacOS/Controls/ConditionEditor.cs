@@ -10,7 +10,7 @@ namespace Preferis.Settings.MacOS.Controls;
 
 /// <summary>
 /// A rule's condition in an NSPredicateEditor, as in the rules of Mail and the smart folders of Finder: rows of
-/// "Host / URL — is / starts with / … — pattern" under "All / Any / None of the following are true", nested with ⌥+.
+/// "Host / URL / App — is / starts with / … — pattern" under "All / Any / None of the following are true", nested with ⌥+.
 /// Translates between NSPredicate and the UI-neutral tree of <see cref="ConditionPredicates"/>.
 /// </summary>
 internal sealed class ConditionEditor : IDisposable
@@ -20,6 +20,8 @@ internal sealed class ConditionEditor : IDisposable
         (PredicateField.Host, "host", L("Host")),
         (PredicateField.Url, "url", L("URL")),
         (PredicateField.UrlCaseSensitive, "urlCaseSensitive", L("URL (case-sensitive)")),
+        (PredicateField.AppId, "appId", L("App ID")),
+        (PredicateField.AppPath, "appPath", L("App path")),
     ];
 
     // The titles follow the rule summaries of the list (RuleSummary). The compound rows are AppKit's own, in the language

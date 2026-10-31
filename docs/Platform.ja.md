@@ -757,7 +757,7 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
   ポップアップは値の右に `secondarySystemFill` の丸いシェブロン (`MenuPopUpButton`。AppKit に同じ見た目のベゼルはないため
   枠なしのポップアップにバッジを重ねる)。行は `NSStackView` ではなく制約で組む: 横向きのスタックは中央揃えのとき最も高い
   ビューに対して上下のインセットを守らず、説明つきの行が詰まった。
-- ルールの条件は `NSPredicateEditor` (`ConditionEditor`)。左の式 `host` / `url` / `urlCaseSensitive` と演算子 `==` /
+- ルールの条件は `NSPredicateEditor` (`ConditionEditor`)。左の式 `host` / `url` / `urlCaseSensitive` / `appId` / `appPath` と演算子 `==` /
   `BEGINSWITH` / `ENDSWITH` / `CONTAINS` / `LIKE` (wildcard) / `MATCHES` (regex) の `NSPredicate` を `ConditionPredicates` の木に
   変換する。ポップアップの表示名はテンプレートのビューの項目名を書き換えて変える (エディターは行ごとにそのコピーを使い、
   項目は元の式と演算子を保持する)。`NSPredicateEditor` は自分自身を `NSRuleEditor` のデリゲートにしているので差し替えず、

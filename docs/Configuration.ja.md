@@ -273,7 +273,7 @@ Firefox のプロファイルは `-P <name>` で選ぶため `name` だけを保
 
 `ignoreCase` は `url` のみ有効 (既定 `true`)。`host`、`appId`、`appPath` は常に大文字小文字を区別しません。
 
-`appId` と `appPath` は URL を開いたアプリと照合します。
+`appId` と `appPath` は URL を開いたアプリと照合します。macOS ではまだアプリを判定しないため、今は一致しません。
 
 | type | macOS | Windows |
 | --- | --- | --- |
@@ -431,7 +431,7 @@ www.example.com,Personal,Work
 | `browserOverrides` | ブラウザー ID → `{ path, userDataDir? }`。検出より優先する。ポータブル版や特殊なインストール先向け。`path` は macOS では `.app`、Windows では実行ファイル (`"D:\\Portable\\Chrome\\chrome.exe"`)。Windows ではキーの無いポータブル版も検出結果に加わる |
 | `profileTargets` | プロファイル `id` → このマシンで使うターゲット (§3.1) |
 | `logging.level` | `off` / `error` / `info` / `trace`。エラーのメッセージ中の URL はユーザー情報・クエリ・フラグメントを伏せる。`info` と `trace` は開いた URL をそのまま含む |
-| `logging.history` | ルーティング履歴 (URL を含む) をローカルに保存するか。オプトイン。保存先はログディレクトリの `history.jsonl` (macOS: `~/Library/Logs/Preferis/`、Windows: `%LOCALAPPDATA%\Cysharp\Preferis\Logs\`) |
+| `logging.history` | ルーティング履歴 (URL と、分かれば URL を開いたアプリを含む) をローカルに保存するか。オプトイン。保存先はログディレクトリの `history.jsonl` (macOS: `~/Library/Logs/Preferis/`、Windows: `%LOCALAPPDATA%\Cysharp\Preferis\Logs\`) |
 | `logging.historySize` | 履歴に残す件数 (既定 50)。古いものから消す |
 
 ### 3.1 `profileTargets` (このマシンのターゲット)

@@ -8,6 +8,9 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
+        // First of all: the window the link was clicked in may lose the front to another at any time (docs/Platform.md §2.9).
+        var sourceApp = OperatingSystem.IsWindows() ? WindowsSourceAppDetector.CaptureForeground() : null;
+
         // The installer's hooks (--veloapp-install <version> and the like, docs/Platform.md §2.1) end here. A downloaded
         // update is installed by the settings, never on a link click.
         VelopackInstallation.Start(applyPendingUpdate: false);
@@ -22,9 +25,12 @@ internal static class Program
             // options (docs/Platform.md §2.2). Nothing is printed, so there is no console to attach to.
             if (urls.FirstOrDefault() == CommandLine.SingleArgumentMarker)
             {
-                return CommandLine.SingleArgument(Environment.CommandLine) is { } url
-                    ? RouterHost.Create(interactive: false).HandleUrls([url])
-                    : 1;
+                if (CommandLine.SingleArgument(Environment.CommandLine) is not { } url)
+                {
+                    return 1;
+                }
+                var host = RouterHost.Create(interactive: false);
+                return host.HandleUrls([url], host.DetectSourceApp(sourceApp));
             }
             WindowsProcess.AttachToParentConsole();
         }
@@ -64,7 +70,10 @@ internal static class Program
                 Console.Error.WriteLine($"Unknown option: {option}");
                 return Usage();
             default:
-                return RouterHost.Create(interactive: !launchedByLaunchServices).HandleUrls(urls);
+            {
+                var host = RouterHost.Create(interactive: !launchedByLaunchServices);
+                return host.HandleUrls(urls, host.DetectSourceApp(sourceApp));
+            }
         }
     }
 

@@ -18,6 +18,12 @@ public sealed class HistoryEntry
     public string Outcome { get; set; } = "";
 
     public string? ProfileId { get; set; }
+
+    /// <summary>The <see cref="Routing.SourceApp.Id"/> of the app that opened the URL, when known.</summary>
+    public string? AppId { get; set; }
+
+    /// <summary>The <see cref="Routing.SourceApp.Path"/> of the app that opened the URL, when known.</summary>
+    public string? AppPath { get; set; }
 }
 
 /// <summary>

@@ -41,6 +41,27 @@ public class RoutingHistoryTests : IDisposable
     }
 
     [Fact]
+    public void The_app_that_opened_the_url_is_kept_when_known()
+    {
+        var history = new RoutingHistory(FilePath);
+        var fromSlack = Entry(1);
+        fromSlack.AppPath = @"C:\Users\me\AppData\Local\slack\app-4.41.105\slack.exe";
+        var fromTerminal = Entry(2);
+        fromTerminal.AppId = "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App";
+        fromTerminal.AppPath = @"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.24.12741.0_x64__8wekyb3d8bbwe\WindowsTerminal.exe";
+
+        history.Append(fromSlack, maxEntries: 10);
+        history.Append(fromTerminal, maxEntries: 10);
+        history.Append(Entry(3), maxEntries: 10);
+
+        var entries = history.Read();
+        Assert.Equal([null, fromTerminal.AppId, null], entries.Select(e => e.AppId));
+        Assert.Equal([null, fromTerminal.AppPath, fromSlack.AppPath], entries.Select(e => e.AppPath));
+        // An unknown app takes no room in the line.
+        Assert.DoesNotContain("app", File.ReadLines(FilePath).Last(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Only_the_most_recent_entries_are_kept()
     {
         var history = new RoutingHistory(FilePath);

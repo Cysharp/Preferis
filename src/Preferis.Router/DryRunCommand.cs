@@ -29,7 +29,7 @@ internal static class DryRunCommand
         output.WriteLine($"HostPlatform: {PlatformInfo.Current}");
         output.WriteLine($"URL:      {url.AbsoluteUri}");
         output.WriteLine($"Host:     {url.Host}{(url.IdnHost != url.Host ? $" ({url.IdnHost})" : "")}");
-        output.WriteLine($"App:      {(source is null ? "unknown" : $"id {source.Id ?? "unknown"}, path {source.Path ?? "unknown"}")}");
+        output.WriteLine($"App:      {RouterHost.Describe(source)}");
         output.WriteLine();
 
         // This machine's targets in place of the shared ones, as the Router routes (docs/Design.md §7.4).

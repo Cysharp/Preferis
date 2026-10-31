@@ -45,6 +45,7 @@ Preferis.Core.Hosting.IRoutingLog             Write(level, message)
 | `Windows.WindowsUserNotifier` | Windows | `MessageBoxW`。「はい」で URL をクリップボードにコピー |
 | `Windows.WindowsApplicationIcons` | Windows | `SHDefExtractIcon` → `GetDIBits` → PNG (自前の `PngEncoder`)。System.Drawing を使わない。`LoadApplicationIcon` は自分の exe のアイコン (リソース 32512) を `LoadImage` で読む (§2.7) |
 | `Windows.WindowsProcess` | Windows | Router のコンソール接続、標準ハンドルの継承止め、`AllowSetForegroundWindow` |
+| `Windows.WindowsSourceAppDetector` | Windows | URL を開いたアプリ (`SourceApp`) を親プロセスと起動直後の前面ウィンドウから判定する (§2.9)。判定の規則はプロセスとウィンドウのフェイクでテストする |
 | `Windows.CommandLine` | Windows | `--single-argument` の後ろを生のコマンドラインから取り出す (§2.2) |
 | `Windows.IRegistry` / `IUrlAssociations` | Windows | レジストリと関連付けの薄い抽象。テストはフェイクで検出と登録を検証する |
 
@@ -445,6 +446,39 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
     -ConfigPath "$env:APPDATA/Cysharp/Preferis/config.json"
 ```
 
+### 2.9 URL を開いたアプリの判定
+
+`Windows.WindowsSourceAppDetector` が、条件 `appId` / `appPath` (Design.md §6.2) の照合に使う `SourceApp` を作る。
+URL ハンドラーにはコマンドラインしか渡らないため、残る手がかりの親プロセスと前面ウィンドウを使う (Design.md §12 スパイク 10)。
+
+- 前面ウィンドウは `Main` の最初に `GetForegroundWindow` で記録する (`CaptureForeground`)。Router の起動が進む間に別の
+  ウィンドウが前面に来ても、リンクをクリックしたウィンドウで判定するため。
+- シェルは登録したコマンドを、URL を開くよう頼んだプロセスの中で起動する (ShellExecuteEx)。そのため通常はそのアプリが親になる。
+  1. 自分から親をたどる。中継 (`cmd.exe`、`conhost.exe`、`rundll32.exe`、`OpenWith.exe`) なら、さらにその親へ進む (8 段まで)。
+  2. 中継でない最初の親が仲介プロセス (`explorer.exe`、`svchost.exe`、`sihost.exe`、`RuntimeBroker.exe`、
+     `ApplicationFrameHost.exe`、`services.exe`) なら、前面ウィンドウのプロセスをアプリとする。UWP アプリは sihost.exe が
+     ハンドラーを起動するので、この経路になる。前面が `ApplicationFrameHost.exe` (UWP アプリの枠) なら、子ウィンドウのうち
+     枠以外のプロセスがアプリ本体。前面ウィンドウが無い場合と、枠の中にアプリが無い場合は不明。
+  3. それ以外ならその親がアプリ。その上 (新しい Outlook を起動した sihost.exe など) は見ない。
+- 次の場合は不明とし、前面ウィンドウは使わない (Design.md §13)。
+  - 親が終了済み。終了したプロセスでも、ハンドルを持つプロセス (その親) がいる間は開けるので、`cmd /c start` の cmd も
+    たどれることがある。
+  - 親を開けない (`PROCESS_QUERY_LIMITED_INFORMATION` が拒否される他のユーザーやサービスのプロセス)。
+  - 親が自分 (子) より後に起動している (終了した親の ID が再利用された)。
+- 各プロセスから読むもの:
+  - 実行ファイルのパス (`QueryFullProcessImageNameW`)。中継・仲介プロセスかどうかはそのファイル名で、大文字小文字を区別せずに見る。
+  - 起動時刻 (`GetProcessTimes`)。
+  - 親の ID (`NtQueryInformationProcess` の `ProcessBasicInformation`)。
+  - AUMID (`GetApplicationUserModelId`)。パッケージのアプリでなければ無い。
+- Toolhelp のスナップショット (`CreateToolhelp32Snapshot`) は開けないプロセスの名前も分かるが、それだけで 10〜20 ms かかる
+  ため使わない (§5)。判定全体は約 0.3 ms。
+- Router は `--single-argument` (既定のブラウザーとしての起動) でも、コマンドラインで渡された URL でも判定し、
+  `RoutingService.Handle` に渡す。
+  - 結果と所要時間は `info` でログに書く (`Opened by: id …, path … (0.3 ms)`)。
+  - 履歴には `appId` / `appPath` として残す。
+  - 判定が例外で失敗した場合は、警告をログに書いて不明として続ける。
+- 設定 UI のテストページの「開く」は Router を子プロセスとして実行するので、アプリは `Preferis.Settings.exe` になる。
+
 ## 3. macOS
 
 ### 3.1 バンドル構成
@@ -781,6 +815,26 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 計測結果は本書末尾に記録し、Design.md §5.2 の目標値と比較します。
 
 ## 5. 計測記録
+
+### 2026-11-01 送信元アプリの判定の所要時間 (§2.9)
+
+環境: Windows 11 Pro (10.0.26200), x64, .NET 10, NativeAOT の Release ビルド、441 プロセスが動いている状態。
+
+- 内訳: 各手順の呼び出しだけを並べた使い捨てのプログラム (6 回)。
+- 判定全体: `PREFERIS_TRACE=1` の Router が書く `Opened by` の行 (7 回)。Router は URL でない引数で起動し、判定の後の
+  振り分けで止めた。起動元はストア版 PowerShell 7 で、`Start-Process` から 5 回、`cmd /c` 経由と直接の実行から各 1 回。
+
+| 手順 | 所要時間 |
+| --- | --- |
+| Toolhelp のスナップショットの作成 | 10.3〜10.9 ms |
+| スナップショットの全件の走査 (名前と親の辞書を作る) | 8.1〜9.3 ms |
+| 1 プロセスを開いてパス・起動時刻・AUMID を読む | 約 0.1 ms |
+| `NtQueryInformationProcess` で親の ID を読む | 0.08〜0.10 ms |
+| 判定全体 (スナップショットを使う版) | 12.6〜13.7 ms |
+| 判定全体 (`NtQueryInformationProcess` を使う版、採用) | 0.3〜0.4 ms |
+
+7 回ともストア版 PowerShell (`Microsoft.PowerShell_8wekyb3d8bbwe!App`、`WindowsApps\…\pwsh.exe`) と判定した。
+`cmd /c` 経由の 1 回も、cmd を飛ばして PowerShell までたどれた。
 
 ### 2026-10-31 スパイク 10: Windows の送信元アプリの判定 (`spikes/SourceApp`)
 

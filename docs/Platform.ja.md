@@ -799,8 +799,28 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 - プローブが前面ウィンドウを読むのはプロセス起動から 17〜43 ms 後で、親のチェーンを調べるのはその直後。
   `cmd /c start` と `rundll32` は、ハンドラーを起動した直後に終了するため、ほとんど間に合わない。
 - MSIX パッケージの pwsh.exe が親でも、プローブ自身はパッケージの ID を持たなかった (`GetCurrentPackageFullName` が失敗)。
-- 前面ウィンドウはどの経路でも Edge だった (起動元とは無関係)。リンクをクリックした場合の前面は未確認。
+- 前面ウィンドウはどの経路でも Edge だった (起動元とは無関係)。
 - svchost.exe、services.exe、wininit.exe は通常のユーザーからは開けない (名前と親の ID はスナップショットから分かる)。
+
+続けて、開発者が `SourceApp.exe --register-browser` でプローブを既定のブラウザーにして、アプリ内のリンクをクリックした
+(各 1 回、URL は Edge に転送)。
+
+| クリックしたアプリ | 種類 | 親プロセスのチェーン | 前面ウィンドウ (起動から) | 推定 |
+| --- | --- | --- | --- | --- |
+| VS Code | デスクトップ (Electron、パッケージなし) | Code.exe → explorer.exe | Code.exe (29 ms) | 親と前面が同じプロセス |
+| Windows Terminal 1.24 | デスクトップ (MSIX) | WindowsTerminal.exe → (終了済み) | WindowsTerminal.exe (23 ms) | 親と前面が同じプロセス |
+| メモ帳 11.2607 | デスクトップ (MSIX) | Notepad.exe → explorer.exe | Notepad.exe (25 ms) | 親と前面が同じプロセス |
+| 新しい Outlook (olk.exe) | デスクトップ (MSIX、WebView2) | olk.exe → sihost.exe → svchost.exe | olk.exe (36 ms) | 親と前面が同じプロセス |
+| Microsoft Store | UWP | sihost.exe → svchost.exe → services.exe | ApplicationFrameHost.exe。子ウィンドウから WinStore.App.exe を特定 (36 ms) | 親は仲介プロセス。前面からアプリ |
+| 設定 | UWP | sihost.exe → svchost.exe → services.exe | ApplicationFrameHost.exe。子ウィンドウから SystemSettings.exe を特定 (32 ms) | 親は仲介プロセス。前面からアプリ |
+
+- デスクトップアプリは、MSIX パッケージでもそのアプリ自身がハンドラーを起動した。Windows Terminal はシェルを介さずに
+  自分でリンクを開いた (親が端末のシェルではなく WindowsTerminal.exe)。
+- UWP アプリが開いた URL のハンドラーは sihost.exe (Shell Infrastructure Host) が起動した。親からは送信元が分からない。
+- 新しい Outlook のように sihost.exe が起動したデスクトップアプリもある。チェーンの先頭 (中継を除く最初の親) を見れば、
+  上にある sihost.exe に惑わされない。
+- プローブ自身は、設定から開いた時だけ設定アプリのパッケージ ID (`windows.immersivecontrolpanel_10.0.8.1000_neutral_neutral_cw5n1h2txyewy`)
+  を持っていた。同じ UWP の Microsoft Store を含め、他の 5 つでは持たなかった。
 
 ### 2026-10-03 設定 UI: 1,000 条件のルールの編集 (Design.md §9.1)
 

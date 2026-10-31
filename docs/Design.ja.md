@@ -932,8 +932,15 @@ Windows のスパイク 6〜9 は使い捨てのコードではなく、M4 の�
     (起動から約 20〜40 ms) には消えていて、チェーンをたどれない (cmd は 5 回中 1 回だけ間に合った、rundll32 は 0 回)。
     `explorer.exe <url>` は、COM で起動されたエクスプローラーが親になり、送信元は分からない。
     前面ウィンドウは、スクリプトからの起動では起動元と無関係 (その時に前面にあったウィンドウ) になる。
-    未確認: 実際のアプリでのリンクのクリック (Slack、新しい Teams、新しい Outlook、クラシック Outlook、VS Code、
-    Windows Terminal)。`SourceApp.exe --register-browser` で既定のブラウザーにして開発者が確認する (spikes/README.md)。
+    実際のアプリでのリンクのクリックは、プローブを既定のブラウザーにして開発者が確認した (各 1 回)。デスクトップアプリは
+    パッケージの有無によらず、親がそのアプリで、前面ウィンドウも同じプロセスだった (VS Code、Windows Terminal、メモ帳、
+    新しい Outlook)。UWP アプリ (Microsoft Store、設定) では親が sihost.exe (仲介プロセス) で、親からは送信元が分からない。
+    前面ウィンドウは ApplicationFrameHost.exe のものだが、その子ウィンドウからアプリ本体を特定できた。親を主に使い、
+    親が仲介プロセスなら前面ウィンドウに切り替える方式で、6 つとも送信元を特定できる。
+    設定から開いた時だけ、プローブ自身が設定アプリのパッケージ ID (`windows.immersivecontrolpanel`) を持って起動された。
+    Router が他のアプリのパッケージ ID で動く時に、ファイルの書き込み先 (AppData の仮想化) が変わるかは未確認。
+    未確認: Slack、新しい Teams、クラシック Outlook。`SourceApp.exe --register-browser` で既定のブラウザーにして
+    開発者が確認する (spikes/README.md)。
 
 ユーザー判断が必要な事項:
 

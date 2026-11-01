@@ -14,7 +14,7 @@ namespace Preferis.Settings.MacOS.Controls;
 internal sealed class ListPane<T> : IDisposable
     where T : class, INotifyPropertyChanged
 {
-    private const string RowType = "net.mayuki.preferis.row";
+    private const string RowType = "com.cysharp.preferis.row";
 
     private readonly IList<T> _items;
     private readonly Func<T, NSView> _row;

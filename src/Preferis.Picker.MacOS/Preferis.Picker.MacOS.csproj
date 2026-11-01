@@ -13,7 +13,7 @@
     <RootNamespace>Preferis.Picker.MacOS</RootNamespace>
     <AssemblyName>Preferis Picker</AssemblyName>
     <ApplicationTitle>Preferis Picker</ApplicationTitle>
-    <ApplicationId>net.mayuki.Preferis.Picker</ApplicationId>
+    <ApplicationId>com.cysharp.Preferis.Picker</ApplicationId>
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>$(Version)</ApplicationDisplayVersion>
     <SelfContained>true</SelfContained>

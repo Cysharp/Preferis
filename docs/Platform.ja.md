@@ -32,7 +32,7 @@ Preferis.Core.Hosting.IRoutingLog             Write(level, message)
 | `Browsers.BrowserProfileEnumerator` | 共通 | `ChromiumLocalStateReader` / `FirefoxProfilesIniReader` を使う。読めなければ null |
 | `Launching.LaunchPlanExecutor` | 共通 | `ProcessStartInfo.ArgumentList` に要素単位で渡す。macOS の `OpenWithApplication` は `open -a` |
 | `Launching.ProcessPickerLauncher` | 共通 | stdin/stdout JSON、タイムアウト、stderr をログへ転送。実行ファイルが無ければ null |
-| `MacOS.MacBrowserDetector` | macOS | `NSWorkspace` の bundle id 解決と https ハンドラー列挙。Preferis 自身とヘルパー (`net.mayuki.Preferis` とその配下の bundle id) は、どのプロセスから呼んでも除外 |
+| `MacOS.MacBrowserDetector` | macOS | `NSWorkspace` の bundle id 解決と https ハンドラー列挙。Preferis 自身とヘルパー (`com.cysharp.Preferis` とその配下の bundle id) は、どのプロセスから呼んでも除外 |
 | `MacOS.MacSystemOpener` | macOS | 既定ハンドラーの bundle id を自分と比較。委譲は `open <url>` |
 | `MacOS.MacDefaultBrowserRegistrar` | macOS | `LSRegisterURL` + `setDefaultApplicationAtURL:toOpenURLsWithScheme:completionHandler:` (ブロック) 。失敗時は `LSSetDefaultHandlerForURLScheme`。対象の `Preferis.app` をパスで受け取る (Router は `ForMainBundle()`、設定 UI は自分を含む `Preferis.app`) |
 | `MacOS.MacApplicationIcons` | macOS | `iconForFile:` → `CGImageForProposedRect:` → PNG。UI 非依存の設定 ViewModel がアイコンを PNG で持つため |
@@ -454,12 +454,12 @@ Preferis.app/
     Info.plist                       Router の plist。CFBundleURLTypes を宣言する唯一のバンドル
     MacOS/Preferis                   Router (NativeAOT, net10.0)
     Helpers/
-      Preferis Picker.app/           bundle id: net.mayuki.Preferis.Picker。CFBundleURLTypes なし。LSUIElement
+      Preferis Picker.app/           bundle id: com.cysharp.Preferis.Picker。CFBundleURLTypes なし。LSUIElement
         Contents/Info.plist          Microsoft.macOS が生成 (src/Preferis.Picker.MacOS/Info.plist をマージ)
         Contents/MacOS/Preferis Picker
         Contents/MonoBundle/         NativeAOT でも .NET のネイティブライブラリ数個と runtimeconfig.bin が置かれる
         Contents/Resources/          Assets.car と Preferis.icns (アプリアイコン。Router と同じもの)
-      Preferis Settings.app/         bundle id: net.mayuki.Preferis.Settings。CFBundleURLTypes なし。通常のアプリ (Dock に出る)
+      Preferis Settings.app/         bundle id: com.cysharp.Preferis.Settings。CFBundleURLTypes なし。通常のアプリ (Dock に出る)
         Contents/Info.plist          Microsoft.macOS が生成 (src/Preferis.Settings.MacOS/Info.plist をマージ)
         Contents/MacOS/Preferis Settings
         Contents/MonoBundle/         ピッカーと同じ
@@ -499,7 +499,7 @@ Preferis.app/
 Router の `Info.plist` の要点:
 
 ```xml
-<key>CFBundleIdentifier</key>      <string>net.mayuki.Preferis</string>  <!-- 仮 -->
+<key>CFBundleIdentifier</key>      <string>com.cysharp.Preferis</string>
 <key>CFBundleExecutable</key>      <string>Preferis</string>
 <key>LSUIElement</key>             <true/>   <!-- Dock に出さない -->
 <key>LSMinimumSystemVersion</key>  <string>12.0</string>
@@ -622,7 +622,7 @@ Preferis は `LSUIElement` なので、起動したブラウザーが前面に�
 
 Router は UI フレームワークを持たないため、Apple Event を受けるための最小限の AppKit 呼び出しを
 objc ランタイム経由で自前で行います (`MacUrlActivationSource`)。Launch Services から起動されたかどうかは
-LS が設定する環境変数 `__CFBundleIdentifier` が自分の bundle id (`net.mayuki.Preferis`) かで判定します。
+LS が設定する環境変数 `__CFBundleIdentifier` が自分の bundle id (`com.cysharp.Preferis`) かで判定します。
 この変数は子プロセスに引き継がれるため、有無だけで判定すると Terminal のシェル (`com.apple.Terminal`) や設定 UI が
 起動した Router も「LS から起動された」とみなしてしまう (M3 で修正)。シェルから URL を引数に起動された場合は
 NSApplication を使わずその場で処理します。
@@ -762,7 +762,7 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
   ハンドラーは組み立て途中のフィールドではなく通知の `Object` からテーブルを取る。`DidFinishLaunching` で投げた例外は AppKit が
   ログに出して握りつぶし、ウィンドウのないプロセスが残るため、捕まえて終了する。
 - 終了 (⌘Q、AppleScript の quit) は書き込み待ちの編集を書き込んでから終わる (保留中で書けない時だけ尋ねる)。`osascript -e 'tell application id
-  "net.mayuki.Preferis.Settings" to quit'` は終了したにもかかわらず -128 (ユーザーによるキャンセル) を返すことがある。
+  "com.cysharp.Preferis.Settings" to quit'` は終了したにもかかわらず -128 (ユーザーによるキャンセル) を返すことがある。
 
 ## 4. 共通: 起動時間の計測
 

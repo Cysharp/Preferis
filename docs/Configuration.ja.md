@@ -273,7 +273,9 @@ Firefox のプロファイルは `-P <name>` で選ぶため `name` だけを保
 
 `ignoreCase` は `url` のみ有効 (既定 `true`)。`host`、`appId`、`appPath` は常に大文字小文字を区別しません。
 
-`appId` と `appPath` は URL を開いたアプリと照合します。macOS ではまだアプリを判定しないため、今は一致しません。
+`appId` と `appPath` は URL を開いたアプリと照合します。アプリが分からない場合 (バックグラウンドのスクリプトが開いた
+URL など) は一致しません。macOS では、Terminal で `open` などのコマンドが開いた URL は、そのコマンドを動かしている
+アプリ (Terminal) が開いたものとみなします。
 
 | type | macOS | Windows |
 | --- | --- | --- |

@@ -39,6 +39,7 @@ Preferis.Core.Hosting.IRoutingLog             Write(level, message)
 | `MacOS.MacUrlActivationSource` | macOS | NSApplication + `application:openURLs:` デリゲート (スパイク 1 の製品版) |
 | `MacOS.MacUserNotifier` | macOS | 暫定で `osascript` の `display dialog` (「Copy URL」ボタンつき)。後で NSAlert に置換可 |
 | `MacOS.ObjC` | macOS | objc ランタイム / Foundation / AppKit / Launch Services への最小限の P/Invoke。グローバルブロック生成を含む |
+| `MacOS.MacSourceAppDetector` | macOS | URL を開いたアプリ (`SourceApp`) を Apple Event の送り主のプロセスとその親から判定する (§3.9)。判定の規則はプロセスのフェイクでテストする |
 | `Windows.WindowsBrowserDetector` | Windows | `StartMenuInternet` (HKCU → HKLM → WOW6432Node) とカタログの既知パス。Preferis 自身と Internet Explorer は除外 (§2.3) |
 | `Windows.WindowsSystemOpener` | Windows | 既定ハンドラーの ProgId (`AssocQueryString`) が `PreferisURL` かを見る。委譲は `ShellExecute` |
 | `Windows.WindowsDefaultBrowserRegistrar` | Windows | HKCU への登録と解除、`ms-settings:defaultapps` を開く (§2.2) |
@@ -670,6 +671,8 @@ NSApplication を使わずその場で処理します。
 2. `[NSApplication sharedApplication]` → `setDelegate:` → `run`。
 3. `application:openURLs:` で受け取った `NSArray<NSURL>` を列挙し、`absoluteString` → `UTF8String` で
    文字列化して URL ごとにルーティングを開始する。Finder から `.html` を開いた場合は `file://` URL が届く。
+   その前に、AppKit が処理中の Apple Event (`NSAppleEventManager` の `currentAppleEvent`) から送り主のプロセス ID
+   (`keySenderPIDAttr`) を読み、URL を開いたアプリを判定する (§3.9)。
 4. 処理中の URL 件数をカウントし、ピッカー待ちを含めてすべて完了したら 300 ms の猶予の後に
    `performSelectorOnMainThread:` 経由で `terminate:` を呼ぶ。URL ごとの処理はスレッドプールで行い、
    ランループは次のイベントを受け続ける。
@@ -800,6 +803,46 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
   ログに出して握りつぶし、ウィンドウのないプロセスが残るため、捕まえて終了する。
 - 終了 (⌘Q、AppleScript の quit) は書き込み待ちの編集を書き込んでから終わる (保留中で書けない時だけ尋ねる)。`osascript -e 'tell application id
   "net.mayuki.Preferis.Settings" to quit'` は終了したにもかかわらず -128 (ユーザーによるキャンセル) を返すことがある。
+
+### 3.9 URL を開いたアプリの判定
+
+`MacOS.MacSourceAppDetector` が、条件 `appId` / `appPath` (Design.md §6.2) の照合に使う `SourceApp` を作る。
+Windows (§2.9) と違い、URL を届ける Apple Event が送り主のプロセスを持つので、それを使う。**実機では未確認**
+(Design.md §12 スパイク 11、下記)。
+
+- 送り主のプロセス ID は `application:openURLs:` の中で読む (§3.6)。判定もメインスレッドで、URL を受け取ってすぐ行う。
+  `open` コマンドは頼み終えるとすぐに終了するため。
+- アプリの決め方:
+  1. 送り主から親へたどり、実行ファイルがバンドルの本体 (`X.app/Contents/MacOS/x`) である最初のプロセスをアプリとする。
+     その `.app` のパスと、`Info.plist` の `CFBundleIdentifier` (`NSBundle`) を使う。
+  2. アプリでないプログラム (`open`、シェル、`login`、コマンドラインツール) は飛ばして親へ進む (8 段まで)。Terminal で
+     `open https://…` を実行すると、`open` → `zsh` → `login` → Terminal とたどって Terminal になる。
+  3. 別のアプリの `Contents/Frameworks/` の中にあるアプリ (Electron の `Code Helper.app`、Chromium の
+     `Google Chrome Helper.app`) はヘルパーとして、外側のアプリとする。VS Code の統合ターミナルはヘルパーの中で動くため。
+     ほかの場所で別のアプリの中にあるアプリ (`Contents/Helpers` の `Preferis Settings.app`、Xcode の Simulator) は、
+     それ自体をアプリとする。
+  4. XPC サービス (`.xpc`) と、アプリの中のコマンドラインツール (`Xcode.app/Contents/Developer/usr/bin/…`) はアプリではない。
+- 次の場合は不明とする。
+  - Apple Event に送り主が無い (読み取りに失敗した場合も。URL はそのまま振り分ける)。送り主が Router 自身。
+  - 送り主が終了して回収 (reap) された。終了しても親が回収するまで (ゾンビの間) は、パスは読めないが親は分かるのでたどる。
+  - アプリに着く前に launchd (pid 1) に着いた。launchd はアプリもバックグラウンドのジョブも起動し、親が終了したプロセスも
+    引き取るので、その上にアプリは無い。
+- 親の ID は Windows と違って古くならない (親が終了すると子は launchd に引き取られる) ので、起動時刻は比べない。
+- 各プロセスから読むもの:
+  - 親の ID (`proc_pidinfo` の `PROC_PIDT_SHORTBSDINFO`)。`PROC_PIDTBSDINFO` は他のユーザーのプロセス (Terminal が root で
+    動かす `login`) で拒否される。
+  - 実行ファイルのパス (`proc_pidpath`)。
+- コマンドラインで URL を渡された Router (シェル、設定 UI の「開く」) は、自分の親から同じ規則で判定する。設定 UI の「開く」
+  では `Preferis Settings.app` になる。
+- 結果と所要時間は `info` でログに書き (`Opened by: …`)、履歴に残す (§2.9 と同じ)。送り主のプロセス ID と実行ファイルは
+  `trace` で書く (`The URLs came from process …`)。
+- 実機で確かめること:
+  - 送り主が URL を開いたアプリ (かその子) になるか。特に Router が起動していない時 (URL で起動される、通常の経路) に、
+    Launch Services のデーモンが送り主にならないか。デーモンが送り主なら launchd に着いて不明になる。
+  - `application:openURLs:` の中で `currentAppleEvent` が取れるか。AppKit が起動中に URL を溜めてから渡すと取れない
+    可能性がある。取れなければ `trace` に `The Apple Event did not name its sender.` と出る。その場合は GURL の
+    Apple Event ハンドラーを自分で登録する方式に切り替える。
+  - 所要時間。
 
 ## 4. 共通: 起動時間の計測
 

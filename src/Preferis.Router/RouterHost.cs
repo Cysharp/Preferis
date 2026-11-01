@@ -163,19 +163,25 @@ internal sealed class RouterHost
     }
 
     /// <summary>
-    /// The app that opened the URL (docs/Design.md §6.2). On Windows it is told from the processes and from the window that
-    /// <paramref name="detector"/> noted in front at start; null when it cannot be told. Never stops the URL from opening.
+    /// The app that opened the URL given to the Router (docs/Design.md §6.2). On Windows it is told from the processes and
+    /// from the window that <paramref name="detector"/> noted in front at start; on macOS, from the program that started the
+    /// Router. Null when it cannot be told. Never stops the URL from opening.
     /// </summary>
     public SourceApp? DetectSourceApp(WindowsSourceAppDetector? detector)
     {
-        if (detector is null || !OperatingSystem.IsWindows())
+        if (OperatingSystem.IsWindows())
         {
-            return null;
+            return detector is null ? null : DetectSourceApp(detector.Detect);
         }
+        return OperatingSystem.IsMacOS() ? DetectSourceApp(MacSourceAppDetector.DetectParent) : null;
+    }
+
+    private SourceApp? DetectSourceApp(Func<SourceApp?> detect)
+    {
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
-            var source = detector.Detect();
+            var source = detect();
             Log.Write(LogLevel.Info, $"Opened by: {Describe(source)} ({System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F1} ms)");
             return source;
         }
@@ -196,8 +202,10 @@ internal sealed class RouterHost
     {
         Log.Write(LogLevel.Trace, "Waiting for URLs from Launch Services.");
         MacUrlActivationSource.Run(
-            onUrls: urls =>
+            onUrls: (urls, sender) =>
             {
+                // Here on the main thread, before the sender may be gone: the open command exits once it has asked.
+                var source = DetectSourceApp(() => DetectSender(sender));
                 foreach (var url in urls)
                 {
                     // Work off the main thread so the run loop keeps receiving events while a picker is open.
@@ -206,7 +214,7 @@ internal sealed class RouterHost
                     {
                         try
                         {
-                            Handle(url, source: null);
+                            Handle(url, source);
                         }
                         finally
                         {
@@ -229,6 +237,19 @@ internal sealed class RouterHost
                 }
             });
         return 0;
+    }
+
+    // The sender goes to the trace log until the detection is confirmed on real Macs (docs/Platform.md §3.9).
+    [SupportedOSPlatform("macos")]
+    private SourceApp? DetectSender(int? sender)
+    {
+        if (sender is not { } id)
+        {
+            Log.Write(LogLevel.Trace, "The Apple Event did not name its sender.");
+            return null;
+        }
+        Log.Write(LogLevel.Trace, $"The URLs came from process {id} ({MacSourceAppDetector.ExecutablePath(id) ?? "exited"}).");
+        return MacSourceAppDetector.Detect(id);
     }
 
     private HandleOutcome Handle(string input, SourceApp? source)

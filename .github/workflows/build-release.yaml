@@ -174,3 +174,4 @@ jobs:
         ./Preferis-win-x64/*
         ./Preferis-win-arm64/*
         ./Preferis-osx-arm64/*
+    secrets: inherit

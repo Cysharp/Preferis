@@ -7,7 +7,7 @@
   <key>CFBundleExecutable</key>
   <string>Preferis</string>
   <key>CFBundleIdentifier</key>
-  <string>net.mayuki.Preferis</string>
+  <string>com.cysharp.Preferis</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>

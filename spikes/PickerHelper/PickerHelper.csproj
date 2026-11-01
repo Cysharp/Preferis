@@ -13,7 +13,7 @@
     <RootNamespace>Preferis.Spikes.PickerHelper</RootNamespace>
     <AssemblyName>PickerHelper</AssemblyName>
     <ApplicationTitle>PickerHelper</ApplicationTitle>
-    <ApplicationId>net.mayuki.preferis.spike.picker</ApplicationId>
+    <ApplicationId>com.cysharp.preferis.spike.picker</ApplicationId>
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>

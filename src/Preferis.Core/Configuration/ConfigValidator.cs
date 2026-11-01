@@ -160,11 +160,23 @@ public static class ConfigValidator
                 ValidateCondition(not.Condition, patterns, add);
                 break;
             case PatternCondition leaf when leaf.Pattern.Length == 0:
-                add(IssueSeverity.Warning, (leaf is UrlCondition ? L("The URL pattern is empty.") : L("The host pattern is empty.")));
+                add(IssueSeverity.Warning, leaf switch
+                {
+                    UrlCondition => L("The URL pattern is empty."),
+                    AppIdCondition => L("The app ID pattern is empty."),
+                    AppPathCondition => L("The app path pattern is empty."),
+                    _ => L("The host pattern is empty."),
+                });
                 break;
-            // With the case sensitivity the Router compiles it with (ConditionEvaluator): hosts always ignore case.
+            // With the case sensitivity the Router compiles it with (ConditionEvaluator): hosts and apps always ignore case.
             case PatternCondition leaf when patterns.ErrorOf(leaf.Match, leaf.Pattern, ignoreCase: leaf is not UrlCondition { IgnoreCase: false }) is { } error:
-                add(IssueSeverity.Error, (leaf is UrlCondition ? L("The URL pattern '{0}' is invalid: {1}", leaf.Pattern, error) : L("The host pattern '{0}' is invalid: {1}", leaf.Pattern, error)));
+                add(IssueSeverity.Error, leaf switch
+                {
+                    UrlCondition => L("The URL pattern '{0}' is invalid: {1}", leaf.Pattern, error),
+                    AppIdCondition => L("The app ID pattern '{0}' is invalid: {1}", leaf.Pattern, error),
+                    AppPathCondition => L("The app path pattern '{0}' is invalid: {1}", leaf.Pattern, error),
+                    _ => L("The host pattern '{0}' is invalid: {1}", leaf.Pattern, error),
+                });
                 break;
             case UnknownCondition unknown:
                 add(IssueSeverity.Warning, L("The condition type '{0}' comes from a newer Preferis and never matches here.", unknown.Type));

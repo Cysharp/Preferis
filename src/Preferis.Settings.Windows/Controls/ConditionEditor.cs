@@ -9,8 +9,8 @@ namespace Preferis.Settings.Windows.Controls;
 
 /// <summary>
 /// A rule's condition as rows, in the shape of Outlook's and Mail's rules (the AppKit version uses NSPredicateEditor):
-/// "All / Any / None of the following are true" with "Host / URL — is / starts with / … — pattern" rows under it, groups
-/// nested at any depth. Edits the UI-neutral tree of <see cref="ConditionPredicates"/> and reports it after every change.
+/// "All / Any / None of the following are true" with "Host / URL / App — is / starts with / … — pattern" rows under it,
+/// groups nested at any depth. Edits the UI-neutral tree of <see cref="ConditionPredicates"/> and reports it after every change.
 /// </summary>
 internal sealed class ConditionEditor
 {
@@ -21,6 +21,8 @@ internal sealed class ConditionEditor
         (PredicateField.Host, L("Host")),
         (PredicateField.Url, L("URL")),
         (PredicateField.UrlCaseSensitive, L("URL (case-sensitive)")),
+        (PredicateField.AppId, L("App ID")),
+        (PredicateField.AppPath, L("App path")),
     ];
 
     // The titles follow the rule summaries of the list (RuleSummary).

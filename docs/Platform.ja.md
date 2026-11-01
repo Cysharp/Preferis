@@ -39,12 +39,14 @@ Preferis.Core.Hosting.IRoutingLog             Write(level, message)
 | `MacOS.MacUrlActivationSource` | macOS | NSApplication + `application:openURLs:` デリゲート (スパイク 1 の製品版) |
 | `MacOS.MacUserNotifier` | macOS | 暫定で `osascript` の `display dialog` (「Copy URL」ボタンつき)。後で NSAlert に置換可 |
 | `MacOS.ObjC` | macOS | objc ランタイム / Foundation / AppKit / Launch Services への最小限の P/Invoke。グローバルブロック生成を含む |
+| `MacOS.MacSourceAppDetector` | macOS | URL を開いたアプリ (`SourceApp`) を Apple Event の送り主のプロセスとその親から判定する (§3.9)。判定の規則はプロセスのフェイクでテストする |
 | `Windows.WindowsBrowserDetector` | Windows | `StartMenuInternet` (HKCU → HKLM → WOW6432Node) とカタログの既知パス。Preferis 自身と Internet Explorer は除外 (§2.3) |
 | `Windows.WindowsSystemOpener` | Windows | 既定ハンドラーの ProgId (`AssocQueryString`) が `PreferisURL` かを見る。委譲は `ShellExecute` |
 | `Windows.WindowsDefaultBrowserRegistrar` | Windows | HKCU への登録と解除、`ms-settings:defaultapps` を開く (§2.2) |
 | `Windows.WindowsUserNotifier` | Windows | `MessageBoxW`。「はい」で URL をクリップボードにコピー |
 | `Windows.WindowsApplicationIcons` | Windows | `SHDefExtractIcon` → `GetDIBits` → PNG (自前の `PngEncoder`)。System.Drawing を使わない。`LoadApplicationIcon` は自分の exe のアイコン (リソース 32512) を `LoadImage` で読む (§2.7) |
 | `Windows.WindowsProcess` | Windows | Router のコンソール接続、標準ハンドルの継承止め、`AllowSetForegroundWindow` |
+| `Windows.WindowsSourceAppDetector` | Windows | URL を開いたアプリ (`SourceApp`) を親プロセスと起動直後の前面ウィンドウから判定する (§2.9)。判定の規則はプロセスとウィンドウのフェイクでテストする |
 | `Windows.CommandLine` | Windows | `--single-argument` の後ろを生のコマンドラインから取り出す (§2.2) |
 | `Windows.IRegistry` / `IUrlAssociations` | Windows | レジストリと関連付けの薄い抽象。テストはフェイクで検出と登録を検証する |
 
@@ -140,7 +142,10 @@ Windows は `WindowsSettingsPlatform`、§2.8)。
 - NativeAOT のリンクに Visual Studio の C++ ツール (「C++ によるデスクトップ開発」) が要る。ILCompiler は
   `%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe` でそれを探すが、Git Bash から `dotnet` を起動すると
   括弧を含む環境変数 `ProgramFiles(x86)` が子に渡らず、「'vswhere.exe' is not recognized」でリンクが失敗する。PowerShell か
-  コマンドプロンプトから実行する。
+  コマンドプロンプトから実行する。環境変数 `NoDefaultCurrentDirectoryInExePath` が設定されている環境 (Claude Code など) でも
+  同じエラーになる: Visual Studio 18 の `VsDevCmd.bat` は Installer フォルダーに `pushd` して `vswhere.exe` を名前だけで
+  呼ぶが、この変数があると cmd はカレントフォルダーの実行ファイルを探さない。`%ProgramFiles(x86)%\Microsoft Visual Studio\Installer`
+  を PATH に足すと通る (2026-10-31)。
 - WinUI のプロジェクトには `EnableMsixTooling=true` が要る (非パッケージでも)。無いと publish に `<名前>.pri` が入らず、
   コントロールが Fluent のスタイルを失う (microsoft/WindowsAppSDK#3451)。
 - .NET 11 RC2 の NativeAOT publish は参照解決より先に XAML をコンパイルして WMC1007 になるため、WinUI の 2 プロジェクトで
@@ -442,6 +447,39 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
     -ConfigPath "$env:APPDATA/Cysharp/Preferis/config.json"
 ```
 
+### 2.9 URL を開いたアプリの判定
+
+`Windows.WindowsSourceAppDetector` が、条件 `appId` / `appPath` (Design.md §6.2) の照合に使う `SourceApp` を作る。
+URL ハンドラーにはコマンドラインしか渡らないため、残る手がかりの親プロセスと前面ウィンドウを使う (Design.md §12 スパイク 10)。
+
+- 前面ウィンドウは `Main` の最初に `GetForegroundWindow` で記録する (`CaptureForeground`)。Router の起動が進む間に別の
+  ウィンドウが前面に来ても、リンクをクリックしたウィンドウで判定するため。
+- シェルは登録したコマンドを、URL を開くよう頼んだプロセスの中で起動する (ShellExecuteEx)。そのため通常はそのアプリが親になる。
+  1. 自分から親をたどる。中継 (`cmd.exe`、`conhost.exe`、`rundll32.exe`、`OpenWith.exe`) なら、さらにその親へ進む (8 段まで)。
+  2. 中継でない最初の親が仲介プロセス (`explorer.exe`、`svchost.exe`、`sihost.exe`、`RuntimeBroker.exe`、
+     `ApplicationFrameHost.exe`、`services.exe`) なら、前面ウィンドウのプロセスをアプリとする。UWP アプリは sihost.exe が
+     ハンドラーを起動するので、この経路になる。前面が `ApplicationFrameHost.exe` (UWP アプリの枠) なら、子ウィンドウのうち
+     枠以外のプロセスがアプリ本体。前面ウィンドウが無い場合と、枠の中にアプリが無い場合は不明。
+  3. それ以外ならその親がアプリ。その上 (新しい Outlook を起動した sihost.exe など) は見ない。
+- 次の場合は不明とし、前面ウィンドウは使わない (Design.md §13)。
+  - 親が終了済み。終了したプロセスでも、ハンドルを持つプロセス (その親) がいる間は開けるので、`cmd /c start` の cmd も
+    たどれることがある。
+  - 親を開けない (`PROCESS_QUERY_LIMITED_INFORMATION` が拒否される他のユーザーやサービスのプロセス)。
+  - 親が自分 (子) より後に起動している (終了した親の ID が再利用された)。
+- 各プロセスから読むもの:
+  - 実行ファイルのパス (`QueryFullProcessImageNameW`)。中継・仲介プロセスかどうかはそのファイル名で、大文字小文字を区別せずに見る。
+  - 起動時刻 (`GetProcessTimes`)。
+  - 親の ID (`NtQueryInformationProcess` の `ProcessBasicInformation`)。
+  - AUMID (`GetApplicationUserModelId`)。パッケージのアプリでなければ無い。
+- Toolhelp のスナップショット (`CreateToolhelp32Snapshot`) は開けないプロセスの名前も分かるが、それだけで 10〜20 ms かかる
+  ため使わない (§5)。判定全体は約 0.3 ms。
+- Router は `--single-argument` (既定のブラウザーとしての起動) でも、コマンドラインで渡された URL でも判定し、
+  `RoutingService.Handle` に渡す。
+  - 結果と所要時間は `info` でログに書く (`Opened by: id …, path … (0.3 ms)`)。
+  - 履歴には `appId` / `appPath` として残す。
+  - 判定が例外で失敗した場合は、警告をログに書いて不明として続ける。
+- 設定 UI のテストページの「開く」は Router を子プロセスとして実行するので、アプリは `Preferis.Settings.exe` になる。
+
 ## 3. macOS
 
 ### 3.1 バンドル構成
@@ -633,6 +671,8 @@ NSApplication を使わずその場で処理します。
 2. `[NSApplication sharedApplication]` → `setDelegate:` → `run`。
 3. `application:openURLs:` で受け取った `NSArray<NSURL>` を列挙し、`absoluteString` → `UTF8String` で
    文字列化して URL ごとにルーティングを開始する。Finder から `.html` を開いた場合は `file://` URL が届く。
+   その前に、AppKit が処理中の Apple Event (`NSAppleEventManager` の `currentAppleEvent`) から送り主のプロセス ID
+   (`keySenderPIDAttr`) を読み、URL を開いたアプリを判定する (§3.9)。
 4. 処理中の URL 件数をカウントし、ピッカー待ちを含めてすべて完了したら 300 ms の猶予の後に
    `performSelectorOnMainThread:` 経由で `terminate:` を呼ぶ。URL ごとの処理はスレッドプールで行い、
    ランループは次のイベントを受け続ける。
@@ -720,7 +760,7 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
   ポップアップは値の右に `secondarySystemFill` の丸いシェブロン (`MenuPopUpButton`。AppKit に同じ見た目のベゼルはないため
   枠なしのポップアップにバッジを重ねる)。行は `NSStackView` ではなく制約で組む: 横向きのスタックは中央揃えのとき最も高い
   ビューに対して上下のインセットを守らず、説明つきの行が詰まった。
-- ルールの条件は `NSPredicateEditor` (`ConditionEditor`)。左の式 `host` / `url` / `urlCaseSensitive` と演算子 `==` /
+- ルールの条件は `NSPredicateEditor` (`ConditionEditor`)。左の式 `host` / `url` / `urlCaseSensitive` / `appId` / `appPath` と演算子 `==` /
   `BEGINSWITH` / `ENDSWITH` / `CONTAINS` / `LIKE` (wildcard) / `MATCHES` (regex) の `NSPredicate` を `ConditionPredicates` の木に
   変換する。ポップアップの表示名はテンプレートのビューの項目名を書き換えて変える (エディターは行ごとにそのコピーを使い、
   項目は元の式と演算子を保持する)。`NSPredicateEditor` は自分自身を `NSRuleEditor` のデリゲートにしているので差し替えず、
@@ -764,6 +804,42 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 - 終了 (⌘Q、AppleScript の quit) は書き込み待ちの編集を書き込んでから終わる (保留中で書けない時だけ尋ねる)。`osascript -e 'tell application id
   "net.mayuki.Preferis.Settings" to quit'` は終了したにもかかわらず -128 (ユーザーによるキャンセル) を返すことがある。
 
+### 3.9 URL を開いたアプリの判定
+
+`MacOS.MacSourceAppDetector` が、条件 `appId` / `appPath` (Design.md §6.2) の照合に使う `SourceApp` を作る。
+Windows (§2.9) と違い、URL を届ける Apple Event が送り主のプロセスを持つので、それを使う (Design.md §12 スパイク 11)。
+
+- 送り主のプロセス ID は `application:openURLs:` の中で読む (§3.6)。判定もメインスレッドで、URL を受け取ってすぐ行う。
+  `open` コマンドは頼み終えるとすぐに終了するため。
+- アプリの決め方:
+  1. 送り主から親へたどり、実行ファイルがバンドルの本体 (`X.app/Contents/MacOS/x`) である最初のプロセスをアプリとする。
+     その `.app` のパスと、`Info.plist` の `CFBundleIdentifier` (`NSBundle`) を使う。
+  2. アプリでないプログラム (`open`、シェル、`login`、コマンドラインツール) は飛ばして親へ進む (8 段まで)。Terminal で
+     `open https://…` を実行すると、`open` → `zsh` → `login` → Terminal とたどって Terminal になる。
+  3. 別のアプリの `Contents/Frameworks/` の中にあるアプリ (Electron の `Code Helper.app`、Chromium の
+     `Google Chrome Helper.app`) はヘルパーとして、外側のアプリとする。VS Code の統合ターミナルはヘルパーの中で動くため。
+     ほかの場所で別のアプリの中にあるアプリ (`Contents/Helpers` の `Preferis Settings.app`、Xcode の Simulator) は、
+     それ自体をアプリとする。
+  4. XPC サービス (`.xpc`) と、アプリの中のコマンドラインツール (`Xcode.app/Contents/Developer/usr/bin/…`) はアプリではない。
+- 次の場合は不明とする。
+  - Apple Event に送り主が無い (読み取りに失敗した場合も。URL はそのまま振り分ける)。送り主が Router 自身。
+  - 送り主が終了して回収 (reap) された。終了しても親が回収するまで (ゾンビの間) は、パスは読めないが親は分かるのでたどる。
+  - アプリに着く前に launchd (pid 1) に着いた。launchd はアプリもバックグラウンドのジョブも起動し、親が終了したプロセスも
+    引き取るので、その上にアプリは無い。
+- 親の ID は Windows と違って古くならない (親が終了すると子は launchd に引き取られる) ので、起動時刻は比べない。
+- 各プロセスから読むもの:
+  - 親の ID (`proc_pidinfo` の `PROC_PIDT_SHORTBSDINFO`)。`PROC_PIDTBSDINFO` は他のユーザーのプロセス (Terminal が root で
+    動かす `login`) で拒否される。
+  - 実行ファイルのパス (`proc_pidpath`)。
+- コマンドラインで URL を渡された Router (シェル、設定 UI の「開く」) は、自分の親から同じ規則で判定する。設定 UI の「開く」
+  では `Preferis Settings.app` になる。
+- 結果と所要時間は `info` でログに書き (`Opened by: …`)、履歴に残す (§2.9 と同じ)。送り主のプロセス ID と実行ファイルは
+  `trace` で書く (`The URLs came from process …`)。
+- アプリを誤る、または不明になる場合は `trace` のログで送り主を見る。`The Apple Event did not name its sender.` なら
+  `currentAppleEvent` が取れていない (AppKit が URL を溜めてから渡した場合など)。その時は GURL の Apple Event ハンドラーを
+  自分で登録する方式に切り替える。送り主が Launch Services のデーモンなら、launchd に着いて不明になる。
+- 所要時間は未計測。
+
 ## 4. 共通: 起動時間の計測
 
 `tools/bench` に以下を用意します。
@@ -778,6 +854,66 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 計測結果は本書末尾に記録し、Design.md §5.2 の目標値と比較します。
 
 ## 5. 計測記録
+
+### 2026-11-01 送信元アプリの判定の所要時間 (§2.9)
+
+環境: Windows 11 Pro (10.0.26200), x64, .NET 10, NativeAOT の Release ビルド、441 プロセスが動いている状態。
+
+- 内訳: 各手順の呼び出しだけを並べた使い捨てのプログラム (6 回)。
+- 判定全体: `PREFERIS_TRACE=1` の Router が書く `Opened by` の行 (7 回)。Router は URL でない引数で起動し、判定の後の
+  振り分けで止めた。起動元はストア版 PowerShell 7 で、`Start-Process` から 5 回、`cmd /c` 経由と直接の実行から各 1 回。
+
+| 手順 | 所要時間 |
+| --- | --- |
+| Toolhelp のスナップショットの作成 | 10.3〜10.9 ms |
+| スナップショットの全件の走査 (名前と親の辞書を作る) | 8.1〜9.3 ms |
+| 1 プロセスを開いてパス・起動時刻・AUMID を読む | 約 0.1 ms |
+| `NtQueryInformationProcess` で親の ID を読む | 0.08〜0.10 ms |
+| 判定全体 (スナップショットを使う版) | 12.6〜13.7 ms |
+| 判定全体 (`NtQueryInformationProcess` を使う版、採用) | 0.3〜0.4 ms |
+
+7 回ともストア版 PowerShell (`Microsoft.PowerShell_8wekyb3d8bbwe!App`、`WindowsApps\…\pwsh.exe`) と判定した。
+`cmd /c` 経由の 1 回も、cmd を飛ばして PowerShell までたどれた。
+
+### 2026-10-31 スパイク 10: Windows の送信元アプリの判定 (`spikes/SourceApp`)
+
+環境: Windows 11 Pro (10.0.26200), x64, .NET 10.0.401, NativeAOT。`spikes/SourceApp/measure.ps1` を 3 回と、改修前の
+ビルドで 2 回実行した。独自スキーム `preferis-probe:` のハンドラーにしたプローブを、ストア版 PowerShell 7 (MSIX
+パッケージ) から各経路で起動した。前面には Edge のウィンドウがあった。
+
+| 経路 | 親プロセスのチェーン | 推定 |
+| --- | --- | --- |
+| `Start-Process` (ShellExecuteEx) | pwsh.exe (呼び出し元) → … | 呼び出し元 (5/5) |
+| `cmd /c start "" <url>` | cmd.exe が終了済み (4/5)。1 回はスナップショットに残っていて、そこから pwsh.exe へたどれた | 不明 (4/5) |
+| `rundll32 url.dll,FileProtocolHandler <url>` | rundll32.exe が終了済み | 不明 (5/5) |
+| `explorer.exe <url>` | explorer.exe (この時に起動された別プロセス) → svchost.exe → services.exe | 仲介プロセスのため不明 (5/5) |
+| Windows PowerShell 5.1 から `Windows.System.Launcher.LaunchUriAsync` | powershell.exe (呼び出し元) → … | 呼び出し元 (5/5) |
+
+- プローブが前面ウィンドウを読むのはプロセス起動から 17〜43 ms 後で、親のチェーンを調べるのはその直後。
+  `cmd /c start` と `rundll32` は、ハンドラーを起動した直後に終了するため、ほとんど間に合わない。
+- MSIX パッケージの pwsh.exe が親でも、プローブ自身はパッケージの ID を持たなかった (`GetCurrentPackageFullName` が失敗)。
+- 前面ウィンドウはどの経路でも Edge だった (起動元とは無関係)。
+- svchost.exe、services.exe、wininit.exe は通常のユーザーからは開けない (名前と親の ID はスナップショットから分かる)。
+
+続けて、開発者が `SourceApp.exe --register-browser` でプローブを既定のブラウザーにして、アプリ内のリンクをクリックした
+(各 1 回、URL は Edge に転送)。
+
+| クリックしたアプリ | 種類 | 親プロセスのチェーン | 前面ウィンドウ (起動から) | 推定 |
+| --- | --- | --- | --- | --- |
+| VS Code | デスクトップ (Electron、パッケージなし) | Code.exe → explorer.exe | Code.exe (29 ms) | 親と前面が同じプロセス |
+| Windows Terminal 1.24 | デスクトップ (MSIX) | WindowsTerminal.exe → (終了済み) | WindowsTerminal.exe (23 ms) | 親と前面が同じプロセス |
+| メモ帳 11.2607 | デスクトップ (MSIX) | Notepad.exe → explorer.exe | Notepad.exe (25 ms) | 親と前面が同じプロセス |
+| 新しい Outlook (olk.exe) | デスクトップ (MSIX、WebView2) | olk.exe → sihost.exe → svchost.exe | olk.exe (36 ms) | 親と前面が同じプロセス |
+| Microsoft Store | UWP | sihost.exe → svchost.exe → services.exe | ApplicationFrameHost.exe。子ウィンドウから WinStore.App.exe を特定 (36 ms) | 親は仲介プロセス。前面からアプリ |
+| 設定 | UWP | sihost.exe → svchost.exe → services.exe | ApplicationFrameHost.exe。子ウィンドウから SystemSettings.exe を特定 (32 ms) | 親は仲介プロセス。前面からアプリ |
+
+- デスクトップアプリは、MSIX パッケージでもそのアプリ自身がハンドラーを起動した。Windows Terminal はシェルを介さずに
+  自分でリンクを開いた (親が端末のシェルではなく WindowsTerminal.exe)。
+- UWP アプリが開いた URL のハンドラーは sihost.exe (Shell Infrastructure Host) が起動した。親からは送信元が分からない。
+- 新しい Outlook のように sihost.exe が起動したデスクトップアプリもある。チェーンの先頭 (中継を除く最初の親) を見れば、
+  上にある sihost.exe に惑わされない。
+- プローブ自身は、設定から開いた時だけ設定アプリのパッケージ ID (`windows.immersivecontrolpanel_10.0.8.1000_neutral_neutral_cw5n1h2txyewy`)
+  を持っていた。同じ UWP の Microsoft Store を含め、他の 5 つでは持たなかった。
 
 ### 2026-10-03 設定 UI: 1,000 条件のルールの編集 (Design.md §9.1)
 

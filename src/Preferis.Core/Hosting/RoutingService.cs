@@ -24,7 +24,7 @@ public sealed class RoutingService
         _services = services;
     }
 
-    public HandleResult Handle(RoutingUrl url)
+    public HandleResult Handle(RoutingUrl url, SourceApp? source = null)
     {
         // The language of the picker and of the messages (docs/Design.md §9.4) is config.json's; while it loads, and when it
         // cannot be read, the system's rather than that of the previous URL. Scopes belong to this execution: another
@@ -43,7 +43,7 @@ public sealed class RoutingService
         // What this machine opens: its own targets in place of the shared ones (docs/Design.md §7.4). Remembering a
         // choice writes to the file as loaded again, so these never reach config.json.
         var config = LocalProfileTargets.Apply(loaded.Config, loaded.Local);
-        var result = new Router(config).Route(url);
+        var result = new Router(config).Route(url, source);
         foreach (var entry in result.Trace)
         {
             Log(LogLevel.Trace, entry.RuleId is null ? $"[{entry.Kind}] {entry.Message}" : $"[{entry.Kind}] {entry.RuleId}: {entry.Message}");

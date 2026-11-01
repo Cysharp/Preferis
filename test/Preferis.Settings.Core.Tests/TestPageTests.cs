@@ -220,6 +220,64 @@ public sealed class TestPageTests : IDisposable
     }
 
     [Fact]
+    public void The_url_is_tested_as_opened_by_the_app_given()
+    {
+        const string Slack = @"C:\Users\me\AppData\Local\slack\app-4.41.105\slack.exe";
+        var settings = _harness.WithSample().Create();
+        settings.Config.Rules.Insert(0, new Rule
+        {
+            Id = "from-slack",
+            Name = "From Slack",
+            Condition = new OrCondition
+            {
+                Conditions =
+                [
+                    new AppIdCondition { Match = MatchKind.Exact, Pattern = "com.tinyspeck.slackmacgap" },
+                    new AppPathCondition { Match = MatchKind.EndsWith, Pattern = @"\slack.exe" },
+                ],
+            },
+            Actions = [new NoneAction()],
+        });
+        var page = settings.Test;
+        page.Url = "https://example.com/";
+
+        page.RunCommand.Execute(null);
+        Assert.Contains(page.Trace, t => t.Rule == "From Slack" && t.Kind == "not matched");
+
+        page.AppPath = $"  {Slack}  ";
+        page.RunCommand.Execute(null);
+        Assert.Equal("Do nothing (rule \"From Slack\")", page.Decision);
+
+        page.AppPath = "";
+        page.AppId = "com.tinyspeck.slackmacgap";
+        page.RunCommand.Execute(null);
+        Assert.Equal("Do nothing (rule \"From Slack\")", page.Decision);
+    }
+
+    [Fact]
+    public void The_history_names_the_app_and_tests_again_with_it()
+    {
+        const string Terminal = @"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.24.12741.0_x64__8wekyb3d8bbwe\WindowsTerminal.exe";
+        File.WriteAllText(_harness.Paths.LocalConfigPath, """{ "logging": { "history": true } }""");
+        var history = new RoutingHistory(_harness.Paths.HistoryPath);
+        history.Append(new HistoryEntry { Time = DateTimeOffset.Now, Url = "https://example.com/a", Outcome = "Launched", AppId = "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", AppPath = Terminal }, 50);
+        history.Append(new HistoryEntry { Time = DateTimeOffset.Now, Url = "https://example.com/b", Outcome = "Launched", AppPath = "/Applications/Slack.app/" }, 50);
+        history.Append(new HistoryEntry { Time = DateTimeOffset.Now, Url = "https://example.com/c", Outcome = "Launched" }, 50);
+        var page = _harness.WithSample().Create().Test;
+
+        page.Activate();
+
+        Assert.Equal([null, "Slack.app", "WindowsTerminal.exe"], page.History.Select(h => h.App));
+        page.TestHistoryEntryCommand.Execute(page.History[2]);
+        Assert.Equal("Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", page.AppId);
+        Assert.Equal(Terminal, page.AppPath);
+        // An entry without an app leaves none behind from the one tested before.
+        page.TestHistoryEntryCommand.Execute(page.History[0]);
+        Assert.Equal("", page.AppId);
+        Assert.Equal("", page.AppPath);
+    }
+
+    [Fact]
     public void The_history_is_hidden_while_it_is_off()
     {
         var page = _harness.WithSample().Create().Test;

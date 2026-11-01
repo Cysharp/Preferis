@@ -268,9 +268,29 @@ Firefox のプロファイルは `-P <name>` で選ぶため `name` だけを保
 { "type": "not", "condition": Condition }
 { "type": "host" | "url", "match": "regex" | "wildcard" | "startsWith" | "endsWith" | "contains" | "equals",
   "pattern": "...", "ignoreCase": true }
+{ "type": "appId" | "appPath", "match": ..., "pattern": "..." }
 ```
 
-`ignoreCase` は `url` のみ有効 (既定 `true`)。`host` は常に大文字小文字を区別しません。
+`ignoreCase` は `url` のみ有効 (既定 `true`)。`host`、`appId`、`appPath` は常に大文字小文字を区別しません。
+
+`appId` と `appPath` は URL を開いたアプリと照合します。アプリが分からない場合 (バックグラウンドのスクリプトが開いた
+URL など) は一致しません。macOS では、Terminal で `open` などのコマンドが開いた URL は、そのコマンドを動かしている
+アプリ (Terminal) が開いたものとみなします。
+
+| type | macOS | Windows |
+| --- | --- | --- |
+| `appId` | バンドル ID (`com.tinyspeck.slackmacgap`) | パッケージアプリの AUMID (`Microsoft.WindowsTerminal_8wekyb3d8bbwe!App`)。パッケージでないアプリには無い |
+| `appPath` | `.app` のパス (`/Applications/Slack.app`) | 実行ファイルのパス (`C:\Users\…\AppData\Local\slack\app-4.41.105\slack.exe`) |
+
+OS ごとの書き分けはありません。両 OS で共有する設定では `or` で並べます (片方の OS の ID やパスはもう一方では一致しない)。
+Windows のパスはバージョンやユーザー名を含むことがあるため、`endsWith` (`\slack.exe`) やワイルドカードを使います。
+
+```json
+{ "type": "or", "conditions": [
+  { "type": "appId",   "match": "equals",   "pattern": "com.tinyspeck.slackmacgap" },
+  { "type": "appPath", "match": "endsWith", "pattern": "\\slack.exe" } ] }
+```
+
 意味論は [Design.md §6.2](Design.md) を参照。
 
 ### 2.8 Action
@@ -413,7 +433,7 @@ www.example.com,Personal,Work
 | `browserOverrides` | ブラウザー ID → `{ path, userDataDir? }`。検出より優先する。ポータブル版や特殊なインストール先向け。`path` は macOS では `.app`、Windows では実行ファイル (`"D:\\Portable\\Chrome\\chrome.exe"`)。Windows ではキーの無いポータブル版も検出結果に加わる |
 | `profileTargets` | プロファイル `id` → このマシンで使うターゲット (§3.1) |
 | `logging.level` | `off` / `error` / `info` / `trace`。エラーのメッセージ中の URL はユーザー情報・クエリ・フラグメントを伏せる。`info` と `trace` は開いた URL をそのまま含む |
-| `logging.history` | ルーティング履歴 (URL を含む) をローカルに保存するか。オプトイン。保存先はログディレクトリの `history.jsonl` (macOS: `~/Library/Logs/Preferis/`、Windows: `%LOCALAPPDATA%\Cysharp\Preferis\Logs\`) |
+| `logging.history` | ルーティング履歴 (URL と、分かれば URL を開いたアプリを含む) をローカルに保存するか。オプトイン。保存先はログディレクトリの `history.jsonl` (macOS: `~/Library/Logs/Preferis/`、Windows: `%LOCALAPPDATA%\Cysharp\Preferis\Logs\`) |
 | `logging.historySize` | 履歴に残す件数 (既定 50)。古いものから消す |
 
 ### 3.1 `profileTargets` (このマシンのターゲット)

@@ -14,6 +14,56 @@ public class ConditionEvaluatorTests
 
     private static UrlCondition Url(MatchKind match, string pattern, bool ignoreCase = true) => new() { Match = match, Pattern = pattern, IgnoreCase = ignoreCase };
 
+    private static bool MatchesFrom(Condition condition, SourceApp? source)
+        => ConditionEvaluator.Matches(condition, RoutingUrl.Parse("https://example.com/"), source);
+
+    [Theory]
+    [InlineData("com.tinyspeck.slackmacgap", true)]
+    [InlineData("COM.TinySpeck.SlackMacGap", true)]
+    [InlineData("com.tinyspeck.slackmacgap.helper", false)]
+    public void App_id_is_matched_against_the_id_of_the_app_that_opened_the_url_ignoring_case(string id, bool expected)
+    {
+        var condition = new AppIdCondition { Match = MatchKind.Exact, Pattern = "com.tinyspeck.slackmacgap" };
+
+        Assert.Equal(expected, MatchesFrom(condition, new SourceApp(id, "/Applications/Slack.app")));
+    }
+
+    [Theory]
+    [InlineData(MatchKind.EndsWith, @"\slack.exe")]
+    [InlineData(MatchKind.Wildcard, @"*\slack\app-*\slack.exe")]
+    public void App_path_is_matched_against_the_path_of_the_app_that_opened_the_url_ignoring_case(MatchKind match, string pattern)
+    {
+        var condition = new AppPathCondition { Match = match, Pattern = pattern };
+
+        Assert.True(MatchesFrom(condition, new SourceApp(null, @"C:\Users\a\AppData\Local\slack\app-4.41.105\Slack.exe")));
+        Assert.False(MatchesFrom(condition, new SourceApp(null, @"C:\Program Files\Microsoft VS Code\Code.exe")));
+    }
+
+    [Fact]
+    public void App_conditions_never_match_when_the_app_or_that_part_of_it_is_unknown()
+    {
+        var id = new AppIdCondition { Match = MatchKind.Wildcard, Pattern = "*" };
+        var path = new AppPathCondition { Match = MatchKind.Wildcard, Pattern = "*" };
+
+        Assert.False(MatchesFrom(id, null));
+        Assert.False(MatchesFrom(path, null));
+        // An unpackaged Windows program has a path but no id.
+        Assert.False(MatchesFrom(id, new SourceApp(null, @"C:\Tools\tool.exe")));
+        Assert.True(MatchesFrom(path, new SourceApp(null, @"C:\Tools\tool.exe")));
+        Assert.False(MatchesFrom(path, new SourceApp("com.example.tool", null)));
+        // "Not opened from the app" holds when the app is unknown.
+        Assert.True(MatchesFrom(new NotCondition { Condition = id }, null));
+    }
+
+    [Fact]
+    public void Url_conditions_do_not_depend_on_the_app()
+    {
+        var host = Host(MatchKind.Exact, "example.com");
+
+        Assert.True(MatchesFrom(host, null));
+        Assert.True(MatchesFrom(host, new SourceApp("com.example.tool", "/Applications/Tool.app")));
+    }
+
     [Theory]
     [InlineData("https://www.example.com/", true)]
     [InlineData("https://a.b.example.com/path", true)]

@@ -49,6 +49,27 @@ public class RoutingServiceTests
     }
 
     [Fact]
+    public void The_app_that_opened_the_url_reaches_the_rules()
+    {
+        var host = FullHost();
+        host.Config.Rules.Insert(0, new Rule
+        {
+            Id = "from-slack",
+            Name = "From Slack",
+            Condition = new AppIdCondition { Match = MatchKind.Exact, Pattern = "com.tinyspeck.slackmacgap" },
+            Actions = [new OpenAction { Profiles = ["chrome-work"] }],
+        });
+        var url = RoutingUrl.Parse("https://www.example.org/");
+
+        var fromSlack = host.CreateService().Handle(url, new SourceApp("com.tinyspeck.slackmacgap", "/Applications/Slack.app"));
+        var fromElsewhere = host.CreateService().Handle(url);
+
+        Assert.Equal("from-slack", fromSlack.RuleId);
+        Assert.Equal("chrome-work", fromSlack.ProfileId);
+        Assert.NotEqual("from-slack", fromElsewhere.RuleId);
+    }
+
+    [Fact]
     public void The_log_names_profiles_as_well_as_their_ids()
     {
         var host = FullHost();

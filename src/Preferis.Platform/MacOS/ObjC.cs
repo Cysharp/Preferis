@@ -70,6 +70,7 @@ internal static unsafe partial class ObjC
     public static IntPtr Send(IntPtr receiver, string selector, int arg) => objc_msgSend_int(receiver, Sel(selector), arg);
     public static nuint SendNUInt(IntPtr receiver, string selector) => objc_msgSend_ret_nuint(receiver, Sel(selector));
     public static nint SendNInt(IntPtr receiver, string selector) => objc_msgSend_ret_nint(receiver, Sel(selector));
+    public static int SendInt(IntPtr receiver, string selector) => objc_msgSend_ret_int(receiver, Sel(selector));
     public static bool SendBool(IntPtr receiver, string selector, IntPtr arg) => objc_msgSend_ret_bool(receiver, Sel(selector), arg);
     public static bool SendBool(IntPtr receiver, string selector, nuint arg) => objc_msgSend_ret_bool_nuint(receiver, Sel(selector), arg);
     public static void SendVoid(IntPtr receiver, string selector) => objc_msgSend_void(receiver, Sel(selector));
@@ -152,6 +153,19 @@ internal static unsafe partial class ObjC
     public static string? MainBundlePath => FromNSString(Send(MainBundle, "bundlePath"));
 
     public static string? MainBundleIdentifier => BundleIdentifier(MainBundle);
+
+    // ---- Apple Events ---------------------------------------------------------------------------
+
+    // keySenderPIDAttr ('spid')
+    private const int SenderProcessIdAttribute = 0x73706964;
+
+    /// <summary>The process that sent the Apple Event being handled on this thread; null outside a handler, or when the event does not say.</summary>
+    public static int? CurrentAppleEventSender()
+    {
+        var current = Send(Send(GetClass("NSAppleEventManager"), "sharedAppleEventManager"), "currentAppleEvent");
+        var sender = current == IntPtr.Zero ? IntPtr.Zero : Send(current, "attributeDescriptorForKeyword:", SenderProcessIdAttribute);
+        return sender == IntPtr.Zero ? null : SendInt(sender, "int32Value");
+    }
 
     // ---- blocks ---------------------------------------------------------------------------------
 
@@ -251,6 +265,9 @@ internal static unsafe partial class ObjC
 
     [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
     private static partial nint objc_msgSend_ret_nint(IntPtr receiver, IntPtr selector);
+
+    [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
+    private static partial int objc_msgSend_ret_int(IntPtr receiver, IntPtr selector);
 
     [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
     [return: MarshalAs(UnmanagedType.I1)]

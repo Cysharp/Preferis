@@ -151,15 +151,50 @@ internal sealed class RouterHost
     }
 
     /// <summary>Routes URLs given on the command line. Exit code 0 unless one of them failed completely.</summary>
-    public int HandleUrls(IEnumerable<string> inputs)
+    /// <param name="source">The app that opened them, for the app conditions; null when unknown.</param>
+    public int HandleUrls(IEnumerable<string> inputs, SourceApp? source)
     {
         var failed = false;
         foreach (var input in inputs)
         {
-            failed |= Handle(input) == HandleOutcome.Failed;
+            failed |= Handle(input, source) == HandleOutcome.Failed;
         }
         return failed ? 2 : 0;
     }
+
+    /// <summary>
+    /// The app that opened the URL given to the Router (docs/Design.md §6.2). On Windows it is told from the processes and
+    /// from the window that <paramref name="detector"/> noted in front at start; on macOS, from the program that started the
+    /// Router. Null when it cannot be told. Never stops the URL from opening.
+    /// </summary>
+    public SourceApp? DetectSourceApp(WindowsSourceAppDetector? detector)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return detector is null ? null : DetectSourceApp(detector.Detect);
+        }
+        return OperatingSystem.IsMacOS() ? DetectSourceApp(MacSourceAppDetector.DetectParent) : null;
+    }
+
+    private SourceApp? DetectSourceApp(Func<SourceApp?> detect)
+    {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        try
+        {
+            var source = detect();
+            Log.Write(LogLevel.Info, $"Opened by: {Describe(source)} ({System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F1} ms)");
+            return source;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Log.Write(LogLevel.Warning, $"Could not tell which app opened the URL: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>The app as the log and <c>--dry-run</c> show it.</summary>
+    public static string Describe(SourceApp? source)
+        => source is null ? "unknown" : $"id {source.Id ?? "unknown"}, path {source.Path ?? "unknown"}";
 
     /// <summary>macOS: run the application loop and route every URL Launch Services delivers, then quit.</summary>
     [SupportedOSPlatform("macos")]
@@ -167,8 +202,10 @@ internal sealed class RouterHost
     {
         Log.Write(LogLevel.Trace, "Waiting for URLs from Launch Services.");
         MacUrlActivationSource.Run(
-            onUrls: urls =>
+            onUrls: (urls, sender) =>
             {
+                // Here on the main thread, before the sender may be gone: the open command exits once it has asked.
+                var source = DetectSourceApp(() => DetectSender(sender));
                 foreach (var url in urls)
                 {
                     // Work off the main thread so the run loop keeps receiving events while a picker is open.
@@ -177,7 +214,7 @@ internal sealed class RouterHost
                     {
                         try
                         {
-                            Handle(url);
+                            Handle(url, source);
                         }
                         finally
                         {
@@ -202,7 +239,20 @@ internal sealed class RouterHost
         return 0;
     }
 
-    private HandleOutcome Handle(string input)
+    // The sender goes to the trace log, to look into an app that is told wrongly or not at all (docs/Platform.md §3.9).
+    [SupportedOSPlatform("macos")]
+    private SourceApp? DetectSender(int? sender)
+    {
+        if (sender is not { } id)
+        {
+            Log.Write(LogLevel.Trace, "The Apple Event did not name its sender.");
+            return null;
+        }
+        Log.Write(LogLevel.Trace, $"The URLs came from process {id} ({MacSourceAppDetector.ExecutablePath(id) ?? "exited"}).");
+        return MacSourceAppDetector.Detect(id);
+    }
+
+    private HandleOutcome Handle(string input, SourceApp? source)
     {
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         if (!RoutingUrl.TryParse(input, out var url))
@@ -214,9 +264,9 @@ internal sealed class RouterHost
 
         try
         {
-            var result = Service.Handle(url);
+            var result = Service.Handle(url, source);
             Log.Write(LogLevel.Info, $"{result.Outcome}: {result.Summary} ({System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F1} ms)");
-            RecordHistory(url, result);
+            RecordHistory(url, result, source);
             return result.Outcome;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -227,7 +277,7 @@ internal sealed class RouterHost
     }
 
     // After the launch, so the opt-in history never delays opening the URL.
-    private void RecordHistory(RoutingUrl url, HandleResult result)
+    private void RecordHistory(RoutingUrl url, HandleResult result, SourceApp? source)
     {
         if (_history is null)
         {
@@ -238,7 +288,16 @@ internal sealed class RouterHost
             lock (_historyGate)
             {
                 _history.Append(
-                    new HistoryEntry { Time = DateTimeOffset.Now, Url = url.AbsoluteUri, RuleId = result.RuleId, Outcome = result.Outcome.ToString(), ProfileId = result.ProfileId },
+                    new HistoryEntry
+                    {
+                        Time = DateTimeOffset.Now,
+                        Url = url.AbsoluteUri,
+                        RuleId = result.RuleId,
+                        Outcome = result.Outcome.ToString(),
+                        ProfileId = result.ProfileId,
+                        AppId = source?.Id,
+                        AppPath = source?.Path,
+                    },
                     _historySize);
             }
         }

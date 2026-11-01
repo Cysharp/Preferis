@@ -23,6 +23,12 @@ public enum PredicateField
     Host,
     Url,
     UrlCaseSensitive,
+
+    /// <summary>The ID of the app that opened the URL (<c>appId</c>).</summary>
+    AppId,
+
+    /// <summary>The path of the app that opened the URL (<c>appPath</c>).</summary>
+    AppPath,
 }
 
 public sealed record CompoundPredicate(CompoundKind Kind, IReadOnlyList<PredicateNode> Children) : PredicateNode;
@@ -88,6 +94,10 @@ public static class ConditionPredicates
                 return new ComparisonPredicate(PredicateField.Host, host.Match, host.Pattern);
             case UrlCondition url:
                 return new ComparisonPredicate(url.IgnoreCase ? PredicateField.Url : PredicateField.UrlCaseSensitive, url.Match, url.Pattern);
+            case AppIdCondition id:
+                return new ComparisonPredicate(PredicateField.AppId, id.Match, id.Pattern);
+            case AppPathCondition path:
+                return new ComparisonPredicate(PredicateField.AppPath, path.Match, path.Pattern);
             default:
                 return null;
         }
@@ -122,6 +132,8 @@ public static class ConditionPredicates
     {
         CompoundPredicate group => FromGroup(group, previous, Rows(previous)),
         ComparisonPredicate { Field: PredicateField.Host } host => Keep(previous, new HostCondition { Match = host.Match, Pattern = host.Pattern }),
+        ComparisonPredicate { Field: PredicateField.AppId } id => Keep(previous, new AppIdCondition { Match = id.Match, Pattern = id.Pattern }),
+        ComparisonPredicate { Field: PredicateField.AppPath } path => Keep(previous, new AppPathCondition { Match = path.Match, Pattern = path.Pattern }),
         ComparisonPredicate url => Keep(previous, new UrlCondition { Match = url.Match, Pattern = url.Pattern, IgnoreCase = url.Field == PredicateField.Url }),
         _ => throw new ArgumentOutOfRangeException(nameof(node), node, "Unsupported predicate."),
     };

@@ -5,7 +5,7 @@ namespace Preferis.Core.Routing;
 
 /// <summary>
 /// The routing engine: evaluates rules in order and executes the first match's actions.
-/// Pure: depends only on the configuration and the URL. Semantics are specified in docs/Design.md §6.1.
+/// Pure: depends only on the configuration, the URL and the app that opened it. Semantics are specified in docs/Design.md §6.1.
 /// </summary>
 public sealed class Router
 {
@@ -21,24 +21,29 @@ public sealed class Router
         _profileIds = config.Profiles.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
     }
 
-    public RoutingResult Route(RoutingUrl url)
+    /// <param name="source">
+    /// The app that opened the URL, for the app conditions; null when the platform could not tell. Rewrites change the URL
+    /// but not the app it came from.
+    /// </param>
+    public RoutingResult Route(RoutingUrl url, SourceApp? source = null)
     {
         var trace = new List<TraceEntry>();
-        var (decision, ruleId) = RouteCore(url, trace);
+        var (decision, ruleId) = RouteCore(url, source, trace);
         trace.Add(new TraceEntry(TraceKind.Decision, null, Describe(decision)));
         return new RoutingResult(decision, trace) { RuleId = ruleId };
     }
 
-    private (RoutingDecision Decision, string? RuleId) RouteCore(RoutingUrl start, List<TraceEntry> trace)
+    private (RoutingDecision Decision, string? RuleId) RouteCore(RoutingUrl start, SourceApp? source, List<TraceEntry> trace)
     {
         var current = start;
         var hops = 0;
-        // Routing is a deterministic function of the URL, so restarting with a URL seen before can only loop.
+        // Routing is a deterministic function of the URL (the app stays the same), so restarting with a URL seen before
+        // can only loop.
         var seen = new HashSet<string>(StringComparer.Ordinal) { start.AbsoluteUri };
 
         while (true)
         {
-            var outcome = EvaluateOnce(ref current, trace);
+            var outcome = EvaluateOnce(ref current, source, trace);
             if (outcome.Decision is { } decision)
             {
                 return (decision, outcome.RuleId);
@@ -59,9 +64,9 @@ public sealed class Router
     }
 
     /// <summary>Runs through the rules once. Returns a decision, or a reroute request (Decision == null).</summary>
-    private (RoutingDecision? Decision, string? RuleId) EvaluateOnce(ref RoutingUrl current, List<TraceEntry> trace)
+    private (RoutingDecision? Decision, string? RuleId) EvaluateOnce(ref RoutingUrl current, SourceApp? source, List<TraceEntry> trace)
     {
-        var (outcome, ruleId) = EvaluateRules(_config.Rules.Count, ref current, trace);
+        var (outcome, ruleId) = EvaluateRules(_config.Rules.Count, ref current, source, trace);
         if (outcome is ActionOutcome.FallThrough)
         {
             trace.Add(new TraceEntry(TraceKind.CatchAll, null, L("No rule matched; applying the catch-all rule")));
@@ -72,14 +77,14 @@ public sealed class Router
                 ActionOutcome.FallThrough => new ActionOutcome.Decided(Open(null, null, current, trace)),
                 var terminal => terminal,
             };
-            (outcome, ruleId) = BeforeThePicker(outcome, null, _config.Rules.Count, arrived, ref current, trace);
+            (outcome, ruleId) = BeforeThePicker(outcome, null, _config.Rules.Count, arrived, ref current, source, trace);
         }
 
         return outcome is ActionOutcome.Decided(var decision) ? (decision, ruleId) : (null, ruleId);
     }
 
     /// <summary>Evaluates the first <paramref name="count"/> rules in order. FallThrough when none of them decided.</summary>
-    private (ActionOutcome Outcome, string? RuleId) EvaluateRules(int count, ref RoutingUrl current, List<TraceEntry> trace)
+    private (ActionOutcome Outcome, string? RuleId) EvaluateRules(int count, ref RoutingUrl current, SourceApp? source, List<TraceEntry> trace)
     {
         for (var index = 0; index < count; index++)
         {
@@ -90,7 +95,7 @@ public sealed class Router
                 continue;
             }
 
-            if (!ConditionEvaluator.Matches(rule.Condition, current))
+            if (!ConditionEvaluator.Matches(rule.Condition, current, source))
             {
                 trace.Add(new TraceEntry(TraceKind.RuleNotMatched, rule.Id, L("No match for {0}", current.AbsoluteUri)));
                 continue;
@@ -98,7 +103,7 @@ public sealed class Router
 
             trace.Add(new TraceEntry(TraceKind.RuleMatched, rule.Id, L("Matched {0}", current.AbsoluteUri)));
             var matched = current;
-            var (outcome, ruleId) = BeforeThePicker(ExecuteActions(rule.Actions, rule.Id, ref current, trace), rule.Id, index, matched, ref current, trace);
+            var (outcome, ruleId) = BeforeThePicker(ExecuteActions(rule.Actions, rule.Id, ref current, trace), rule.Id, index, matched, ref current, source, trace);
             if (outcome is not ActionOutcome.FallThrough)
             {
                 return (outcome, ruleId);
@@ -117,7 +122,7 @@ public sealed class Router
     /// </summary>
     /// <param name="above">How many rules come before the one that opened: all of them for the catch-all.</param>
     /// <param name="matched">The URL the rule's actions started with.</param>
-    private (ActionOutcome Outcome, string? RuleId) BeforeThePicker(ActionOutcome outcome, string? ruleId, int above, RoutingUrl matched, ref RoutingUrl current, List<TraceEntry> trace)
+    private (ActionOutcome Outcome, string? RuleId) BeforeThePicker(ActionOutcome outcome, string? ruleId, int above, RoutingUrl matched, ref RoutingUrl current, SourceApp? source, List<TraceEntry> trace)
     {
         // Without a rewrite of its own, a choice remembered just above this rule is already evaluated with this very URL.
         // One profile, or none, shows no picker.
@@ -130,7 +135,7 @@ public sealed class Router
         // On a copy: when none of them decides, the picker shows the URL as this rule left it, not as a rule above that
         // only rewrote left it.
         var url = current;
-        var (decided, decidedBy) = EvaluateRules(above, ref url, trace);
+        var (decided, decidedBy) = EvaluateRules(above, ref url, source, trace);
         if (decided is ActionOutcome.FallThrough)
         {
             trace.Add(new TraceEntry(TraceKind.Reevaluated, ruleId, L("No rule above decided; showing the picker")));

@@ -28,6 +28,48 @@ public class RouterTests
 
     private static HostCondition Host(string host) => new() { Match = MatchKind.Exact, Pattern = host };
 
+    private static readonly SourceApp Slack = new(null, @"C:\Users\a\AppData\Local\slack\app-4.41.105\slack.exe");
+
+    private static AppPathCondition FromSlack() => new() { Match = MatchKind.EndsWith, Pattern = @"\slack.exe" };
+
+    private static RewriteAction AToB() => new() { Mode = RewriteMode.Regex, Pattern = @"//a\.example\.com/", Replacement = "//b.example.com/" };
+
+    [Fact]
+    public void A_rule_can_decide_by_the_app_that_opened_the_url()
+    {
+        var config = Config("edge", RuleFor("slack", FromSlack(), new OpenAction { Profiles = ["chrome"] }));
+
+        Assert.Equal(["chrome"], Assert.IsType<RoutingDecision.Open>(new Router(config).Route(RoutingUrl.Parse("https://a.example.com/"), Slack).Decision).ProfileIds);
+        Assert.Equal(["edge"], Assert.IsType<RoutingDecision.Open>(Route(config, "https://a.example.com/").Decision).ProfileIds);
+    }
+
+    [Fact]
+    public void The_app_still_counts_after_a_rewrite_and_a_reroute()
+    {
+        var config = Config("edge",
+            RuleFor("slack-b", new AndCondition { Conditions = [Host("b.example.com"), FromSlack()] }, new OpenAction { Profiles = ["chrome"] }),
+            RuleFor("a-to-b", Host("a.example.com"), AToB(), new RerouteAction()));
+
+        var open = Assert.IsType<RoutingDecision.Open>(new Router(config).Route(RoutingUrl.Parse("https://a.example.com/"), Slack).Decision);
+
+        Assert.Equal(["chrome"], open.ProfileIds);
+        Assert.Equal("https://b.example.com/", open.Url.AbsoluteUri);
+    }
+
+    [Fact]
+    public void The_rules_evaluated_again_before_the_picker_see_the_app_too()
+    {
+        // The second rule rewrites and would show the picker; the first one decides the rewritten URL when Slack opened it.
+        var config = Config("edge",
+            RuleFor("slack-b", new AndCondition { Conditions = [Host("b.example.com"), FromSlack()] }, new OpenAction { Profiles = ["chrome"] }),
+            RuleFor("a-to-b", Host("a.example.com"), AToB(), new OpenAction { Profiles = ["edge", "chrome"] }));
+
+        var result = new Router(config).Route(RoutingUrl.Parse("https://a.example.com/"), Slack);
+
+        Assert.Equal("slack-b", result.RuleId);
+        Assert.Equal(["chrome"], Assert.IsType<RoutingDecision.Open>(result.Decision).ProfileIds);
+    }
+
     [Fact]
     public void First_matching_rule_wins()
     {

@@ -8,6 +8,9 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
+        // First of all: the window the link was clicked in may lose the front to another at any time (docs/Platform.md §2.9).
+        var sourceApp = OperatingSystem.IsWindows() ? WindowsSourceAppDetector.CaptureForeground() : null;
+
         // The installer's hooks (--veloapp-install <version> and the like, docs/Platform.md §2.1) end here. A downloaded
         // update is installed by the settings, never on a link click.
         VelopackInstallation.Start(applyPendingUpdate: false);
@@ -22,9 +25,12 @@ internal static class Program
             // options (docs/Platform.md §2.2). Nothing is printed, so there is no console to attach to.
             if (urls.FirstOrDefault() == CommandLine.SingleArgumentMarker)
             {
-                return CommandLine.SingleArgument(Environment.CommandLine) is { } url
-                    ? RouterHost.Create(interactive: false).HandleUrls([url])
-                    : 1;
+                if (CommandLine.SingleArgument(Environment.CommandLine) is not { } url)
+                {
+                    return 1;
+                }
+                var host = RouterHost.Create(interactive: false);
+                return host.HandleUrls([url], host.DetectSourceApp(sourceApp));
             }
             WindowsProcess.AttachToParentConsole();
         }
@@ -46,7 +52,7 @@ internal static class Program
         switch (urls[0])
         {
             case "--dry-run" when urls.Count >= 2:
-                return DryRunCommand.Run(urls[1], OptionValue(urls, "--config"), Console.Out);
+                return DryRunCommand.Run(urls[1], OptionValue(urls, "--config"), SourceAppOption(urls), Console.Out);
             case "--register":
                 return Report(RouterHost.Create(interactive: true).Registrar.Register());
             case "--unregister":
@@ -64,7 +70,10 @@ internal static class Program
                 Console.Error.WriteLine($"Unknown option: {option}");
                 return Usage();
             default:
-                return RouterHost.Create(interactive: !launchedByLaunchServices).HandleUrls(urls);
+            {
+                var host = RouterHost.Create(interactive: !launchedByLaunchServices);
+                return host.HandleUrls(urls, host.DetectSourceApp(sourceApp));
+            }
         }
     }
 
@@ -72,6 +81,13 @@ internal static class Program
     {
         var index = args.IndexOf(name);
         return index >= 0 && index + 1 < args.Count ? args[index + 1] : null;
+    }
+
+    private static Core.Routing.SourceApp? SourceAppOption(List<string> args)
+    {
+        var id = OptionValue(args, "--app-id");
+        var path = OptionValue(args, "--app-path");
+        return id is null && path is null ? null : new Core.Routing.SourceApp(id, path);
     }
 
     private static int Report(Core.Hosting.RegistrationResult result)
@@ -103,6 +119,7 @@ internal static class Program
             Usage:
               Preferis <url> [<url> ...]                     Route the URLs and open them.
               Preferis --dry-run <url> [--config <path>]     Show how <url> would be routed, without opening anything.
+                       [--app-id <id>] [--app-path <path>]   As if the app with that id or path had opened it.
               Preferis --register | --unregister | --status  Manage the registration as the default browser.
               Preferis --settings                            Open the settings.
               Preferis --version | --help

@@ -24,6 +24,15 @@ internal sealed class TestPage : IPageView
         _bindings.Command(open, page.OpenCommand);
         var input = Ui.HStack(8, url, test, open);
 
+        var appId = Ui.Field(L("App ID"), monospaced: true);
+        _bindings.Text(appId, page, nameof(TestPageViewModel.AppId), () => page.AppId, value => page.AppId = value);
+        appId.Activated += (_, _) => page.RunCommand.Execute(null);
+        var appPath = Ui.Field(L("App path"), monospaced: true);
+        _bindings.Text(appPath, page, nameof(TestPageViewModel.AppPath), () => page.AppPath, value => page.AppPath = value);
+        appPath.Activated += (_, _) => page.RunCommand.Execute(null);
+        var app = Ui.HStack(8, appId, appPath);
+        appId.WidthAnchor.ConstraintEqualTo(appPath.WidthAnchor).Active = true;
+
         var error = Ui.Flowing("", 12, NSColor.SystemRed);
         var errorFooter = Form.Footer(error);
         _bindings.Observe(page, () =>
@@ -36,7 +45,8 @@ internal sealed class TestPage : IPageView
             page.CanOpenUrls
                 ? L("Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so you can test how the picker and browser work.")
                 : L("Test shows how the configuration being edited routes the URL, unsaved changes included, without opening anything. Open hands it to Preferis like a clicked link, so you can test how the picker and browser work. Open needs Preferis Settings to run from inside Preferis.app."),
-            Form.Row(L("URL"), input));
+            Form.Row(L("URL"), input),
+            Form.Row(L("Opened by"), app, L("Test routes the URL as if this app had opened it, for the rules that look at the app. Open does not use it.")));
 
         View = Form.Page(intro, errorFooter, Result(page), Opened(page), Steps(page), History(page));
     }
@@ -145,12 +155,19 @@ internal sealed class TestPage : IPageView
                 url.Font = NSFont.MonospacedSystemFont(11, NSFontWeight.Regular)!;
                 url.ToolTip = entry.Url;
                 url.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
+                var app = Ui.Secondary(entry.App ?? "");
+                app.LineBreakMode = NSLineBreakMode.TruncatingMiddle;
+                app.WidthAnchor.ConstraintLessThanOrEqualTo(160).Active = true;
+                if (entry.App is not null)
+                {
+                    app.ToolTip = string.Join("\n", new[] { entry.AppPath, entry.AppId }.OfType<string>());
+                }
                 var rule = Ui.Secondary(entry.Rule);
                 var again = Ui.Button(L("Test"));
                 again.ControlSize = NSControlSize.Small;
                 var line = entry;
                 again.Activated += (_, _) => page.TestHistoryEntryCommand.Execute(line);
-                var row = Ui.HStack(8, time, url, rule, again);
+                var row = Ui.HStack(8, time, url, app, rule, again);
                 rows.AddArrangedSubview(row);
                 Ui.FillWidth(row, rows);
             }

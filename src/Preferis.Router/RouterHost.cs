@@ -239,7 +239,7 @@ internal sealed class RouterHost
         return 0;
     }
 
-    // The sender goes to the trace log until the detection is confirmed on real Macs (docs/Platform.md §3.9).
+    // The sender goes to the trace log, to look into an app that is told wrongly or not at all (docs/Platform.md §3.9).
     [SupportedOSPlatform("macos")]
     private SourceApp? DetectSender(int? sender)
     {

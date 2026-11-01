@@ -807,8 +807,7 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 ### 3.9 URL を開いたアプリの判定
 
 `MacOS.MacSourceAppDetector` が、条件 `appId` / `appPath` (Design.md §6.2) の照合に使う `SourceApp` を作る。
-Windows (§2.9) と違い、URL を届ける Apple Event が送り主のプロセスを持つので、それを使う。**実機では未確認**
-(Design.md §12 スパイク 11、下記)。
+Windows (§2.9) と違い、URL を届ける Apple Event が送り主のプロセスを持つので、それを使う (Design.md §12 スパイク 11)。
 
 - 送り主のプロセス ID は `application:openURLs:` の中で読む (§3.6)。判定もメインスレッドで、URL を受け取ってすぐ行う。
   `open` コマンドは頼み終えるとすぐに終了するため。
@@ -836,13 +835,10 @@ Windows (§2.9) と違い、URL を届ける Apple Event が送り主のプロ�
   では `Preferis Settings.app` になる。
 - 結果と所要時間は `info` でログに書き (`Opened by: …`)、履歴に残す (§2.9 と同じ)。送り主のプロセス ID と実行ファイルは
   `trace` で書く (`The URLs came from process …`)。
-- 実機で確かめること:
-  - 送り主が URL を開いたアプリ (かその子) になるか。特に Router が起動していない時 (URL で起動される、通常の経路) に、
-    Launch Services のデーモンが送り主にならないか。デーモンが送り主なら launchd に着いて不明になる。
-  - `application:openURLs:` の中で `currentAppleEvent` が取れるか。AppKit が起動中に URL を溜めてから渡すと取れない
-    可能性がある。取れなければ `trace` に `The Apple Event did not name its sender.` と出る。その場合は GURL の
-    Apple Event ハンドラーを自分で登録する方式に切り替える。
-  - 所要時間。
+- アプリを誤る、または不明になる場合は `trace` のログで送り主を見る。`The Apple Event did not name its sender.` なら
+  `currentAppleEvent` が取れていない (AppKit が URL を溜めてから渡した場合など)。その時は GURL の Apple Event ハンドラーを
+  自分で登録する方式に切り替える。送り主が Launch Services のデーモンなら、launchd に着いて不明になる。
+- 所要時間は未計測。
 
 ## 4. 共通: 起動時間の計測
 

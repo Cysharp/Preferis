@@ -137,7 +137,7 @@ jobs:
       - name: Write the notary API key
         if: ${{ steps.signing.outcome == 'success' && env.APPLE_NOTARY_KEY != '' }}
         run: echo "$APPLE_NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
-      # Preferis.app in a dmg; signed and notarized when the secrets allow it.
+      # Preferis.app in a dmg (dmgbuild through the image's pipx); signed and notarized when the secrets allow it.
       - run: |
           args=(-p:RuntimeIdentifier=osx-arm64 -p:Version="$VERSION")
           if [[ -n "$SIGNING_IDENTITY" ]]; then

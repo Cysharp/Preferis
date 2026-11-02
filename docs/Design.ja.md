@@ -175,6 +175,8 @@ dmg) も同じプロジェクトの `Package*` ターゲットで作ります (2
 ```
 build/
   Preferis.Build.proj     MSBuild オーケストレーションプロジェクト。追加ツールのインストール不要
+  dmg/settings.py         dmg の Finder レイアウト (dmgbuild の設定)。PackageMacOS が `pipx run dmgbuild` で使う
+  dmg/arrow.png           dmg の背景の矢印の元画像。make-background.py が background.png / background@2x.png を作る
 dotnet-tools.json          ローカルツール: vpk (Velopack CLI)。PackageWindows が `dotnet tool restore` で入れる
 .github/workflows/
   build-debug.yaml         push / PR ごとのビルドとテストのワークフロー (下記)
@@ -192,11 +194,13 @@ artifacts/                 出力先 (.gitignore 対象)
 | `dotnet build build/Preferis.Build.proj` | 実行している OS の成果物 (下の 2 つのどちらか)。RID はそのマシンのもの (NativeAOT は OS をまたいでビルドできない) |
 | `dotnet build build/Preferis.Build.proj -t:PublishMacOS -p:RuntimeIdentifier=osx-arm64` | Router / Picker.MacOS / Settings.MacOS を NativeAOT で publish し、`Preferis.app` (ヘルパーバンドル込み) を組み立て、ad-hoc 署名する |
 | `dotnet build build/Preferis.Build.proj -t:PublishWindows -p:RuntimeIdentifier=win-x64` | Router / Picker.Windows / Settings.Windows を NativeAOT で publish し、3 つの実行ファイルと Windows App SDK の自己完結 DLL を `artifacts/win-x64/Preferis/` にまとめる (M4 で 82 MB、約 50 秒) |
-| `dotnet build build/Preferis.Build.proj -t:PackageMacOS -p:RuntimeIdentifier=osx-arm64 -p:Version=1.2.3` | `PublishMacOS` に続けて、`Preferis.app` と `/Applications` へのリンクを入れた dmg を `artifacts/osx-arm64/release/` に作る。`-p:SigningIdentity="Developer ID Application: ..."` で ad-hoc 署名を Developer ID に置き換え (hardened runtime とタイムスタンプ付き)、さらに `-p:Notarize=true -p:NotaryKeyPath=<AuthKey.p8> -p:NotaryKeyId=... -p:NotaryIssuerId=...` (App Store Connect API キー) で dmg を公証してチケットをステープルする (Platform.md §3.1) |
+| `dotnet build build/Preferis.Build.proj -t:PackageMacOS -p:RuntimeIdentifier=osx-arm64 -p:Version=1.2.3` | `PublishMacOS` に続けて、`Preferis.app` と `/Applications` へのリンクを入れた dmg を dmgbuild (`pipx run`) で `artifacts/osx-arm64/release/` に作る (Finder のレイアウトは `build/dmg/settings.py`)。`-p:SigningIdentity="Developer ID Application: ..."` で ad-hoc 署名を Developer ID に置き換え (hardened runtime とタイムスタンプ付き)、さらに `-p:Notarize=true -p:NotaryKeyPath=<AuthKey.p8> -p:NotaryKeyId=... -p:NotaryIssuerId=...` (App Store Connect API キー) で dmg を公証してチケットをステープルする (Platform.md §3.1) |
 | `dotnet build build/Preferis.Build.proj -t:PackageWindows -p:RuntimeIdentifier=win-x64 -p:Version=1.2.3` | `PublishWindows` に続けて、フォルダーを `Preferis/` ごと zip にし (ポータブル版)、Velopack (`dotnet vpk pack`) でインストーラー `Preferis-win-x64-Setup.exe`、フルパッケージ `Preferis-1.2.3-win-x64-full.nupkg`、更新フィード `releases.win-x64.json` を `artifacts/win-x64/release/` に作る (Platform.md §2.1)。`-p:VelopackRepoUrl=https://github.com/Cysharp/Preferis` を渡すと直前のリリースのフルパッケージを取得して差分パッケージも作る (非公開リポジトリは環境変数 `VPK_TOKEN` にトークン。取れなければ警告して差分なしで続ける) |
 
 - オーケストレーションを MSBuild にするのは、Guidelines の「.NET CLI ツールをグローバルにインストールしない」
   に従い、`dotnet` だけで完結させるためです。シェルや PowerShell のスクリプトは用意しません。
+  macOS の dmg だけは [dmgbuild](https://github.com/dmgbuild/dmgbuild) (MIT、Python) を `pipx run` で呼びます。
+  `pipx run` は pipx 自身のキャッシュに入れて実行するだけで、マシンには何もインストールしません。
 - バンドル組み立て (Info.plist とアプリアイコンの配置、`Contents/Helpers/` へのヘルパー配置、`codesign` 呼び出し) は
   `Preferis.Build.proj` のターゲットとして実装し、Router プロジェクト自体は素の `dotnet publish` で
   成果物を出すだけにします。
@@ -977,6 +981,8 @@ Windows のスパイクは使い捨てのコードではなく、M4 の製品コ
 | 2026-10-29 | 配布は Windows がポータブル zip と Velopack のインストーラー (x64 / arm64 を別チャネル)、macOS が Apple Silicon の dmg。リリースは `build-release.yaml` (workflow_dispatch、dry-run あり) で Cysharp/Actions の `validate-release` / `create-release` を使い、パッケージ作成は `Preferis.Build.proj` の `PackageWindows` / `PackageMacOS` に置く。バージョンは `-p:Version` で渡し、コミットしない | Velopack は管理者権限なしのインストール、GitHub Release をそのまま更新フィードにできること、差分更新、NativeAOT との相性で選んだ。パッケージ作成を MSBuild に置くのは §4.4 の方針 (`dotnet` だけで完結、ローカルでも同じコマンド) に合わせるため。org のワークフローはライブラリー向けなので、NuGet の部分を成果物のアップロードに置き換えた。arm64 は公開リポジトリ限定の `windows-11-arm` ランナーが使えないため x64 でクロスコンパイルする |
 | 2026-10-29 | アプリ側の Velopack 統合: 3 つの実行ファイルは `Main` の先頭で `VelopackInstallation.Start` を呼び、親フォルダーに `Update.exe` がある時だけ `VelopackApp.Build().Run()` を実行する。ダウンロード済みで未適用の更新の自動適用は設定 UI だけが許す。更新チェックは設定 UI の一般ページの「更新」カードで、`ISettingsPlatform.Updater` が null (ポータブル zip、ローカルビルド、macOS) なら出さない。Velopack のライブラリは `Preferis.Platform` が Windows でビルドする時だけ参照する (Platform.md §2.1) | Velopack の `Run()` はインストールされていなくてもインストール先を探し `%LocalAppData%\velopack` にログを書くため、ポータブル版のリンクのクリックにその起動コストと副作用を乗せない。リンクを開く Router とピッカーが更新の適用で待つのは §5.2 の方針に反し、設定 UI なら開き直すだけで済む。macOS は dmg 配布で Velopack を使わないので、ライブラリをバンドルに持ち込まない。更新の ViewModel をページでなくセッションに持たせるのは、Router の「記憶する」による読み直しでページが作り直されても進行中のダウンロードを失わないため |
 | 2026-10-30 | Windows の設定ファイルの置き場を `%LOCALAPPDATA%\Preferis` / `%APPDATA%\Preferis` から `%LOCALAPPDATA%\Cysharp\Preferis` / `%APPDATA%\Cysharp\Preferis` に移す。古いフォルダーの中身は起動時に一度だけ移し、古いフォルダーを消す (Configuration.md §1)。macOS は変えない | `%LOCALAPPDATA%\Preferis` は Velopack のインストール先 (`%LOCALAPPDATA%\{packId}`) そのもので、Setup は空でないフォルダーを「インストール済み」と判定し、Repair・更新・アンインストールはフォルダーごと扱う。ポータブル版や開発ビルドを先に使った PC で初回インストールが誤検出し、Repair で `local.json` が消えた。Velopack は `current` の 1 つ上に置くデータを認めているが、アンインストールで消え、インストール前に存在すれば誤検出する。多くのアプリ (Discord、VS Code、Teams) と Windows の指針どおり、プログラムとデータを別のフォルダーに分け、データは「会社名\製品名」に置く。packId を変える案 (`Cysharp.Preferis`) は成果物名と AUMID が変わるので採らなかった |
+| 2026-10-30 | macOS の dmg は `hdiutil create` でなく dmgbuild (MIT) で作り、Finder のウィンドウの大きさとアイコン配置 (左に `Preferis.app`、右に `/Applications` へのリンク) を `build/dmg/settings.py` で固定する。dmgbuild は `pipx run dmgbuild==<version>` で実行し、インストールしない | `hdiutil` だけでは Finder のレイアウト (.DS_Store) を作れず、開いた時にアイコンが散らばる。dmgbuild はバンドルを `ditto` でコピーして署名を保ち、バージョンを固定できる。`pipx run` は Guidelines の「ツールをグローバルにインストールしない」に沿い、pipx は GitHub の macOS ランナーに入っている |
+| 2026-11-02 | dmg の背景は濃いグレー (#282828) の地に明るいグレーの矢印を焼き込み、ラベルの行から下 (188pt 以降) は明るいグレー (#D4D4D4) の帯にする (`build/dmg/make-background.py`)。透過の背景にはしない | Finder はフォルダーの背景画像を外観で切り替えず、画像を設定すると透過部分を白の上に描くため、透過にしてもダークモードで白い窓になった。暗い地なら両モードで同じに見えるが、背景画像のある窓では Finder はラベルを常に黒で描くので、暗い地だけではファイル名が読めず、ラベルの下だけ明るくした |
 
 ## 14. マイルストーンと現在の状態
 

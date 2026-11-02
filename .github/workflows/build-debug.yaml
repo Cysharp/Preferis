@@ -98,7 +98,8 @@ jobs:
       - run: dotnet test Preferis.MacOS.slnf -c Debug --no-build
       - run: dotnet build Preferis.MacOS.slnf -c Release
       - run: dotnet test Preferis.MacOS.slnf -c Release --no-build
-      # Preferis.app in a dmg, ad-hoc signed; Developer ID signing and notarization belong to build-release.yaml.
+      # Preferis.app in a dmg (dmgbuild through the image's pipx), ad-hoc signed; Developer ID signing and notarization
+      # belong to build-release.yaml.
       - run: dotnet build build/Preferis.Build.proj -t:PackageMacOS -p:RuntimeIdentifier=osx-arm64
       - uses: Cysharp/Actions/.github/actions/upload-artifact@main
         with:

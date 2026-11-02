@@ -2,7 +2,8 @@
 
   <!--
     Orchestrates `dotnet publish` of the executables and assembles the distributable artifacts
-    (docs/Design.md §4.4). Only `dotnet` is required.
+    (docs/Design.md §4.4). Only `dotnet` is required, plus `pipx` for the macOS disk image: PackageMacOS runs
+    dmgbuild through `pipx run`, which installs nothing on the machine.
 
       dotnet build build/Preferis.Build.proj                     the artifacts of the OS this runs on
       dotnet build build/Preferis.Build.proj -t:PublishMacOS -p:RuntimeIdentifier=osx-arm64
@@ -57,8 +58,15 @@
     <SettingsBuiltBundle>$(RepoRoot)src/Preferis.Settings.MacOS/bin/$(Configuration)/net10.0-macos/$(RuntimeIdentifier)/Preferis Settings.app</SettingsBuiltBundle>
     <!-- The Router bundle's icon, compiled by AppIcon.targets. -->
     <AppIconOutputDir>$(ArtifactsDir)appicon/</AppIconOutputDir>
-    <!-- The disk image (docs/Platform.md §3.1): Preferis.app next to a link to /Applications. -->
-    <DmgStagingDir>$(ArtifactsDir)dmg/</DmgStagingDir>
+    <!--
+      The disk image (docs/Platform.md §3.1): Preferis.app next to a link to /Applications, with the Finder window laid
+      out by dmgbuild (MIT) from build/dmg/settings.py and an arrow between them as the background (build/dmg/background.png,
+      drawn by make-background.py). `pipx run` fetches the pinned version into pipx's own cache, so nothing is
+      installed on the machine; GitHub's macOS runners carry pipx.
+    -->
+    <DmgBuildVersion Condition="'$(DmgBuildVersion)' == ''">1.6.7</DmgBuildVersion>
+    <DmgSettings>$(MSBuildThisFileDirectory)dmg/settings.py</DmgSettings>
+    <DmgBackground>$(MSBuildThisFileDirectory)dmg/background.png</DmgBackground>
     <DmgPath>$(ReleaseDir)Preferis-$(Version)-$(RuntimeIdentifier).dmg</DmgPath>
     <!-- The portable zip (docs/Platform.md §2.1) and the Velopack packages (installer and update feed). -->
     <ZipStagingDir>$(ArtifactsDir)zip/</ZipStagingDir>
@@ -134,17 +142,14 @@
 
   <!--
     The macOS release package: Preferis.app in a compressed disk image, signed with the same identity as the bundle.
+    dmgbuild copies the bundle with ditto (signature intact), adds the /Applications link and writes the Finder layout.
     Notarize=true then has Apple notarize the image and staples the ticket to it, so that Gatekeeper accepts it offline.
   -->
   <Target Name="PackageMacOS" DependsOnTargets="PublishMacOS" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
-    <RemoveDir Directories="$(DmgStagingDir)" />
-    <MakeDir Directories="$(DmgStagingDir);$(ReleaseDir)" />
+    <MakeDir Directories="$(ReleaseDir)" />
     <Delete Files="$(DmgPath)" />
-    <!-- Without the trailing slash: `cp -R dir/ dest` would copy the bundle's contents, not the bundle. -->
-    <Exec Command="cp -R &quot;$(BundleDir.TrimEnd('/'))&quot; &quot;$(DmgStagingDir)&quot;" />
-    <Exec Command="ln -s /Applications &quot;$(DmgStagingDir)Applications&quot;" />
-    <!-- hdiutil now and then fails with "Resource busy" on a loaded machine (CI); a retry is the usual remedy. -->
-    <Exec Command="for i in 1 2 3; do hdiutil create -volname Preferis -srcfolder &quot;$(DmgStagingDir.TrimEnd('/'))&quot; -ov -format UDZO &quot;$(DmgPath)&quot; &amp;&amp; exit 0; sleep 10; done; exit 1" />
+    <!-- dmgbuild drives hdiutil, which now and then fails with "Resource busy" on a loaded machine (CI); a retry is the usual remedy. -->
+    <Exec Command="for i in 1 2 3; do pipx run dmgbuild==$(DmgBuildVersion) -s &quot;$(DmgSettings)&quot; -D app=&quot;$(BundleDir.TrimEnd('/'))&quot; -D background=&quot;$(DmgBackground)&quot; Preferis &quot;$(DmgPath)&quot; &amp;&amp; exit 0; sleep 10; done; exit 1" />
     <Exec Condition="'$(SigningIdentity)' != '-'" Command="codesign --force --sign &quot;$(SigningIdentity)&quot; --timestamp &quot;$(DmgPath)&quot;" />
     <Message Importance="high" Text="Release files: $(ReleaseDir)" />
   </Target>

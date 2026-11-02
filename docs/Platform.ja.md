@@ -567,10 +567,23 @@ Router の `Info.plist` の要点:
 ウィンドウ表示時に `NSApp.activate` で前面化する。設定 UI は通常のアプリとして `LSUIElement=false`。
 
 配布 (Design.md §4.4、`PackageMacOS` ターゲット): `Preferis.app` と `/Applications` へのリンクを入れた圧縮 dmg
-(`Preferis-<version>-osx-arm64.dmg`) を `hdiutil` で作り、`SigningIdentity` が ad-hoc 以外ならバンドルと同じ identity で
-dmg にも署名します。Developer ID による署名と公証 (notarization) がないと Gatekeeper に止められます。開発中の ad-hoc
-署名でもローカルでは問題なく動作します。
+(`Preferis-<version>-osx-arm64.dmg`) を [dmgbuild](https://github.com/dmgbuild/dmgbuild) (MIT) で作り、`SigningIdentity` が
+ad-hoc 以外ならバンドルと同じ identity で dmg にも署名します。Developer ID による署名と公証 (notarization) がないと
+Gatekeeper に止められます。開発中の ad-hoc 署名でもローカルでは問題なく動作します。
 
+- dmg を開いた Finder ウィンドウの見た目 (ウィンドウの大きさ、アイコンの大きさ、左に `Preferis.app`・右に `Applications`
+  という配置) は `build/dmg/settings.py` (dmgbuild の設定ファイル) で決める。dmgbuild はバンドルを `ditto` でコピーするので
+  署名はそのまま残る。
+- 背景は 2 つのアイコンの間に置いた矢印 (`build/dmg/background.png` と Retina 用の `background@2x.png`。dmgbuild が隣の
+  `@2x` を見つけて 1 枚の TIFF にまとめる)。元画像は `build/dmg/arrow.png` で、`python3 build/dmg/make-background.py`
+  (標準ライブラリのみ) が透明の余白を切り詰めて 160pt 幅に縮小し、明るいグレー (#C0C0C0) に塗り替えて、濃いグレー (#282828)
+  のキャンバスのアイコンの間に置いて 2 枚を書き出す。矢印や色を変えたら 2 枚とも作り直す。
+- Finder はフォルダーの背景を外観 (ライト/ダーク) で切り替えず、背景画像を設定すると透過部分も白の上に描く。透過の
+  キャンバスではダークモードでも白いウィンドウになったため、両モードで同じに見える暗い地を焼き込んでいる。
+- 背景画像のある窓では Finder はダークモードでもラベルを黒で描くため、暗い地だけではファイル名が読めない。アイコンの
+  下端 (y=184pt) のすぐ下、188pt から窓の下端までを明るいグレー (#D4D4D4) の帯にして、ラベルをその上に乗せている。
+- dmgbuild はインストールせず `pipx run dmgbuild==<version>` で実行する (バージョンは `Preferis.Build.proj` の
+  `DmgBuildVersion`)。pipx は GitHub の macOS ランナーに入っていて、ローカルでは Homebrew の `pipx` が要る。
 - 公証は `-p:Notarize=true` と App Store Connect API キー (`NotaryKeyPath` = .p8、`NotaryKeyId`、`NotaryIssuerId`) で、
   `xcrun notarytool submit --wait` に dmg を送り (中のバンドルも対象になる)、`xcrun stapler staple` でチケットを dmg に
   添付し、`spctl --assess --type open` で Gatekeeper の判定を確かめる。
@@ -578,7 +591,7 @@ dmg にも署名します。Developer ID による署名と公証 (notarization)
   `APPLE_CERTIFICATE_PASSWORD` があれば一時キーチェーンに証明書を入れて `security find-identity` で identity を見つけ、
   `APPLE_NOTARY_KEY` (.p8 の base64)、`APPLE_NOTARY_KEY_ID`、`APPLE_NOTARY_ISSUER_ID` があれば公証する。無ければ ad-hoc 署名の
   dmg を作る (配布には向かない)。
-- `hdiutil create` は負荷の高いマシンで "Resource busy" になることがあるため 3 回まで試す。
+- dmgbuild が内部で呼ぶ `hdiutil` は負荷の高いマシンで "Resource busy" になることがあるため、dmgbuild を 3 回まで試す。
 
 ### 3.2 既定ブラウザーとして登録する
 

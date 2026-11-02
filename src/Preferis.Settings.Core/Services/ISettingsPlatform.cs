@@ -42,6 +42,12 @@ public interface ISettingsPlatform
     /// <summary>Opens the OS page where the default browser is chosen.</summary>
     void OpenDefaultBrowserSettings();
 
+    /// <summary>
+    /// Opens the Full Disk Access list in System Settings (docs/Platform.md §3.4). macOS only: Windows has nothing like
+    /// it, and the view models do not offer it there.
+    /// </summary>
+    void OpenFullDiskAccessSettings();
+
     /// <summary>False when the Router cannot be found (settings UI not running from inside <c>Preferis.app</c>).</summary>
     bool CanOpenUrls { get; }
 

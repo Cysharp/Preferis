@@ -81,6 +81,13 @@ public sealed class MacSettingsPlatform : ISettingsPlatform
 
     public void OpenDefaultBrowserSettings() => _registrar.OpenSystemSettings();
 
+    public void OpenFullDiskAccessSettings()
+    {
+        var info = new ProcessStartInfo("/usr/bin/open") { UseShellExecute = false };
+        info.ArgumentList.Add("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles");
+        using var process = Process.Start(info);
+    }
+
     // A Chromium browser started directly (profile selected) inherits the Router's output; RouterProcess does not wait for it.
     public Task<RouterRunResult> OpenUrlAsync(string url)
         => RouterPath is { } router

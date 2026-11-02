@@ -120,14 +120,23 @@ Windows は `WindowsSettingsPlatform`、§2.8)。
   入らない。
 - ダウンロード済みで未適用の更新があれば `Run()` はそれを適用して Preferis を再起動する (`SetAutoApplyOnStartup`)。これを
   許すのは設定 UI だけで、Router とピッカーは許さない (リンクを開くのを更新で待たせない。§5.2)。
-- アプリ内からの更新チェックは設定 UI の一般ページの「更新」カード (§2.8): `UpdateManager` + `GithubSource`
-  (`https://github.com/Cysharp/Preferis`。チャネルは指定せず、インストールのマニフェストにあるビルド時の `win-x64` / `win-arm64`
-  を使う) で、最新の公開リリースの `releases.<channel>.json` を読み (`CheckForUpdatesAsync`)、「ダウンロード」
+- アプリ内からの更新チェックは設定 UI の一般ページの「更新」カード (§2.8): `LatestReleaseUpdateManager`
+  (`Preferis.Platform.Windows`。Velopack の `UpdateManager` + `SimpleWebSource`、
+  `https://github.com/Cysharp/Preferis/releases/latest/download/`。チャネルは指定せず、インストールのマニフェストにあるビルド時の
+  `win-x64` / `win-arm64` を使う) で、最新の公開リリースの `releases.<channel>.json` を読み (`CheckForUpdatesAsync`)、「ダウンロード」
   (`DownloadUpdatesAsync`、進捗バー)、「再起動して更新」(保存待ちの編集を書いてから `ApplyUpdatesAndRestart`。`Update.exe` が
   `current\` を置き換えて `Preferis.exe` を引数なしで起動するので、設定 UI が開き直す) の順。カードは Velopack でインストール
   されている時だけ出す (`ISettingsPlatform.Updater` が null なら出さない: ポータブル zip、ローカルビルド、macOS)。
-- リポジトリが非公開の間は GitHub の API がトークン無しの読み取りを拒むため、更新の確認は「404 (Not Found)」で失敗する。公開
-  すれば動く (認証なしの制限は IP あたり 60 回/時)。
+- フィードとパッケージはリリースのダウンロード用の URL (`releases/latest/download/<ファイル名>`。GitHub が最新のリリースの
+  そのファイルへリダイレクトする) から読み、GitHub の API は使わない。`releases/latest` はドラフトとプレリリースを除く最新の
+  リリースで、リポジトリが非公開なら 404 になる。Velopack の `GithubSource` はリリースの一覧を API で取るため、トークンなしでは
+  送信元の IP あたり 60 回/時の制限を同じ IP の利用者全員 (社内の NAT など) で分け合い、使い切ると更新の確認が
+  「403 (rate limit exceeded)」で失敗した (2026-11-02)。アプリにトークンは埋め込めない。
+- 最新のリリースのフィードには、そのリリースと一緒にパックしたものだけが載る: そのリリースの完全パッケージと差分パッケージ、
+  差分の元にした 1 つ前のリリースの完全パッケージ (`vpk download github`、Design.md §4.4)。差分はその 1 つ前のリリースからしか
+  当てられないので、インストール済みの版の完全パッケージがフィードにない時 (2 つ以上前の版) は差分を使わず完全パッケージを取る
+  (`CreateDeltaUpdateStrategy` の上書き)。Velopack はその版にも差分を当て、差分で変わらないファイルをインストール済みの版のまま
+  残し、結果を検証しない。`GithubSource` は直近 10 リリースのフィードをまとめるので差分を連ねられたが、その一覧を API で取る。
 - Velopack のライブラリのログは `%LocalAppData%\velopack\velopack_Preferis.log`。
 - インストールせずにインストール配置を試すには、`artifacts/win-x64/Preferis/` を任意の `current\` にコピーし、
   `Preferis-<version>-win-x64-full.nupkg` の `lib/app/sq.version` (マニフェスト) を `current\` に置き、親フォルダーに
@@ -410,7 +419,9 @@ Edge は上記に加えて `edge_account_*` を持つが、`name` / `user_name` 
   (開くボタンはその時だけ出す)、一覧の幅は画面の 36 % (240〜320 DIP)。カードはコントロールの横に文字の幅が 200 DIP 残らない時、
   コントロールを文字の下に回す (設定アプリの SettingsCard と同じ考え方)。既定のウィンドウ (1120 × 780 DIP) でも
   プロファイルとルールの編集画面は幅 490 DIP ほどなので、入力欄のカードは折り返す。
-- 「+」のメニューは検出したブラウザーごとのサブメニュー (ブラウザー自体と各ブラウザープロファイル)。条件は
+- 「+」のメニューは検出したブラウザーごとのサブメニュー (ブラウザー自体と各ブラウザープロファイル)。ブラウザー
+  プロファイルを読めなかったブラウザーは、サブメニューの末尾に「ブラウザープロファイルを読み込めませんでした…」を出し、
+  選ぶと `ContentDialog` で案内 (一度ブラウザーを起動してプロファイルを作る) を表示する。条件は
   `ConditionEditor` (Design.md §9.1)。幅が狭いときはパターンの入力欄を次の行に回す。
 - 一般ページの最後は、Velopack でインストールされていれば「更新」カード (バージョン、状態の行、「更新を確認」→「ダウンロード」
   (進捗バー) →「再起動して更新」のボタンを 1 つずつ)、そうでなければバージョンのフッター (§2.1 の配布)。ViewModel は
@@ -609,7 +620,8 @@ Gatekeeper に止められます。開発中の ad-hoc 署名でもローカル�
 - リリースワークフローはシークレット `APPLE_CERTIFICATE_P12` (Developer ID Application 証明書の .p12 を base64 にしたもの) と
   `APPLE_CERTIFICATE_PASSWORD` があれば一時キーチェーンに証明書を入れて `security find-identity` で identity を見つけ、
   `APPLE_NOTARY_KEY` (.p8 の base64)、`APPLE_NOTARY_KEY_ID`、`APPLE_NOTARY_ISSUER_ID` があれば公証する。無ければ ad-hoc 署名の
-  dmg を作る (配布には向かない)。
+  dmg を作る (配布には向かない)。ad-hoc 署名ではビルドのたびにコードの同一性が変わるため、プライバシーの許可
+  (§3.4 のフルディスクアクセスなど) がアップデートで引き継がれない。
 - dmgbuild が内部で呼ぶ `hdiutil` は負荷の高いマシンで "Resource busy" になることがあるため、dmgbuild を 3 回まで試す。
 
 ### 3.2 既定ブラウザーとして登録する
@@ -663,7 +675,10 @@ Stable とは独立した `Local State` があることを確認しています�
    (Configuration.md §2.5)。起動自体は影響を受けない。
 2. 最後に列挙できた結果をローカルキャッシュ (`~/Library/Caches/Preferis/`) に保存し、
    読めない時はキャッシュを使う。
-3. 設定 UI で「macOS がアクセスを拒否しています。フルディスクアクセスを許可してください」と案内する。
+3. 設定 UI で、Preferis 設定にフルディスクアクセスを許可するよう案内する。許可はバンドルの署名に結び付いている。
+   Developer ID で署名していないリリース (ad-hoc 署名、§3.1) は、アップデートのたびに macOS から別のアプリとみなされる。
+   システム設定では許可がオンのまま表示されるが、効かなくなる。そのため、アップデート後やすでに許可済みの場合は、
+   フルディスクアクセスの一覧から削除して追加し直すよう併せて案内する。
 
 ### 3.5 起動
 
@@ -804,7 +819,11 @@ Microsoft.macOS への切り替えは、この実装に問題が出た場合の�
 - ブラウザー検出 (`MacBrowserDetector.DetectBrowsers`)、ブラウザープロファイル列挙、アイコン (`MacApplicationIcons`, 64 px) は起動時に
   1 回行い、プロファイル画面の「+」メニューの「Detect Browsers Again」でやり直す。フォルダー・ファイルの選択は `NSOpenPanel`、
   確認は `NSAlert` (どちらもモーダル)。
-- macOS 27 で Chromium のプロファイルデータが読めない場合 (§3.4) は、検出一覧に「フルディスクアクセスを与える」旨を表示する。
+- ブラウザープロファイルを読めない場合 (macOS 27 の制限など、§3.4) は、「+」メニューのそのブラウザーの項目の下に
+  「ブラウザープロファイルを読み込めませんでした…」を出す。選ぶと `NSAlert` で案内 (`DetectedBrowserViewModel.Note`:
+  フルディスクアクセスの許可と、アップデート後の追加し直し) を表示し、「システム設定を開く」でフルディスクアクセスの一覧
+  (`x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles`) を開く。案内はメニューの項目には長すぎるため
+  ダイアログに分けている。
 - 表示言語は起動時に `config.json` から決める (§2.8 と同じ)。メニューバーも自前で作るため項目名を訳す (Apple の日本語の
   用語に合わせる: 「… を非表示」「ほかを非表示」「しまう」など)。`NSOpenPanel` や `NSAlert` の既定の部分は AppKit の文字列で、
   `Info.plist` の `CFBundleLocalizations` (en, ja) のうち macOS の言語に合うもので表示される。Preferis の言語の設定には従わない

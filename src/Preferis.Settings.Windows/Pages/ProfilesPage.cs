@@ -122,10 +122,10 @@ internal sealed class ProfilesPage : IPageView
                 var title = item.Profile is null ? L("{0} (no specific profile)", item.Title) : item.Subtitle is { } subtitle ? $"{item.Title} — {subtitle}" : item.Title;
                 sub.Items.Add(DetectedItem(item, title, Images.FromPng(item.Profile is null ? browser.IconPng : item.AvatarPng ?? browser.IconPng)));
             }
-            if (browser.Note is { } note)
+            if (browser.Note is not null)
             {
                 sub.Items.Add(new MenuFlyoutSeparator());
-                sub.Items.Add(new MenuFlyoutItem { Text = note, IsEnabled = false });
+                sub.Items.Add(Bindings.MenuItem(L("Browser profiles could not be read…"), _page.ExplainNoteCommand, browser));
             }
             menu.Items.Add(sub);
         }

@@ -27,6 +27,49 @@ public sealed class ProfilesPageTests : IDisposable
     }
 
     [Fact]
+    public void Unreadable_browser_profiles_are_explained_with_full_disk_access()
+    {
+        _harness.Platform.WithBrowser("brave");
+
+        var brave = _harness.Create().Profiles.DetectedBrowsers.Single(b => b.Id == "brave");
+
+        Assert.NotNull(brave.Note);
+        Assert.Contains("Full Disk Access", brave.Note, StringComparison.Ordinal);
+        // An update of a release without a Developer ID signature is another app to macOS: the access it had no longer applies.
+        Assert.Contains("add it again", brave.Note, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_explanation_of_unreadable_browser_profiles_can_open_full_disk_access()
+    {
+        _harness.Platform.WithBrowser("brave");
+        var page = _harness.Create().Profiles;
+        var brave = page.DetectedBrowsers.Single(b => b.Id == "brave");
+        _harness.Dialogs.Answers.Enqueue("Open System Settings");
+
+        await page.ExplainNoteCommand.ExecuteAsync(brave);
+
+        var (title, message, buttons) = Assert.Single(_harness.Dialogs.Asked);
+        Assert.Equal("The browser profiles of Brave could not be read.", title);
+        Assert.Equal(brave.Note, message);
+        Assert.Equal(["Open System Settings", "OK"], buttons);
+        Assert.Equal(1, _harness.Platform.FullDiskAccessSettingsOpened);
+    }
+
+    [Fact]
+    public async Task The_explanation_of_unreadable_browser_profiles_can_be_closed()
+    {
+        _harness.Platform.WithBrowser("brave");
+        var page = _harness.Create().Profiles;
+        _harness.Dialogs.Answers.Enqueue("OK");
+
+        await page.ExplainNoteCommand.ExecuteAsync(page.DetectedBrowsers.Single(b => b.Id == "brave"));
+
+        Assert.Single(_harness.Dialogs.Asked);
+        Assert.Equal(0, _harness.Platform.FullDiskAccessSettingsOpened);
+    }
+
+    [Fact]
     public void Adding_a_detected_browser_creates_and_selects_a_profile()
     {
         var settings = _harness.Create();

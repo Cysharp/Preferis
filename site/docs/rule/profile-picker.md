@@ -2,12 +2,16 @@
 title: Choosing Between Multiple Profiles
 ---
 
-If you select multiple profiles for a rule, opening a matching URL displays the profile picker so you can choose which profile to use.
+Preferis lets you select multiple candidate profiles to use when a rule matches.
+
+![](/img/docs/settings-rule-picker-01.png)
+
+When you open a URL that matches a rule with multiple profiles, the profile picker appears. In the picker, you can choose any of the candidate profiles to open the URL with.
 
 ![](/img/docs/profile-picker-01.png)
 
 :::tip
-Profiles appear in the picker in the same order as the profile list. To change the order, drag and drop profiles in the list on the Profiles settings page.
+Profiles appear in the picker in the same order as on the Profiles settings page. To change the order, drag and drop profiles in the list on the Profiles settings page.
 :::
 
 Select **Always open &lt;domain&gt; with this choice** before opening the URL to automatically add a rule for that domain.

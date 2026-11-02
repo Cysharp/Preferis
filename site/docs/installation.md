@@ -19,14 +19,12 @@ The Windows installer and executables are not code signed yet, so Windows SmartS
 
 ### Portable version
 
-If you prefer not to install anything, download `Preferis-<version>-win-x64.zip` (or `win-arm64`) instead and extract the `Preferis` folder it contains to any location. Run `Preferis.exe` in that folder to open the settings and set Preferis as the default browser.
-
-The portable version does not update itself. To update it, extract a new version over the same folder. Your settings are kept, because they are stored outside the folder (see [Configuration Files](configuration-files.md)).
+If you prefer not to install anything, download `Preferis-<version>-win-x64.zip` (or `win-arm64`) instead and extract the `Preferis` folder it contains to any location. Run `Preferis.exe` in that folder to open the settings.
 
 ## Installing on macOS
 
 1. Download the latest `.dmg` file from the [GitHub releases page](https://github.com/cysharp/Preferis/releases).
-2. Drag Preferis from the downloaded disk image into the Applications folder.
+2. Drag and drop Preferis from the downloaded disk image into the Applications folder.
 3. In Terminal, run `xattr -cr /Applications/Preferis.app` to remove the security attributes applied when the app was downloaded.
 
 :::caution
@@ -35,9 +33,18 @@ The macOS version of Preferis is not currently signed or notarized by Apple, so 
 
 ## Updating
 
-- **Windows, installed with the installer**: Preferis can update itself. Open the settings, select **General** in the sidebar and use the **Updates** section at the bottom of the page. **Check for Updates** looks for a newer release on GitHub, **Download** fetches it, and **Restart to Update** installs it and starts Preferis again. Your settings and the default browser registration are kept.
-- **Windows, portable version** and **macOS**: download the new version from the releases page and replace the previous one (on macOS, drag the new Preferis into the Applications folder and repeat the `xattr` step). Your settings are kept.
+### Windows (installer version)
 
-:::note
-Checking for updates reads the GitHub releases of Preferis. While the repository is private, the check fails with "404 (Not Found)"; download the new installer from the releases page instead.
+You can update Preferis from its settings. Select **General** in the settings sidebar and use the **Updates** section.
+
+![](/img/docs/installation-01.png)
+
+### Windows (portable version) and macOS
+
+The portable version does not update itself. To update it, download the new version from the releases page and replace the previous files.
+
+Your settings are kept, because they are stored outside the application. For details, see [Configuration Files](configuration-files.md).
+
+:::caution
+On macOS, after dragging the new Preferis into the Applications folder to replace the old one, you need to repeat the `xattr` step.
 :::

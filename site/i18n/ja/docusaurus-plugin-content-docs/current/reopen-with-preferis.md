@@ -1,5 +1,6 @@
 ---
 title: Preferis で URL を開き直す
+sidebar_position: 8
 ---
 
 ブラウザーで表示しているページを Preferis でもう一度振り分けて、適切なブラウザーで開き直したいといった場合は `preferis` スキームの URL を使用できます。

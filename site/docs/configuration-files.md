@@ -1,5 +1,6 @@
 ---
 title: Configuration Files
+sidebar_position: 4
 ---
 
 Preferis uses two configuration files: **config.json** and **local.json**.

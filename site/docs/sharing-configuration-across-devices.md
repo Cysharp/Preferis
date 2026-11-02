@@ -1,5 +1,6 @@
 ---
 title: Sharing Configuration Across Devices
+sidebar_position: 7
 ---
 
 Preferis supports sharing configuration across devices through cloud storage such as OneDrive, Google Drive, and iCloud.

@@ -43,7 +43,7 @@ pnpm serve
 - 日本語のナビゲーション: `i18n/ja/docusaurus-theme-classic/navbar.json`
 - サイト共通設定: `docusaurus.config.ts`
 
-英語版と日本語版では、同じ相対パス・ドキュメント ID・`slug` を使用してください。例えば `docs/usage.md` を追加したら、日本語版を `i18n/ja/docusaurus-plugin-content-docs/current/usage.md` に追加します。サイドバーはファイル構成から自動生成され、順序は front matter の `sidebar_position` で指定できます。未翻訳のページは英語の内容にフォールバックするため、PR では両言語のファイルを確認してください。
+英語版と日本語版では、同じ相対パス・ドキュメント ID・`slug` を使用してください。例えば `docs/usage.md` を追加したら、日本語版を `i18n/ja/docusaurus-plugin-content-docs/current/usage.md` に追加します。サイドバーはファイル構成から自動生成され、順序はページの front matter の `sidebar_position` とカテゴリーの `_category_.json` の `position` で指定します。番号のないページは番号のあるページの後ろにファイル名順で並ぶため、ページを追加するときは両言語の front matter に番号を付けてください。未翻訳のページは英語の内容にフォールバックするため、PR では両言語のファイルを確認してください。
 
 標準テーマのボタンなどは Docusaurus の日本語訳を使用します。ナビゲーションなどの翻訳キーを追加・更新する場合は、次を実行して生成された JSON を編集します。
 
@@ -73,6 +73,8 @@ flowchart LR
 - `site/**` またはワークフローを変更した PR: 型チェックと両言語のビルド。
 - 同じパスを変更した `main` への push: 検証後に GitHub Pages へ公開。
 - Actions の **Publish documentation** → **Run workflow** (`main` を選択): 手動公開。
+
+アプリのビルドとテストのワークフロー ([build-debug.yaml](../.github/workflows/build-debug.yaml)) は、変更が `site/**` とこのワークフローだけの push / PR では実行されません。
 
 初回はリポジトリの **Settings → Pages → Build and deployment → Source** を **GitHub Actions** に設定してください。`github-pages` 環境に承認ルールがある場合は、そのルールに従います。公開には標準の `GITHUB_TOKEN` と OIDC を使用し、追加の PAT や `gh-pages` ブランチは不要です。PR と `main` 以外のブランチからは公開しません。
 

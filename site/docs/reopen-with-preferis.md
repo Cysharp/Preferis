@@ -1,5 +1,6 @@
 ---
 title: Reopening URLs with Preferis
+sidebar_position: 8
 ---
 
 To route the page you are viewing in a browser through Preferis again and reopen it in the right browser, you can use a URL with the `preferis` scheme.

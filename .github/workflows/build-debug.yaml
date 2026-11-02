@@ -5,15 +5,22 @@ name: Build-Debug
 #            of PackageWindows for win-x64 and win-arm64 (the same ones build-release.yaml ships)
 #   macOS    build and test Preferis.MacOS.slnf (Debug and Release), then PackageMacOS (ad-hoc signed)
 # The packages stay attached to the run for a few days so a change can be tried without a release.
+# Changes that touch only the documentation site are built by publish-docs.yml instead.
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'site/**'
+      - '.github/workflows/publish-docs.yml'
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - 'site/**'
+      - '.github/workflows/publish-docs.yml'
 
 # A newer push to the same branch or pull request supersedes the build that is still running.
 concurrency:

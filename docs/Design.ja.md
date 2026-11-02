@@ -261,6 +261,9 @@ artifacts/                 出力先 (.gitignore 対象)
 実行して NativeAOT publish とパッケージ作成が通ることを確かめます。差分パッケージの取得 (`VelopackRepoUrl`) と
 Developer ID の署名・公証はリリース側だけです。`release/` フォルダーは成果物 `Preferis-<rid>` として 3 日間残るので、
 PR の変更はリリースを作らずに試せます。同じブランチへの新しい push は実行中のビルドを打ち切ります。
+変更がドキュメントサイト (`site/**` と `publish-docs.yml`) だけの push / PR は `paths-ignore` で対象外にし、
+サイトのビルドは `publish-docs.yml` に任せます。`main` にはブランチ保護も必須チェックもないので、実行されない
+チェックで PR が待たされることはありません (2026-11-02)。
 MagicOnion が使う Cysharp/Actions の `actions-timeline` は入れていません: タイムラインの取得に使う workflow run API は
 非公開リポジトリでは `GITHUB_TOKEN` に `actions: read` が必要ですが、再利用ワークフロー側がジョブの権限を
 `contents: read` だけに絞っていて呼び出し側から広げられないため、このリポジトリでは失敗します (2026-10-30)。

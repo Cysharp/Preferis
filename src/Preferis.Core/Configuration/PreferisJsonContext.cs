@@ -25,6 +25,8 @@ namespace Preferis.Core.Configuration;
 [JsonSerializable(typeof(NotCondition))]
 [JsonSerializable(typeof(HostCondition))]
 [JsonSerializable(typeof(UrlCondition))]
+[JsonSerializable(typeof(AppIdCondition))]
+[JsonSerializable(typeof(AppPathCondition))]
 [JsonSerializable(typeof(OpenAction))]
 [JsonSerializable(typeof(SystemAction))]
 [JsonSerializable(typeof(NoneAction))]

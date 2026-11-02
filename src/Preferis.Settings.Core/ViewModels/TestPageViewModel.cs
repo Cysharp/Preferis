@@ -17,7 +17,12 @@ public sealed record TraceLine(string Kind, string? Rule, string Message);
 /// <param name="Detail">The command that would run, or why it would not.</param>
 public sealed record CandidateLine(string Name, bool IsResolved, string Detail);
 
-public sealed record HistoryLine(string Time, string Url, string Rule, string Outcome);
+/// <param name="AppId">The app that opened the URL, when the Router could tell (docs/Design.md §6.2).</param>
+public sealed record HistoryLine(string Time, string Url, string Rule, string Outcome, string? AppId = null, string? AppPath = null)
+{
+    /// <summary>The app as the list names it: its executable or bundle, else its ID; null when unknown.</summary>
+    public string? App => AppPath?.TrimEnd('\\', '/') is { Length: > 0 } path ? path[(path.LastIndexOfAny(['\\', '/']) + 1)..] : AppId;
+}
 
 /// <summary>
 /// The test page: routes a URL with the configuration being edited (unsaved changes included) and shows each step,
@@ -37,6 +42,14 @@ public sealed partial class TestPageViewModel : PageViewModel
 
     [ObservableProperty]
     public partial string Url { get; set; } = "https://";
+
+    /// <summary>The ID of the app to test the URL as opened by (docs/Design.md §6.2); empty when none is given.</summary>
+    [ObservableProperty]
+    public partial string AppId { get; set; } = "";
+
+    /// <summary>The path of the app to test the URL as opened by; empty when none is given.</summary>
+    [ObservableProperty]
+    public partial string AppPath { get; set; } = "";
 
     [ObservableProperty]
     public partial string? Error { get; private set; }
@@ -105,7 +118,7 @@ public sealed partial class TestPageViewModel : PageViewModel
 
         // As the Router on this machine sees it: with this machine's own targets.
         var config = LocalProfileTargets.Apply(Settings.Config, Settings.Local);
-        var result = new Router(config).Route(url);
+        var result = new Router(config).Route(url, Source());
         Trace = result.Trace.Select(entry => new TraceLine(
             KindText(entry.Kind), entry.RuleId is null ? null : RuleName(config, entry.RuleId), entry.Message)).ToArray();
 
@@ -172,10 +185,19 @@ public sealed partial class TestPageViewModel : PageViewModel
 
     private bool CanOpen => Settings.Platform.CanOpenUrls && !IsOpening;
 
+    private SourceApp? Source()
+    {
+        var id = AppId.Trim();
+        var path = AppPath.Trim();
+        return id.Length == 0 && path.Length == 0 ? null : new SourceApp(id.Length == 0 ? null : id, path.Length == 0 ? null : path);
+    }
+
     [RelayCommand]
     private void TestHistoryEntry(HistoryLine entry)
     {
         Url = entry.Url;
+        AppId = entry.AppId ?? "";
+        AppPath = entry.AppPath ?? "";
         Run();
     }
 
@@ -208,7 +230,9 @@ public sealed partial class TestPageViewModel : PageViewModel
                     entry.Time.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
                     entry.Url,
                     entry.RuleId is null ? L("catch-all") : RuleName(Settings.Config, entry.RuleId),
-                    OutcomeText(entry.Outcome))).ToArray();
+                    OutcomeText(entry.Outcome),
+                    entry.AppId,
+                    entry.AppPath)).ToArray();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

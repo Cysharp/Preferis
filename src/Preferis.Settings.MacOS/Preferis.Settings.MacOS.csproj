@@ -13,7 +13,7 @@
     <RootNamespace>Preferis.Settings.MacOS</RootNamespace>
     <AssemblyName>Preferis Settings</AssemblyName>
     <ApplicationTitle>Preferis Settings</ApplicationTitle>
-    <ApplicationId>net.mayuki.Preferis.Settings</ApplicationId>
+    <ApplicationId>com.cysharp.Preferis.Settings</ApplicationId>
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>$(Version)</ApplicationDisplayVersion>
     <SelfContained>true</SelfContained>

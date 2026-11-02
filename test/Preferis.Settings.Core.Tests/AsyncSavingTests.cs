@@ -89,7 +89,7 @@ public sealed class AsyncSavingTests
     }
 
     [Fact]
-    public async Task Undoing_an_edit_during_a_save_does_not_let_the_window_close_before_it_is_persisted()
+    public Task Undoing_an_edit_during_a_save_does_not_let_the_window_close_before_it_is_persisted() => UiThread.RunAsync(async () =>
     {
         using var harness = new SettingsHarness().WithSample();
         var settings = harness.Create();
@@ -112,7 +112,7 @@ public sealed class AsyncSavingTests
         Assert.True(await closing);
         Assert.Equal(original, harness.SavedConfig().Profiles[0].Name);
         Assert.False(settings.HasPendingChanges);
-    }
+    });
 
     [Fact]
     public async Task A_failed_local_write_does_not_turn_a_successful_config_save_into_an_external_conflict()

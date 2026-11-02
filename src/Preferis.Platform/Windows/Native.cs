@@ -23,6 +23,9 @@ internal static unsafe partial class Native
     public const uint ImageIcon = 1;
     public const int DibRgbColors = 0;
     public const uint MuiLanguageName = 0x8;
+    public const uint ProcessQueryLimitedInformation = 0x1000;
+    public const int ProcessBasicInformationClass = 0;
+    public const int ErrorInsufficientBuffer = 122;
 
     [LibraryImport("shlwapi.dll", EntryPoint = "AssocQueryStringW", StringMarshalling = StringMarshalling.Utf16)]
     public static partial int AssocQueryString(int flags, int str, string assoc, string? extra, char* output, ref uint length);
@@ -122,6 +125,50 @@ internal static unsafe partial class Native
     [LibraryImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetUserPreferredUILanguages(uint flags, out uint count, char* languages, ref uint length);
+
+    // Documented in winternl.h; the Toolhelp snapshot would name the parent too, but takes 10-20 ms (docs/Platform.md §5).
+    [LibraryImport("ntdll.dll")]
+    public static partial int NtQueryInformationProcess(IntPtr process, int informationClass, void* information, uint length, out uint returned);
+
+    [LibraryImport("kernel32.dll")]
+    public static partial IntPtr OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint processId);
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool CloseHandle(IntPtr handle);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool QueryFullProcessImageName(IntPtr process, uint flags, char* name, ref uint size);
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetProcessTimes(IntPtr process, out long creation, out long exit, out long kernel, out long user);
+
+    [LibraryImport("kernel32.dll")]
+    public static partial int GetApplicationUserModelId(IntPtr process, ref uint length, char* id);
+
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr GetForegroundWindow();
+
+    [LibraryImport("user32.dll")]
+    public static partial uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool EnumChildWindows(IntPtr parent, delegate* unmanaged<IntPtr, IntPtr, int> callback, IntPtr param);
+
+    // PROCESS_BASIC_INFORMATION. ExitStatus and BasePriority are 32-bit, but padded to the pointers that follow.
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ProcessBasicInformation
+    {
+        public nint ExitStatus;
+        public nint PebBaseAddress;
+        public nint AffinityMask;
+        public nint BasePriority;
+        public nint UniqueProcessId;
+        public nint InheritedFromUniqueProcessId;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct IconInfo

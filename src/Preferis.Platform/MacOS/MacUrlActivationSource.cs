@@ -11,7 +11,7 @@ namespace Preferis.Platform.MacOS;
 [SupportedOSPlatform("macos")]
 public static unsafe class MacUrlActivationSource
 {
-    private static Action<IReadOnlyList<string>>? _onUrls;
+    private static Action<IReadOnlyList<string>, int?>? _onUrls;
     private static Action? _onLaunchedWithoutUrls;
     private static int _urlsReceived;
     private static IntPtr _app;
@@ -28,9 +28,12 @@ public static unsafe class MacUrlActivationSource
         => string.Equals(cfBundleIdentifier, MacBrowserDetector.ProductBundleId, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Runs the application loop. Does not return; call <see cref="Terminate"/> to exit.</summary>
-    /// <param name="onUrls">Invoked on the main thread for every batch of URLs. Should return quickly (hand off to a worker).</param>
+    /// <param name="onUrls">
+    /// Invoked on the main thread for every batch of URLs, with the process that sent them (null when the Apple Event does
+    /// not say). Should return quickly (hand off to a worker).
+    /// </param>
     /// <param name="onLaunchedWithoutUrls">Invoked when no URL arrived shortly after launch (the user opened the app itself).</param>
-    public static void Run(Action<IReadOnlyList<string>> onUrls, Action onLaunchedWithoutUrls)
+    public static void Run(Action<IReadOnlyList<string>, int?> onUrls, Action onLaunchedWithoutUrls)
     {
         _onUrls = onUrls;
         _onLaunchedWithoutUrls = onLaunchedWithoutUrls;
@@ -65,11 +68,25 @@ public static unsafe class MacUrlActivationSource
         {
             var list = ObjC.Enumerate(urls).Select(ObjC.UrlAbsoluteString).OfType<string>().ToList();
             Interlocked.Add(ref _urlsReceived, list.Count);
-            _onUrls?.Invoke(list);
+            _onUrls?.Invoke(list, Sender());
         }
         catch (Exception)
         {
             // Never let an exception cross the native boundary; the caller's handler logs its own failures.
+        }
+    }
+
+    // AppKit calls application:openURLs: from its handler of the Apple Event that carries the URLs (GURL, or odoc for
+    // files). The URLs go on without their sender rather than not at all.
+    private static int? Sender()
+    {
+        try
+        {
+            return ObjC.CurrentAppleEventSender();
+        }
+        catch (Exception)
+        {
+            return null;
         }
     }
 

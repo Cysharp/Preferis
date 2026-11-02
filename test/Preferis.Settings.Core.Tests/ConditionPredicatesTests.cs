@@ -57,6 +57,35 @@ public sealed class ConditionPredicatesTests
         Assert.Equal([PredicateField.Url, PredicateField.UrlCaseSensitive], root.Children.Cast<ComparisonPredicate>().Select(c => c.Field));
     }
 
+    [Fact]
+    public void App_conditions_are_rows_of_their_own()
+    {
+        var root = ConditionPredicates.ToEditor(new OrCondition
+        {
+            Conditions =
+            [
+                new AppIdCondition { Match = MatchKind.Exact, Pattern = "com.tinyspeck.slackmacgap" },
+                new AppPathCondition { Match = MatchKind.EndsWith, Pattern = @"\slack.exe" },
+            ],
+        })!;
+
+        Assert.Equal(
+            [new ComparisonPredicate(PredicateField.AppId, MatchKind.Exact, "com.tinyspeck.slackmacgap"), new ComparisonPredicate(PredicateField.AppPath, MatchKind.EndsWith, @"\slack.exe")],
+            root.Children);
+    }
+
+    [Fact]
+    public void A_row_turned_into_an_app_row_becomes_an_app_condition()
+    {
+        var root = new CompoundPredicate(CompoundKind.All, [new ComparisonPredicate(PredicateField.AppPath, MatchKind.EndsWith, @"\Code.exe")]);
+
+        var condition = ConditionPredicates.FromEditor(root, previous: Host("example.com"));
+
+        var path = Assert.IsType<AppPathCondition>(condition);
+        Assert.Equal(MatchKind.EndsWith, path.Match);
+        Assert.Equal(@"\Code.exe", path.Pattern);
+    }
+
     [Theory]
     [MemberData(nameof(Trees))]
     public void Every_condition_tree_survives_the_editor(string name, Condition condition)
@@ -76,6 +105,8 @@ public sealed class ConditionPredicatesTests
         { "not and", new NotCondition { Condition = new AndCondition { Conditions = [Host("a"), Host("b")] } } },
         { "not not", new NotCondition { Condition = new NotCondition { Condition = Host("a") } } },
         { "nested", new AndCondition { Conditions = [new OrCondition { Conditions = [Host("a", MatchKind.EndsWith), Host("b", MatchKind.Contains)] }, Url("https://c/*", MatchKind.Wildcard)] } },
+        { "app id leaf", new AppIdCondition { Match = MatchKind.Exact, Pattern = "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App" } },
+        { "apps and hosts", new AndCondition { Conditions = [new NotCondition { Condition = new AppPathCondition { Match = MatchKind.Wildcard, Pattern = @"*\Teams\*" } }, Host("a")] } },
     };
 
     [Fact]

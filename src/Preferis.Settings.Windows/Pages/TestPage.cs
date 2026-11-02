@@ -13,24 +13,22 @@ internal sealed class TestPage : IPageView
 
     public TestPage(TestPageViewModel page)
     {
-        var url = new TextBox { PlaceholderText = "https://www.example.com/", FontFamily = Ui.Monospace };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(url, "URL");
-        _bindings.Text(url, page, nameof(TestPageViewModel.Url), () => page.Url, value => page.Url = value);
-        // Enter in the box tests the URL, like the Test button.
-        url.KeyDown += (_, e) =>
-        {
-            if (e.Key == global::Windows.System.VirtualKey.Enter)
-            {
-                page.RunCommand.Execute(null);
-                e.Handled = true;
-            }
-        };
+        var url = Input(page, "https://www.example.com/", "URL", nameof(TestPageViewModel.Url), () => page.Url, value => page.Url = value);
         var test = Ui.AccentButton(L("Test"));
         _bindings.Command(test, page.RunCommand);
         var open = Ui.Button(L("Open"));
         ToolTipService.SetToolTip(open, L("Open the URL with Preferis, as if a link was clicked: the picker appears when the rules say so."));
         _bindings.Command(open, page.OpenCommand);
-        var input = Form.Wide(Ui.Columns(8, (url, Ui.Star), (test, Ui.Auto), (open, Ui.Auto)));
+
+        var appId = Input(page, L("App ID"), L("App ID"), nameof(TestPageViewModel.AppId), () => page.AppId, value => page.AppId = value);
+        var appPath = Input(page, L("App path"), L("App path"), nameof(TestPageViewModel.AppPath), () => page.AppPath, value => page.AppPath = value);
+        var openedBy = Ui.Secondary(L("Opened by"));
+        openedBy.VerticalAlignment = VerticalAlignment.Center;
+        var appHint = Ui.Wrapping(L("Test routes the URL as if this app had opened it, for the rules that look at the app. Open does not use it."));
+        var input = Form.Wide(Ui.VStack(8,
+            Ui.Columns(8, (url, Ui.Star), (test, Ui.Auto), (open, Ui.Auto)),
+            Ui.Columns(8, (openedBy, Ui.Auto), (appId, Ui.Star), (appPath, Ui.Star)),
+            appHint));
 
         var error = Ui.Wrapping("", 12, Ui.Brush("SystemFillColorCriticalBrush"));
         _bindings.Observe(page, () =>
@@ -53,6 +51,23 @@ internal sealed class TestPage : IPageView
     public UIElement View { get; }
 
     public void Dispose() => _bindings.Dispose();
+
+    // Enter in any of the boxes tests the URL, like the Test button.
+    private TextBox Input(TestPageViewModel page, string placeholder, string name, string property, Func<string> get, Action<string> set)
+    {
+        var box = new TextBox { PlaceholderText = placeholder, FontFamily = Ui.Monospace };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(box, name);
+        _bindings.Text(box, page, property, get, set);
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key == global::Windows.System.VirtualKey.Enter)
+            {
+                page.RunCommand.Execute(null);
+                e.Handled = true;
+            }
+        };
+        return box;
+    }
 
     private UIElement Result(TestPageViewModel page)
     {
@@ -147,11 +162,18 @@ internal sealed class TestPage : IPageView
                 var url = Ui.Label(entry.Url, 12);
                 url.FontFamily = Ui.Monospace;
                 ToolTipService.SetToolTip(url, entry.Url);
+                var app = Ui.Secondary(entry.App ?? "");
+                app.MaxWidth = 160;
+                app.TextTrimming = TextTrimming.CharacterEllipsis;
+                if (entry.App is not null)
+                {
+                    ToolTipService.SetToolTip(app, string.Join("\n", new[] { entry.AppPath, entry.AppId }.OfType<string>()));
+                }
                 var again = Ui.Button(L("Test"));
                 again.Padding = new Thickness(8, 2, 8, 2);
                 var line = entry;
                 again.Click += (_, _) => page.TestHistoryEntryCommand.Execute(line);
-                rows.Children.Add(Ui.Columns(8, (Ui.Secondary(entry.Time), new GridLength(130)), (url, Ui.Star), (Ui.Secondary(entry.Rule), Ui.Auto), (again, Ui.Auto)));
+                rows.Children.Add(Ui.Columns(8, (Ui.Secondary(entry.Time), new GridLength(130)), (url, Ui.Star), (app, Ui.Auto), (Ui.Secondary(entry.Rule), Ui.Auto), (again, Ui.Auto)));
             }
         }, nameof(TestPageViewModel.History));
         return section;

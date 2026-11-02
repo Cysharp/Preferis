@@ -160,7 +160,7 @@ Platform 層は単一プロジェクトとし、`OperatingSystem.IsWindows()` �
 | `Preferis` (引数なし、シェルから) | macOS は使い方を表示。Windows は設定 UI を開く (エクスプローラーやスタートメニューのブラウザー項目から開かれるのはこの形で、GUI プログラムなので使い方を表示しても見えない) |
 | `Preferis --settings` | 設定 UI (`Preferis Settings.app` / `Preferis.Settings.exe`) を開く。起動中なら前面に出す |
 | `Preferis --status` | OS への登録状態、既定ブラウザー、設定ファイルの場所を表示 |
-| `Preferis --dry-run <url> [--config <path>]` | 設定を読み、ルーティングの過程 (トレース) と決定、候補プロファイルを標準出力に表示して終了 (起動しない)。デバッグ・テスト用。終了コードは決定できれば 0、失敗なら 2 |
+| `Preferis --dry-run <url> [--config <path>] [--app-id <id>] [--app-path <path>]` | 設定を読み、ルーティングの過程 (トレース) と決定、候補プロファイルを標準出力に表示して終了 (起動しない)。デバッグ・テスト用。`--app-id` / `--app-path` は URL を開いたアプリとして扱う ID とパス (§6.2、省略すると不明)。終了コードは決定できれば 0、失敗なら 2 |
 | `Preferis --register` / `--unregister` | OS への登録/解除 |
 | `Preferis.Picker` | 標準入力からリクエスト JSON を読み、標準出力に応答 JSON を書く (§9.3) |
 | `Preferis.Picker --request <path>` | リクエストをファイルから読む。単体での動作確認用 |
@@ -215,6 +215,9 @@ artifacts/                 出力先 (.gitignore 対象)
   実行ファイルのバージョン情報と `Preferis --version`、Velopack のパッケージ名、Router の `Info.plist`
   (`CFBundleShortVersionString` / `CFBundleVersion` は `1.2.3-beta.1` の数字部分 `1.2.3`) に入ります。
   `Preferis.Build.proj` は SDK 形式ではないので `Directory.Build.props` を明示的に読み込みます。
+- 作者と会社 (`Authors` / `Company`) は `Cysharp, Inc.`、著作権表示 (`Copyright`) は `Copyright © Cysharp, Inc.` で、
+  同じく `Directory.Build.props` にあります。Windows の実行ファイルのバージョン情報 (会社名、著作権) と
+  Velopack のパッケージの作者 (`--packAuthors`、インストール済みアプリの一覧の発行元) に入ります。
 - Windows のインストーラーに [Velopack](https://velopack.io/) (MIT) を使うのは、管理者権限なしの `%LocalAppData%` への
   インストール、GitHub Release をそのまま更新フィードにできること、差分更新、.NET の NativeAOT と相性がよいこと
   (`vpk` はパッケージングだけで、アプリ側のライブラリも AOT 互換) のためです。`vpk` はローカルツール
@@ -338,6 +341,8 @@ URL ごとに新しいプロセスが起動します。単一インスタンス�
   コンソールウィンドウが一瞬開く。コマンド (`--status` など) はターミナルから起動された場合だけ親のコンソールに接続して
   出力する (`AttachConsole`)。GUI プログラムなので cmd / PowerShell は終了を待たず、出力はプロンプトの後に出る。待たせたい
   場合は `Preferis.exe --status | Out-Host` のようにパイプする。
+- URL を開いたアプリの判定 (§6.2) のため、`Main` の最初に前面ウィンドウを記録する。Router の起動が進む間に別のウィンドウが
+  前面に来ても、リンクをクリックしたウィンドウで判定できるように (Platform.md §2.9)。
 
 `.html` 等のファイル関連付けも登録した場合は argv にファイルパスが来るので `file://` URI に変換します。
 
@@ -391,6 +396,8 @@ URL ごとに新しいプロセスが起動します。単一インスタンス�
 | `not` | グループ | 子条件 (1 つ) にマッチしない (追加提案) |
 | `host` | リーフ | `Uri.Host` に対して `match` を適用 |
 | `url` | リーフ | 正規化済み `Uri.AbsoluteUri` に対して `match` を適用 |
+| `appId` | リーフ | URL を開いたアプリの ID (macOS: バンドル ID、Windows: パッケージアプリの AUMID) に対して `match` を適用 |
+| `appPath` | リーフ | URL を開いたアプリのパス (macOS: `.app`、Windows: 実行ファイル) に対して `match` を適用 |
 
 リーフの `match` 種別:
 
@@ -410,6 +417,23 @@ URL ごとに新しいプロセスが起動します。単一インスタンス�
 
 正規化: 入力 URL は `Uri` でパースし、`Host` は小文字化する。IDN ホストは `Uri.IdnHost`
 (punycode) と `Uri.Host` (Unicode) の **両方** に対してマッチを試みる。
+
+URL を開いたアプリ (`appId` / `appPath`):
+
+- Platform 層が URL の受け取り時に判定し、`SourceApp (Id?, Path?)` として Router に渡す。Router はルール評価のたびに
+  これを使い、`rewrite` や `reroute` で URL が変わってもアプリは変わらない (§6.1 の再評価も同じアプリで評価する)。
+- 判定できなかった場合 (アプリが不明、または ID かパスの片方が不明) は、その条件はどのパターンにも一致しない
+  (`wildcard` の `*` にも)。`not` で包むと「そのアプリから開かれた以外」として一致する。Windows のパッケージでない
+  アプリには ID が無い。
+- 大文字小文字は常に区別しない。パスは両 OS の既定のファイルシステムに合わせ、ID もそれに揃える (1 つのルールで
+  両 OS を書けるように)。
+- OS ごとの書き分けは無い。macOS と Windows の ID・パスは形が違い互いに一致しないため、共有する設定では `or` で並べる。
+- 判定の方法: Platform 層が OS ごとに行う。
+  - Windows (Platform.md §2.9): 親プロセスを使い、cmd などの中継を飛ばす。親が sihost.exe や explorer.exe などの
+    仲介プロセスなら、起動直後の前面ウィンドウのアプリを使う (§12 スパイク 10)。親が終了済みか開けない場合は不明とする。
+  - macOS (Platform.md §3.9): URL を届ける Apple Event の送り主のプロセスを使う。`open` やシェルなどアプリでないプログラムなら
+    親をたどり、それが動いているアプリ (Terminal など) にする。アプリに着く前に launchd に着いたら不明とする (§12 スパイク 11)。
+- `--dry-run` は判定せず、`--app-id` / `--app-path` で指定したアプリで評価する。判定したアプリはログ (`info`) と履歴に残る (§8)。
 
 ### 6.3 アクション (Action)
 
@@ -436,9 +460,10 @@ Profile              { Id, Name, Target }     Target = BrowserTarget | CommandTa
 BrowserTarget        { Browser (string | per-OS map), BrowserProfile?, Private, ExtraArgs[] }
 CommandTarget        { Windows?: CommandSpec, MacOS?: CommandSpec }
 Rule                 { Id, Name, Enabled, Condition, Actions[] }
-Condition            = AndCondition | OrCondition | NotCondition | HostCondition | UrlCondition
+Condition            = AndCondition | OrCondition | NotCondition | HostCondition | UrlCondition | AppIdCondition | AppPathCondition
 RoutingAction        = OpenAction | SystemAction | NoneAction | RewriteAction | RerouteAction
-Router               Route(Uri) -> RoutingDecision
+SourceApp            { Id?, Path? }            // URL を開いたアプリ (§6.2)。Platform 層が判定する
+Router               Route(Uri, SourceApp?) -> RoutingDecision
 RoutingDecision      = Open(Uri, ProfileId[]) | System(Uri) | None | Failed(reason)
 ProfileResolver      Resolve(Profile, IBrowserDetector) -> LaunchPlan | ResolveFailure
 LaunchPlan           { ExecutablePath, Arguments[], Kind }   // Platform 層が実行する
@@ -554,7 +579,7 @@ Chromium 系のプロファイルディレクトリ名 (`Default`, `Profile 1`) 
   URL として解釈できない文字列 (受け取った不正な入力、書き換えが作った候補) も同じ規則で伏せる。書き換えの候補は
   失敗の理由そのものに伏せて入れるので、ピッカーやテストページに出る理由でも伏せてある。`info` と `trace` は
   診断のためのオプトインで、開いた URL をそのまま含む。
-- 「履歴」(直近 N 件の URL とマッチしたルール) は設定 UI でルールを調整するために有用だが、
+- 「履歴」(直近 N 件の URL とマッチしたルール、分かれば URL を開いたアプリの ID とパス) は設定 UI でルールを調整するために有用だが、
   URL は機微情報なのでオプトインとし、ローカルにのみ保存する。`local.json` の `logging.history` が `true` の時だけ
   Router が起動処理の後 (起動を遅らせないため) にログディレクトリの `history.jsonl` へ追記し、`historySize` 件に切り詰める。
   設定 UI のテストページが一覧表示し、クリックでその URL を再テストできる。1 つの Router 内の追記は直列化するが、
@@ -573,8 +598,8 @@ Windows: WinUI 3 (M4))、ViewModel とサービス (`Preferis.Settings.Core`) �
 | --- | --- |
 | 一般 | 設定ファイルの場所 (「クラウドストレージへ移動」)、OS への登録状態と「既定のブラウザーに設定」ボタン、ピッカーの動作、ログと履歴の有無、言語、更新 (Windows の Velopack インストールのみ: 確認 → ダウンロード → 再起動。Platform.md §2.1) |
 | プロファイル | プロファイル一覧 / 追加・編集・削除 / デフォルト指定。一覧の「+」メニューに並ぶ検出したブラウザーから 1 クリックでプロファイル化。ブラウザープロファイルは検出結果のドロップダウンから選択。プライベートモード、追加引数、OS 別上書き、フォールバック |
-| ルール | 順序付きリスト (ドラッグ並べ替え、有効/無効トグル、複製)。ルールエディターは条件ツリー (macOS は NSPredicateEditor) とアクション列エディター。末尾にキャッチオールルール (固定)。「…」メニューの「Import from CSV…」で CSV からルールを作る (Configuration.md §2.12) |
-| テスト | URL を入力すると、評価の過程 (どのルールがどう判定され、どの URL に書き換わり、どのプロファイルに解決されたか) を表示する。`--dry-run` と同じエンジンを使う |
+| ルール | 順序付きリスト (ドラッグ並べ替え、有効/無効トグル、複製)。ルールエディターは条件ツリー (macOS は NSPredicateEditor) とアクション列エディター。条件の行で比べる対象はホスト、URL、URL (大文字と小文字を区別)、アプリ ID、アプリのパス (§6.2)。末尾にキャッチオールルール (固定)。「…」メニューの「Import from CSV…」で CSV からルールを作る (Configuration.md §2.12) |
+| テスト | URL を入力すると、評価の過程 (どのルールがどう判定され、どの URL に書き換わり、どのプロファイルに解決されたか) を表示する。`--dry-run` と同じエンジンを使う。URL を開いたアプリの ID とパスも入力でき (どちらも省略可、空なら不明)、そのアプリが開いたものとして評価する。「Open」は実際の Router に渡すので、このアプリは使わない。履歴を有効にしていれば、最近開いた URL と開いたアプリ (実行ファイルかバンドルの名前。ツールチップにパスと ID) を一覧し、「テスト」でその URL とアプリを入れて評価し直す |
 
 設定 UI は起動速度の制約を受けないため、全ブラウザーと全ブラウザープロファイルの列挙、
 アイコンの読み込みはここで行います。OS への登録は Router の `--register` を呼び出して行います
@@ -631,7 +656,8 @@ M3 での実装の要点:
   エディター (macOS は NSPredicateEditor) で、根は常に「All / Any / None of the following are true」の行になる。
   `ConditionPredicates` が条件木とエディターの木を相互変換する: `not` は「None of」(`not (a or b)`) で表し、
   行が 1 つだけの All / Any は保存時にその行に畳む (単純なルールは単純なまま)。`url` の `ignoreCase: false` は
-  「URL (case-sensitive)」という別の対象として表す。空にした条件は「条件なし」(決してマッチしない)。条件には ViewModel を
+  「URL (case-sensitive)」という別の対象として表す。`appId` / `appPath` は「App ID」「App path」の対象として表す。
+  空にした条件は「条件なし」(決してマッチしない)。条件には ViewModel を
   持たせず、両 OS のエディターは変更のたびに条件全体を `RuleViewModel.SetCondition` で置き換える (編集の経路を 1 つにし、
   テストも画面と同じ経路を通すため)。`open` は全プロファイルのチェックリストで、
   プロファイル一覧の順に並べ、チェックしたものもその順で保存する。ピッカーの並びもプロファイル一覧の順で、プロファイル画面の
@@ -639,7 +665,8 @@ M3 での実装の要点:
   読み取り専用で表示し、そのまま書き戻す。既知の条件・アクションに新しいバージョンが加えたプロパティは、編集で作り直しても
   引き継ぐ (条件エディターでは行を編集前の条件に内容と位置で対応付ける。種類が変わったものは捨てる。Configuration.md §4)。
 - **テスト**: 編集中 (書き込み待ちを含む) の設定でルーティングし、各候補がこのマシンで実際に何を実行するか
-  (フォールバックした場合はその理由も) を表示する。「Open」はリンクをクリックした時と同じく Router に URL を渡し
+  (フォールバックした場合はその理由も) を表示する。入力した「開いたアプリ」の ID とパスは前後の空白を除き、両方空なら不明として
+  評価する。履歴の「テスト」は URL とアプリを両方入れ替える (アプリが無い履歴は欄を空にし、前に試したアプリを残さない)。「Open」はリンクをクリックした時と同じく Router に URL を渡し
   (`Preferis <url>`)、ピッカーや実際の起動を試せる。Router はファイルを読むため、待っている編集を先に書き込む。
   書き込めない (保留中の) 場合だけ、ディスク上の設定で開くかを尋ねる。Router のログ出力と結果を表示し、ピッカーで「記憶する」を
   選んだ場合はその場で読み直す。
@@ -658,7 +685,8 @@ M4 (Windows) での実装の要点 (詳細は Platform.md §2.8):
   行の下に表示する。
 - 設定 UI がテストページの「Open」で Router を実行するとき、出力の終端ではなく Router の終了で区切る。Router が起動した
   ブラウザーが出力を引き継ぐと、ブラウザーが終了するまで終端が来ないため (macOS も同じ。Windows の Router は自分の
-  標準ハンドルを子に継承させない)。
+  標準ハンドルを子に継承させない)。出力はスレッドプールではなく専用のスレッドで読む。パイプの読み取りは出力が来るまで
+  スレッドを塞ぐので、ブラウザーが出力を持つ間プールのスレッドが 2 つ塞がり、保存や Router の終了の通知が空きを待たされる。
 
 マシンごとのターゲットとプロファイル ID の変更 (§7.4) の UI (両 OS):
 
@@ -848,7 +876,9 @@ Guidelines に従い TDD (Red → Green) で進めます。
   同時の保存・移動、ロックが取れない時の保存も同じ実ファイルで検証する。フェイクの OS を Windows にして、このマシンの OS を
   基準にする振る舞い (ブラウザーの選択肢、OS ごとの指定、新しいコマンド) も検証する。
   保存中の追加編集・編集取消、部分的な書き込み失敗、画面と Router の解決可否の一致、1,000 ルールのテスト結果が
-  一括通知されることも回帰テストで確認する。
+  一括通知されることも回帰テストで確認する。2 つの操作が同時に進むテスト (保存中に閉じる・Open する) は、継続を
+  1 つのスレッドで実行する同期コンテキスト (`UiThread`) で動かす。xUnit は継続をスレッドプールで再開するため、
+  そのままでは UI スレッド専用の ViewModel が 2 つのスレッドから同時に使われる。
 - **Picker**: `--request <path>` で起動する手動確認を基本とし、ロジック (キー操作による選択、
   自動選択タイマー) は UI から切り離した状態機械 (`PickerSession`) としてテストする。
 - **画面の確認**: 画面収録の権限やディスプレイがなくても見た目を確認できるよう、ピッカーは `PREFERIS_PICKER_SNAPSHOT=<png>`、
@@ -900,7 +930,7 @@ macOS:
 
 Windows:
 
-Windows のスパイクは使い捨てのコードではなく、M4 の製品コード (`artifacts/win-x64/Preferis/`) で行った。
+Windows のスパイク 6〜9 は使い捨てのコードではなく、M4 の製品コード (`artifacts/win-x64/Preferis/`) で行った。
 
 6. **子プロセスのピッカーへのフォーカス移譲** — `AllowSetForegroundWindow` によりピッカーが前面に来るか。
    **結果 (2026-10-02, 一部)**: Router はピッカーの起動直後にそのプロセス ID で `AllowSetForegroundWindow` を呼び、ピッカーは
@@ -921,13 +951,41 @@ Windows のスパイクは使い捨てのコードではなく、M4 の製品コ
    **結果 (2026-10-02, 未確認)**: 利用中のブラウザーにウィンドウを開くため実施していない。手元には Edge と Edge Dev がある。
    Chromium のプロセスシングルトンは Windows でも同じ方式 (引数を起動中のプロセスに渡して終了) なので、macOS と同じ結果を
    見込んでいる。
+10. **送信元アプリの判定 (Windows)** — macOS の Apple Event と違い、Windows は URL ハンドラーにコマンドラインしか渡さない。
+    残る手がかり (親プロセスのチェーン、起動直後の前面ウィンドウ) で、URL を開いたアプリをどこまで判定できるか。
+    **結果 (2026-10-31, 一部, `spikes/SourceApp`)**: シェルの起動経路はスクリプトで計測した (Platform.md §5)。
+    ShellExecuteEx と WinRT の `Launcher.LaunchUriAsync` は、呼び出したプロセスが親になった (各 5 回すべて)。呼び出し元が
+    MSIX パッケージのアプリ (ストア版 PowerShell) でも親はそのアプリで、起動されたハンドラーはパッケージの ID を引き継がない。
+    `cmd /c start` と `rundll32 url.dll` を挟むと、中継プロセスはハンドラーの起動直後に終了する。ハンドラーが調べる時点
+    (起動から約 20〜40 ms) には消えていて、チェーンをたどれない (cmd は 5 回中 1 回だけ間に合った、rundll32 は 0 回)。
+    `explorer.exe <url>` は、COM で起動されたエクスプローラーが親になり、送信元は分からない。
+    前面ウィンドウは、スクリプトからの起動では起動元と無関係 (その時に前面にあったウィンドウ) になる。
+    実際のアプリでのリンクのクリックは、プローブを既定のブラウザーにして開発者が確認した (各 1 回)。デスクトップアプリは
+    パッケージの有無によらず、親がそのアプリで、前面ウィンドウも同じプロセスだった (VS Code、Windows Terminal、メモ帳、
+    新しい Outlook)。UWP アプリ (Microsoft Store、設定) では親が sihost.exe (仲介プロセス) で、親からは送信元が分からない。
+    前面ウィンドウは ApplicationFrameHost.exe のものだが、その子ウィンドウからアプリ本体を特定できた。親を主に使い、
+    親が仲介プロセスなら前面ウィンドウに切り替える方式で、6 つとも送信元を特定できる。
+    設定から開いた時だけ、プローブ自身が設定アプリのパッケージ ID (`windows.immersivecontrolpanel`) を持って起動された。
+    Router が他のアプリのパッケージ ID で動く時に、ファイルの書き込み先 (AppData の仮想化) が変わるかは未確認。
+    未確認: Slack、新しい Teams、クラシック Outlook。`SourceApp.exe --register-browser` で既定のブラウザーにして
+    開発者が確認する (spikes/README.md)。
+    この方式を Router に実装した (2026-11-01、Platform.md §2.9)。親は Toolhelp のスナップショットではなく
+    `NtQueryInformationProcess` で読む (スナップショットだけで 10〜20 ms かかった)。
+
+macOS (M4 の後に追加):
+
+11. **送信元アプリの判定 (macOS)** — URL を届ける Apple Event の送り主 (`keySenderPIDAttr`) が、URL を開いたアプリ (かその子) に
+    なるか。Router が起動していない時 (URL で起動される、通常の経路) にも、Launch Services のデーモンではなく元のアプリになるか。
+    `application:openURLs:` の中で `currentAppleEvent` が取れるか。
+    **結果 (2026-11-01)**: Router に実装し (Platform.md §3.9)、開発者が実機でリンクを開いて、開いたアプリを判定できることを
+    確認した。所要時間は未計測。判定できないアプリがあれば、`logging.level` を `trace` にして、ログの送り主
+    (`The URLs came from process …`) と判定 (`Opened by: …`) を見る。
 
 ユーザー判断が必要な事項:
 
 - 配布形態の残り: winget と Homebrew cask への登録、Apple Developer ID と Windows のコード署名証明書の取得
   (zip + Velopack インストーラーと dmg は決定済み、§4.4。署名と公証はシークレットを置けば動く)
 - Windows で `.html` 等のファイル関連付けも登録するか (既定は URL のみ)
-- 送信元アプリケーション (どのアプリが URL を開いたか) を条件に加えるか (将来拡張)
 
 ## 13. 決定事項の記録
 
@@ -981,7 +1039,12 @@ Windows のスパイクは使い捨てのコードではなく、M4 の製品コ
 | 2026-10-29 | 配布は Windows がポータブル zip と Velopack のインストーラー (x64 / arm64 を別チャネル)、macOS が Apple Silicon の dmg。リリースは `build-release.yaml` (workflow_dispatch、dry-run あり) で Cysharp/Actions の `validate-release` / `create-release` を使い、パッケージ作成は `Preferis.Build.proj` の `PackageWindows` / `PackageMacOS` に置く。バージョンは `-p:Version` で渡し、コミットしない | Velopack は管理者権限なしのインストール、GitHub Release をそのまま更新フィードにできること、差分更新、NativeAOT との相性で選んだ。パッケージ作成を MSBuild に置くのは §4.4 の方針 (`dotnet` だけで完結、ローカルでも同じコマンド) に合わせるため。org のワークフローはライブラリー向けなので、NuGet の部分を成果物のアップロードに置き換えた。arm64 は公開リポジトリ限定の `windows-11-arm` ランナーが使えないため x64 でクロスコンパイルする |
 | 2026-10-29 | アプリ側の Velopack 統合: 3 つの実行ファイルは `Main` の先頭で `VelopackInstallation.Start` を呼び、親フォルダーに `Update.exe` がある時だけ `VelopackApp.Build().Run()` を実行する。ダウンロード済みで未適用の更新の自動適用は設定 UI だけが許す。更新チェックは設定 UI の一般ページの「更新」カードで、`ISettingsPlatform.Updater` が null (ポータブル zip、ローカルビルド、macOS) なら出さない。Velopack のライブラリは `Preferis.Platform` が Windows でビルドする時だけ参照する (Platform.md §2.1) | Velopack の `Run()` はインストールされていなくてもインストール先を探し `%LocalAppData%\velopack` にログを書くため、ポータブル版のリンクのクリックにその起動コストと副作用を乗せない。リンクを開く Router とピッカーが更新の適用で待つのは §5.2 の方針に反し、設定 UI なら開き直すだけで済む。macOS は dmg 配布で Velopack を使わないので、ライブラリをバンドルに持ち込まない。更新の ViewModel をページでなくセッションに持たせるのは、Router の「記憶する」による読み直しでページが作り直されても進行中のダウンロードを失わないため |
 | 2026-10-30 | Windows の設定ファイルの置き場を `%LOCALAPPDATA%\Preferis` / `%APPDATA%\Preferis` から `%LOCALAPPDATA%\Cysharp\Preferis` / `%APPDATA%\Cysharp\Preferis` に移す。古いフォルダーの中身は起動時に一度だけ移し、古いフォルダーを消す (Configuration.md §1)。macOS は変えない | `%LOCALAPPDATA%\Preferis` は Velopack のインストール先 (`%LOCALAPPDATA%\{packId}`) そのもので、Setup は空でないフォルダーを「インストール済み」と判定し、Repair・更新・アンインストールはフォルダーごと扱う。ポータブル版や開発ビルドを先に使った PC で初回インストールが誤検出し、Repair で `local.json` が消えた。Velopack は `current` の 1 つ上に置くデータを認めているが、アンインストールで消え、インストール前に存在すれば誤検出する。多くのアプリ (Discord、VS Code、Teams) と Windows の指針どおり、プログラムとデータを別のフォルダーに分け、データは「会社名\製品名」に置く。packId を変える案 (`Cysharp.Preferis`) は成果物名と AUMID が変わるので採らなかった |
+| 2026-10-30 | (前の行を改める) 古いフォルダーからの移行 (`ConfigPaths.MoveFromLegacyWindowsFolders`) はやめ、古いフォルダーには触れない。開発版の古いファイルが残っていれば手で消す | アプリはリリース前で、移すべき利用者のデータがない。`%LOCALAPPDATA%\Preferis` はインストール先そのものなので、起動時に中身を移すとインストーラーのファイル (`Update.exe`、`current\` など) まで新しいフォルダーへ動かし、インストールを壊した |
+| 2026-10-30 | 設定 UI は Router の出力をスレッドプールではなく専用のスレッドで読む (§9.1)。同時に進む操作の ViewModel テストは UI スレッド相当の単一スレッドで動かし (§11)、ロックを持たせたままの一時停止は `Task.Delay` で待たない | Windows の CI でテストが不定期に失敗した。いずれもスレッドプールが原因: 出力を持ち続ける子のテストが読み取りでプールのスレッドを 2 つ塞ぎ、負荷の高いランナーでは `Exited` と `Task.Delay` のコールバックが空きを待って Router の終了から 6〜7 秒遅れた。同じ枯渇で、Router 役が `Task.Delay` で 0.3 秒ロックを持つはずの待ちが 3 秒のロックのタイムアウトを超えた。また保存と Open の継続が別々のプールのスレッドで並行して走り、UI スレッド専用の `PatternErrorCache` を壊した。負荷をかけたローカルの再現 (12 並列) で 12 回中 10 回の失敗が 36 回中 0 回になった |
 | 2026-10-30 | macOS の dmg は `hdiutil create` でなく dmgbuild (MIT) で作り、Finder のウィンドウの大きさとアイコン配置 (左に `Preferis.app`、右に `/Applications` へのリンク) を `build/dmg/settings.py` で固定する。dmgbuild は `pipx run dmgbuild==<version>` で実行し、インストールしない | `hdiutil` だけでは Finder のレイアウト (.DS_Store) を作れず、開いた時にアイコンが散らばる。dmgbuild はバンドルを `ditto` でコピーして署名を保ち、バージョンを固定できる。`pipx run` は Guidelines の「ツールをグローバルにインストールしない」に沿い、pipx は GitHub の macOS ランナーに入っている |
+| 2026-10-31 | URL を開いたアプリの条件 `appId` / `appPath` を加える (§6.2)。macOS は ID (バンドル ID) とパス (`.app`)、Windows は ID (パッケージアプリの AUMID) とパス (実行ファイル) で、OS ごとの書き分けは設けず、大文字小文字は区別しない。判定できなければ一致しない。Router はアプリを URL とは別に受け取り、書き換え後も同じアプリで評価する | Windows でもスパイク 10 で、デスクトップアプリは親プロセスから、UWP アプリは前面ウィンドウから判定できた。Windows のパスだけでは、ストア配布のアプリ (`WindowsApps\…_1.24.12741.0_x64__…`) や Squirrel のアプリ (`app-4.x.x`) で更新のたびに変わり、ユーザーのフォルダーに入るアプリは設定の共有で一致しないため、変わらない AUMID も選べるようにした。macOS と Windows の ID・パスは形が違い取り違えないので、プロファイルのような OS ごとの指定は要らない。条件の種類は既存の `host` / `url` と同じく比べる対象ごとに分け、照合方法 (`match`) を共有する |
+| 2026-11-01 | Windows の送信元アプリの判定 (Platform.md §2.9) では、親が終了済みか開けない場合に前面ウィンドウに頼らず不明とする。親は `NtQueryInformationProcess` で読み、Toolhelp のスナップショットは使わない。判定はルールにアプリの条件が無くても URL ごとに行う | 親が分からない時に前面ウィンドウを使うと、`cmd /c start` で開くアプリには当たるが、バックグラウンドのスクリプトやツールが開いた URL を前面のアプリが開いたと誤る。誤って一致して別のブラウザーで開くより、どのアプリの条件にも一致しない方が害が小さい。スナップショットは 1 回 10〜20 ms (441 プロセス) かかり、§5.2 の 20 ms の目標をほぼ使い切る。`NtQueryInformationProcess` なら判定全体で 0.3 ms。代わりに開けないプロセス (SYSTEM の svchost.exe など) は名前も分からず仲介プロセスと見分けられないが、スパイク 10 ではそれが直接の親になる経路は無かった。0.3 ms なので、条件が無い時に判定を省く仕組みは入れない |
+| 2026-11-01 | macOS の送信元アプリの判定 (Platform.md §3.9) は Apple Event の送り主を使い、アプリでないプログラムからは親をたどってアプリを探す。アプリは実行ファイルがバンドルの本体 (`X.app/Contents/MacOS/x`) であるプロセスとし、別のアプリの `Contents/Frameworks/` の中のアプリ (ヘルパー) は外側のアプリとする。アプリに着く前に launchd に着いたら不明とする。コマンドラインで渡された URL は Router の親から同じ規則で判定する。実装の後に開発者が実機で確認した (§12 スパイク 11) | 送り主は `open` やシェルのこともあるが、利用者が条件に書きたいのはそれを動かしている Terminal などのアプリ。「アプリかどうか」を `NSRunningApplication` で見る案は、Launch Services に登録していないプロセスでどうなるかが分からず、フェイクでのテストもしにくいため、パスで決める。ヘルパーを外側のアプリに寄せるのは、VS Code の統合ターミナルが `Code Helper.app` の中で動くため。`Contents/Helpers` などそれ以外の入れ子 (設定 UI、Xcode の Simulator) は、利用者から見て別のアプリなのでそのままにする。launchd に着いた時に前面のアプリに頼らないのは、Windows (前の行) と同じく、バックグラウンドのジョブが開いた URL を前面のアプリのものと誤らないため |
 | 2026-11-02 | dmg の背景は濃いグレー (#282828) の地に明るいグレーの矢印を焼き込み、ラベルの行から下 (188pt 以降) は明るいグレー (#D4D4D4) の帯にする (`build/dmg/make-background.py`)。透過の背景にはしない | Finder はフォルダーの背景画像を外観で切り替えず、画像を設定すると透過部分を白の上に描くため、透過にしてもダークモードで白い窓になった。暗い地なら両モードで同じに見えるが、背景画像のある窓では Finder はラベルを常に黒で描くので、暗い地だけではファイル名が読めず、ラベルの下だけ明るくした |
 
 ## 14. マイルストーンと現在の状態
@@ -998,7 +1061,7 @@ Windows 対応で追加するのは Platform の Windows 実装、Router の Win
 | M2 | macOS Platform + Router 高速経路: Launch Services 検出、プロファイル列挙、LaunchPlan 実行、既定ブラウザー登録、Apple Event 受信。**`PublishMacOS` ターゲットで ad-hoc 署名済みの `Preferis.app` 一式を生成** | `artifacts/` の `Preferis.app` を既定ブラウザーにし、単一候補のルールで日常利用できる | 完了 (2026-10-01)。`open -a` 経由と argv 経由で Chrome / Edge Dev への振り分けを確認。既定ブラウザー化は `--register` をユーザーが実行して確認する。ピッカー不在時は既定プロファイルへフォールバック。Platform.md §5 に計測値 |
 | M3 | macOS ピッカー (AppKit, ヘルパーバンドル) + 設定 UI (AppKit)。両者を `Preferis.app` に同梱 | macOS で全機能が揃い、設定ファイルを手で編集せずに運用できる | 実装完了、目視確認待ち (2026-10-02)。`Preferis Picker.app` (6.8 MB) と `Preferis Settings.app` (8.7 MB。Avalonia 版 26 MB から AppKit に置き換え) はどちらも AppKit + NativeAOT で、`Contents/Helpers/` に同梱し内側から署名 (`Preferis.app` 全体で 20 MB)。Router 経由でピッカー表示まで 120 ms、「記憶する」、オプトイン履歴、`Preferis.app` を直接開くと設定 UI。テスト 367 件 (Core 221, Platform 35, Settings.Core 111)。描画はウィンドウのキャプチャで確認済みだが、実際のリンククリックからのピッカーの前面表示と設定 UI の手操作は開発者の目視確認が必要。アプリアイコンは 2026-10-23 に追加 (Platform.md §3.1) |
 | M4 | Windows: スパイク (§12 の 6〜9)、Platform の Windows 実装、Router の Windows 経路、WinUI 3 ピッカー、WinUI 3 の設定 UI (`Preferis.Settings.Core` の ViewModel を使う)。**`PublishWindows` ターゲットで exe 一式のフォルダーを生成** | `artifacts/` の `Preferis.exe` を既定ブラウザーにし、M3 と同等の機能が揃う。同一の設定ファイルを両 OS で共有できる | 実装完了、目視確認待ち (2026-10-02)。`dotnet build build/Preferis.Build.proj` で `artifacts/win-x64/Preferis/` (82 MB: Router 4.9 MB、ピッカー 7.6 MB、設定 10 MB と Windows App SDK) を生成。3 つとも NativeAOT。レジストリからのブラウザー検出、HKCU への登録、`--single-argument`、ピッカー (Router 起動から表示まで約 270 ms)、設定 UI (Windows 11 の設定アプリ風、条件は行のエディター)、テストページからの Router 実行を確認。テスト 424 件 (Core 221, Platform 80, Settings.Core 123)。macOS 側の変更 (ViewModel、`RouterProcess`) は Windows ではビルドとテストのみで、AppKit の 2 プロジェクトは macOS での確認が必要。未確認: 既定ブラウザーにしてのリンククリック (前面表示、スパイク 6)、既定のアプリ一覧への表示 (スパイク 8)、起動中ブラウザーへの受け渡し (スパイク 9)、Firefox。アプリアイコンは 2026-10-22 に追加 (Platform.md §2.7) |
-| M5 | リリース: Developer ID 署名と公証、インストーラー (macOS: dmg / Homebrew cask、Windows: zip / winget 等)、ベンチ結果の記録、利用者向けドキュメント | 配布物を第三者が導入できる | 進行中 (2026-10-29)。ビルド・パッケージ・リリースのワークフロー `build-release.yaml` と `PackageWindows` / `PackageMacOS` ターゲット (§4.4) を追加: Windows x64 / arm64 のポータブル zip と Velopack インストーラー、macOS (Apple Silicon) の dmg を作ってドラフトリリースに添付する。Developer ID 署名と公証はシークレットがあれば行う (証明書は未取得)。push / PR ごとのビルドとテストは `build-debug.yaml` (2026-10-30) が同じコマンドで回す。ローカルで確認したのは Windows x64 の `PackageWindows` (zip、Setup.exe、nupkg、フィード) と 881 件のテストで、arm64 のクロスコンパイルと macOS の dmg / 署名 / 公証はワークフローの初回実行 (dry-run) で確認する。アプリ側の Velopack 統合 (3 つの実行ファイルの `Main` での `VelopackInstallation.Start`、設定 UI の「更新」カード。Platform.md §2.1) は同日に追加し、テストは 896 件 (Core 575, Platform 84, Settings.Core 237)。Windows の設定ファイルの置き場は翌日 `Cysharp\Preferis` に移した (§13、Configuration.md §1)。インストーラーからの実際の更新 (公開リリースが 2 つ以上必要) は未確認。残り: Windows のコード署名、winget / Homebrew cask、利用者向けドキュメント、ベンチ結果 |
+| M5 | リリース: Developer ID 署名と公証、インストーラー (macOS: dmg / Homebrew cask、Windows: zip / winget 等)、ベンチ結果の記録、利用者向けドキュメント | 配布物を第三者が導入できる | 進行中 (2026-10-29)。ビルド・パッケージ・リリースのワークフロー `build-release.yaml` と `PackageWindows` / `PackageMacOS` ターゲット (§4.4) を追加: Windows x64 / arm64 のポータブル zip と Velopack インストーラー、macOS (Apple Silicon) の dmg を作ってドラフトリリースに添付する。Developer ID 署名と公証はシークレットがあれば行う (証明書は未取得)。push / PR ごとのビルドとテストは `build-debug.yaml` (2026-10-30) が同じコマンドで回す。ローカルで確認したのは Windows x64 の `PackageWindows` (zip、Setup.exe、nupkg、フィード) と 881 件のテストで、arm64 のクロスコンパイルと macOS の dmg / 署名 / 公証はワークフローの初回実行 (dry-run) で確認する。アプリ側の Velopack 統合 (3 つの実行ファイルの `Main` での `VelopackInstallation.Start`、設定 UI の「更新」カード。Platform.md §2.1) は同日に追加し、テストは 910 件 (Core 589, Platform 84, Settings.Core 237)。Windows の設定ファイルの置き場は翌日 `Cysharp\Preferis` に移した (§13、Configuration.md §1)。インストーラーからの実際の更新 (公開リリースが 2 つ以上必要) は未確認。残り: Windows のコード署名、winget / Homebrew cask、利用者向けドキュメント、ベンチ結果 |
 
 M3・M4 の後、UI を英語と日本語の 2 言語にした (§9.4、2026-10-02)。Windows では設定 UI とピッカーを NativeAOT で発行し、
 日本語の表示をスナップショットで確認した。AppKit の 2 プロジェクト (メニューバー、`CFBundleLocalizations`、NSPredicateEditor の

@@ -67,6 +67,9 @@ public sealed class WindowsSettingsPlatform : ISettingsPlatform
 
     public void OpenDefaultBrowserSettings() => _registrar.OpenSystemSettings();
 
+    // Nothing on Windows denies reading a browser's profile data (docs/Platform.md §2.4).
+    public void OpenFullDiskAccessSettings() => throw new PlatformNotSupportedException();
+
     public Task<RouterRunResult> OpenUrlAsync(string url) => RunRouterAsync(url);
 
     public void Reveal(string path)

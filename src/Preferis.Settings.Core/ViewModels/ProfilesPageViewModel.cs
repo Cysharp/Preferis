@@ -134,6 +134,22 @@ public sealed partial class ProfilesPageViewModel : PageViewModel
     [RelayCommand]
     private void RefreshBrowsers() => Settings.RedetectBrowsers();
 
+    /// <summary>The <see cref="DetectedBrowserViewModel.Note"/> in a dialog: too long for the menu that offers it.</summary>
+    [RelayCommand]
+    private async Task ExplainNote(DetectedBrowserViewModel browser)
+    {
+        var title = L("The browser profiles of {0} could not be read.", browser.Name);
+        if (Settings.Platform.Platform != HostPlatform.MacOS)
+        {
+            await Settings.Dialogs.AskAsync(title, browser.Note ?? "", [L("OK")]);
+            return;
+        }
+        if (await Settings.Dialogs.AskAsync(title, browser.Note ?? "", [L("Open System Settings"), L("OK")]) == 0)
+        {
+            Settings.Platform.OpenFullDiskAccessSettings();
+        }
+    }
+
     internal void UpdateIssues(IReadOnlyList<ConfigIssue> issues)
     {
         foreach (var profile in Profiles)
@@ -284,12 +300,17 @@ public sealed class DetectedBrowserViewModel
 
     public byte[]? IconPng => Info.IconPng;
 
-    /// <summary>Why no browser profiles are listed, when that is not obvious.</summary>
+    /// <summary>
+    /// What to do about browser profiles that could not be read, when that is not obvious. The menu offers it and
+    /// <see cref="ProfilesPageViewModel.ExplainNoteCommand"/> shows it, under a title that says they could not be read.
+    /// </summary>
     public string? Note => Info.Profiles is null && Info.Browser.Family != BrowserFamily.Other
         ? _platform == HostPlatform.MacOS
-            ? L("Its browser profiles could not be read. On macOS 27 and later, give Preferis Settings Full Disk Access to list them.")
+            // The access is tied to the signature. Without a Developer ID one, every update is another app to macOS: the
+            // access still shows as allowed in System Settings but no longer applies until it is added again.
+            ? L("On macOS 27 and later, give Preferis Settings Full Disk Access to list them. After an update, or when it is already allowed, remove Preferis Settings from the Full Disk Access list and add it again.")
             // On Windows nothing denies access; the profile list does not exist until the browser has run once.
-            : L("Its browser profiles could not be read. Start the browser once so that it creates them.")
+            : L("Start the browser once so that it creates them.")
         : null;
 
     public IReadOnlyList<DetectedItemViewModel> Items { get; }

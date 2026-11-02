@@ -54,6 +54,10 @@ internal sealed class FakeSettingsPlatform : ISettingsPlatform
 
     public void OpenDefaultBrowserSettings() => SystemSettingsOpened++;
 
+    public int FullDiskAccessSettingsOpened { get; private set; }
+
+    public void OpenFullDiskAccessSettings() => FullDiskAccessSettingsOpened++;
+
     /// <summary>What the Router does meanwhile, e.g. save a remembered rule.</summary>
     public Action<string>? OnOpen { get; set; }
 

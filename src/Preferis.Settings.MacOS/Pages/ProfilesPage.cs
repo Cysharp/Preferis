@@ -126,6 +126,14 @@ internal sealed class ProfilesPage : IPageView
                 }
                 menu.AddItem(menuItem);
             }
+            if (browser.Note is not null)
+            {
+                var detected = browser;
+                menu.AddItem(new NSMenuItem(L("Browser profiles could not be read…"), (_, _) => _page.ExplainNoteCommand.Execute(detected))
+                {
+                    IndentationLevel = 1,
+                });
+            }
         }
         menu.AddItem(NSMenuItem.SeparatorItem);
         menu.AddItem(new NSMenuItem(L("Add All Browsers and Profiles"), (_, _) => _page.AddAllDetectedCommand.Execute(null)));

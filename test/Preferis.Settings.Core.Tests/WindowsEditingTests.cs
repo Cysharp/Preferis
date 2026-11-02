@@ -117,6 +117,24 @@ public sealed class WindowsEditingTests : IDisposable
     }
 
     [Fact]
+    public async Task The_explanation_of_unreadable_browser_profiles_has_no_system_settings_on_windows()
+    {
+        _harness.Platform.Browsers.Add(new Services.DetectedBrowserInfo(
+            new DetectedBrowser("chrome", "Google Chrome", BrowserFamily.Chromium, @"C:\Chrome\chrome.exe", null, @"C:\Users\me\AppData\Local\Google\Chrome\User Data", BrowserCatalog.Find("chrome")),
+            null,
+            null));
+        var page = _harness.Create().Profiles;
+        var chrome = page.DetectedBrowsers.Single(b => b.Id == "chrome");
+        _harness.Dialogs.Answers.Enqueue("OK");
+
+        await page.ExplainNoteCommand.ExecuteAsync(chrome);
+
+        var (_, message, buttons) = Assert.Single(_harness.Dialogs.Asked);
+        Assert.Equal(chrome.Note, message);
+        Assert.Equal(["OK"], buttons);
+    }
+
+    [Fact]
     public void Registration_outside_the_folder_of_preferis_exe_is_explained()
     {
         _harness.Platform.CanRegister = false;

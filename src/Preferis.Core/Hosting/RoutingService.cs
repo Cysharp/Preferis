@@ -24,11 +24,37 @@ public sealed class RoutingService
         _services = services;
     }
 
-    public HandleResult Handle(RoutingUrl url, SourceApp? source = null)
+    /// <summary>
+    /// Routes what the Router was given: a URL, a rooted file path, or a <c>preferis:</c> URL, whose web address is routed
+    /// as if the app that opened the <c>preferis:</c> URL had opened it (docs/Design.md §5.5).
+    /// </summary>
+    public HandleResult Handle(string input, SourceApp? source = null)
     {
-        // The language of the picker and of the messages (docs/Design.md §9.4) is config.json's; while it loads, and when it
-        // cannot be read, the system's rather than that of the previous URL. Scopes belong to this execution: another
-        // URL may load or wait for its picker concurrently without changing these texts.
+        if (!ReopenUrl.IsReopenUrl(input))
+        {
+            if (RoutingUrl.TryParse(input, out var url))
+            {
+                return Handle(url, source);
+            }
+            // Not necessarily URL-shaped, so the log would not find it in the message to mask it.
+            Log(LogLevel.Error, $"Not an absolute URL or a rooted file path: {UrlRedaction.Redact(input)}");
+            return new HandleResult(HandleOutcome.Failed, null, "Not an absolute URL or a rooted file path.");
+        }
+
+        // Unwrapped in the configured language: why there is nothing to open is shown to the user.
+        return InConfiguredLanguage(loaded => ReopenUrl.TryUnwrap(input, out var carried, out var problem)
+            ? Route(carried, source, loaded)
+            : Reject(input, problem));
+    }
+
+    public HandleResult Handle(RoutingUrl url, SourceApp? source = null) => InConfiguredLanguage(loaded => Route(url, source, loaded));
+
+    /// <summary>Loads the configuration and runs <paramref name="handle"/> in its language (docs/Design.md §9.4).</summary>
+    private HandleResult InConfiguredLanguage(Func<ConfigLoadResult, HandleResult> handle)
+    {
+        // The language of the picker and of the messages is config.json's; while it loads, and when it cannot be read, the
+        // system's rather than that of the previous URL. Scopes belong to this execution: another URL may load or wait
+        // for its picker concurrently without changing these texts.
         var systemLanguages = _services.SystemLanguages;
         using var loadingLanguage = systemLanguages is null ? null
             : UiLanguages.UseLazily(() => UiLanguages.Resolve(null, systemLanguages));
@@ -39,7 +65,19 @@ public sealed class RoutingService
         {
             Log(LogLevel.Warning, loaded.Error);
         }
+        return handle(loaded);
+    }
 
+    /// <summary>A <c>preferis:</c> URL that carries no web address: the click in the browser would otherwise seem to do nothing.</summary>
+    private HandleResult Reject(string input, string problem)
+    {
+        Log(LogLevel.Error, $"{problem} {UrlRedaction.Redact(input)}");
+        _services.Notifier.ShowError("Preferis", L("The URL could not be opened: {0}", problem), null);
+        return new HandleResult(HandleOutcome.Failed, null, problem);
+    }
+
+    private HandleResult Route(RoutingUrl url, SourceApp? source, ConfigLoadResult loaded)
+    {
         // What this machine opens: its own targets in place of the shared ones (docs/Design.md §7.4). Remembering a
         // choice writes to the file as loaded again, so these never reach config.json.
         var config = LocalProfileTargets.Apply(loaded.Config, loaded.Local);
@@ -53,7 +91,7 @@ public sealed class RoutingService
         // produced: after a rewrite (e.g. an unwrapped Safe Link) that is no longer the URL that came in.
         var resolver = new ProfileResolver(_services.HostPlatform, _services.Browsers, _services.BrowserProfiles, _services.GetEnvironmentVariable, _services.HomeDirectory);
         var context = new Context(result.Decision.Url, loaded, config, resolver, UiLanguages.Current);
-        return Execute(context, result.Decision, loaded.Error) with { RuleId = result.RuleId };
+        return Execute(context, result.Decision, loaded.Error) with { RuleId = result.RuleId, Url = url };
     }
 
     private HandleResult Execute(Context context, RoutingDecision decision, string? configError)

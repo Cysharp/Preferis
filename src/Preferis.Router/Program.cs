@@ -117,7 +117,8 @@ internal static class Program
             Preferis router
 
             Usage:
-              Preferis <url> [<url> ...]                     Route the URLs and open them.
+              Preferis <url> [<url> ...]                     Route the URLs and open them. A preferis:<url> or
+                                                             preferis://open?url=<encoded url> routes the URL in it.
               Preferis --dry-run <url> [--config <path>]     Show how <url> would be routed, without opening anything.
                        [--app-id <id>] [--app-path <path>]   As if the app with that id or path had opened it.
               Preferis --register | --unregister | --status  Manage the registration as the default browser.

@@ -92,6 +92,12 @@ public static partial class CoreText
         { "Profile data of '{0}' could not be read; using the stored name '{1}'.", "「{0}」のプロファイル情報を読み込めなかったため、保存されている名前「{1}」を使用します。" },
         { "Unsupported match kind: {0}", "未対応の比較方法です: {0}" },
 
+        // ---- preferis: URLs ----
+        { "This version of Preferis knows only preferis://open?url=<URL> and preferis:<URL>.", "この Preferis が扱えるのは preferis://open?url=<URL> と preferis:<URL> の形式だけです。" },
+        { "The preferis: URL does not say which URL to open.", "preferis: の URL に、開く URL が指定されていません。" },
+        { "A preferis: URL can open only http and https URLs.", "preferis: の URL で開けるのは http と https の URL だけです。" },
+        { "The preferis: URL has more than its url parameter. Percent-encode the URL it carries, as encodeURIComponent does.", "preferis: の URL に url パラメーター以外の部分があります。渡す URL は encodeURIComponent などでパーセントエンコードしてください。" },
+
         // ---- the steps of routing (the Test page of the settings) ----
         { "Reroute hop limit ({0}) exceeded.", "振り分け直しの上限 ({0} 回) を超えました。" },
         { "Reroute loop detected at '{0}'.", "「{0}」で振り分け直しがループしています。" },

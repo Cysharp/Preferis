@@ -179,6 +179,12 @@ HKCU\Software\Classes\PreferisURL
   DefaultIcon\(Default)                  = "<Preferis.exe>,0"
   shell\open\command\(Default)           = "\"<Preferis.exe>\" --single-argument %1"
 
+HKCU\Software\Classes\preferis                                    ; preferis: URL (Design.md §5.5)
+  (Default)                              = "URL:Preferis"
+  URL Protocol                           = ""
+  DefaultIcon\(Default)                  = "<Preferis.exe>,0"
+  shell\open\command\(Default)           = "\"<Preferis.exe>\" --single-argument %1"
+
 HKCU\Software\RegisteredApplications
   Preferis                               = "Software\Clients\StartMenuInternet\Preferis\Capabilities"
 ```
@@ -193,10 +199,14 @@ HKCU\Software\RegisteredApplications
   ProgId はレジストリの `UserChoice` を直接読まず、シェルの `AssocQueryString(ASSOCF_IS_PROTOCOL, ASSOCSTR_PROGID)` に
   尋ねる: 新しい Windows では選択の保存場所が変わっている (`UserChoiceLatest`) ことがあり、シェルは有効な選択を知っている。
   手元では `MSEdgeHTM` が返った。現在の既定の表示名は `ASSOCSTR_FRIENDLYAPPNAME` (「Microsoft Edge」)。
-- 実行ファイルの移動を検出するため、`PreferisURL` の `shell\open\command` のパスが今の `Preferis.exe` と違えば
-  「登録されていない」とみなす (既定であっても)。設定 UI はその場合「既定にする」を出し、押すと今のパスで登録し直す。
-  登録処理自体は `Preferis.exe --register` が行う (設定 UI もそれを実行する)。
-- 解除 (`--unregister`) は上記のキー 2 つと `RegisteredApplications` の値を削除する。
+- 独自スキーム `preferis` は Preferis だけが扱うので、`URLAssociations` には入れず `Classes\preferis` にコマンドを直接書く。
+  シェルは既定のアプリを選ばせずにこのコマンドを起動する (`zoommtg:` などアプリ独自のスキームと同じ)。URL の受け渡しは
+  http / https と同じ `--single-argument %1`。
+- 実行ファイルの移動を検出するため、`PreferisURL` か `preferis` の `shell\open\command` のパスが今の `Preferis.exe` と違えば
+  (`preferis` が無い場合も) 「登録されていない」とみなす (既定であっても)。設定 UI はその場合「既定にする」を出し、押すと今の
+  パスで登録し直す。`preferis` を登録しない以前の版で登録した場合も同じ扱いで、http / https が既に Preferis なら Windows の
+  設定ページは開かずに終わる。登録処理自体は `Preferis.exe --register` が行う (設定 UI もそれを実行する)。
+- 解除 (`--unregister`) は上記のキー 3 つと `RegisteredApplications` の値を削除する。
 
 ### 2.3 ブラウザー検出
 
@@ -547,6 +557,10 @@ Router の `Info.plist` の要点:
     <key>CFBundleURLName</key>     <string>Web site URL</string>
     <key>CFBundleURLSchemes</key>  <array><string>http</string><string>https</string></array>
   </dict>
+  <dict>
+    <key>CFBundleURLName</key>     <string>com.cysharp.Preferis.reopen</string>
+    <key>CFBundleURLSchemes</key>  <array><string>preferis</string></array>
+  </dict>
 </array>
 <key>CFBundleDocumentTypes</key>
 <array>
@@ -562,6 +576,11 @@ Router の `Info.plist` の要点:
 システム設定の「デフォルトの Web ブラウザ」一覧に表示されることをスパイク 4 で確認しました (§5)。
 一覧の表示名には `CFBundleDisplayName` ではなく `.app` のファイル名が使われるため、バンドル名は必ず
 `Preferis.app` にします。
+
+`preferis` (Design.md §5.5) は http / https と別の `CFBundleURLTypes` の項目にします。Preferis だけが扱うスキームなので
+既定のハンドラーを要求する必要はなく (§3.2 の登録は http / https だけ)、Launch Services がバンドルを登録した時点
+(Finder で開く、`/Applications` に置く、`--register` の `LSRegisterURL`) で Router に届くようになります。届き方は http / https
+と同じ Apple Event です (§3.6)。
 
 ヘルパーの `Info.plist`: ピッカーは一瞬だけ表示されるダイアログなので `LSUIElement=true` とし、
 ウィンドウ表示時に `NSApp.activate` で前面化する。設定 UI は通常のアプリとして `LSUIElement=false`。

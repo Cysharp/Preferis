@@ -255,23 +255,21 @@ internal sealed class RouterHost
     private HandleOutcome Handle(string input, SourceApp? source)
     {
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
-        if (!RoutingUrl.TryParse(input, out var url))
-        {
-            // Not necessarily URL-shaped, so the log would not find it in the message to mask it.
-            Log.Write(LogLevel.Error, $"Not an absolute URL or a rooted file path: {UrlRedaction.Redact(input)}");
-            return HandleOutcome.Failed;
-        }
-
         try
         {
-            var result = Service.Handle(url, source);
+            // A URL, a path, or a preferis: URL that carries one (docs/Design.md §5.5).
+            var result = Service.Handle(input, source);
             Log.Write(LogLevel.Info, $"{result.Outcome}: {result.Summary} ({System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F1} ms)");
-            RecordHistory(url, result, source);
+            if (result.Url is { } url)
+            {
+                RecordHistory(url, result, source);
+            }
             return result.Outcome;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Log.Write(LogLevel.Error, $"Unhandled failure while routing {url.AbsoluteUri}: {ex}");
+            // Not necessarily URL-shaped, so the log would not find it in the message to mask it.
+            Log.Write(LogLevel.Error, $"Unhandled failure while routing {UrlRedaction.Redact(input)}: {ex}");
             return HandleOutcome.Failed;
         }
     }

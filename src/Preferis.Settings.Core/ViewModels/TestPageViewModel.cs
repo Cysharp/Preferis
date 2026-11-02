@@ -108,11 +108,14 @@ public sealed partial class TestPageViewModel : PageViewModel
         RoutedUrl = null;
         Error = null;
 
-        if (!RoutingUrl.TryParse(Url.Trim(), out var url))
+        // A preferis: URL is tested with the URL it carries, as the Router routes it (docs/Design.md §5.5).
+        var input = Url.Trim();
+        string? problem = null;
+        if (ReopenUrl.IsReopenUrl(input) ? !ReopenUrl.TryUnwrap(input, out var url, out problem) : !RoutingUrl.TryParse(input, out url))
         {
             Trace = [];
             Candidates = [];
-            Error = L("Enter an absolute URL, such as https://www.example.com/.");
+            Error = problem ?? L("Enter an absolute URL, such as https://www.example.com/.");
             return;
         }
 

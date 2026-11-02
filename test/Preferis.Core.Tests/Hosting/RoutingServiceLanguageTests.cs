@@ -105,6 +105,17 @@ public sealed class RoutingServiceLanguageTests : LanguageTest
     }
 
     [Fact]
+    public void Why_a_preferis_url_is_not_opened_is_told_in_the_configured_language()
+    {
+        var host = new FakeHost { SystemLanguages = () => ["en-US"] };
+        host.Config.Settings = new AppSettings { Language = "ja" };
+
+        host.CreateService().Handle("preferis://open");
+
+        Assert.Equal("URL を開けませんでした: preferis: の URL に、開く URL が指定されていません。", Assert.Single(host.Errors).Message);
+    }
+
+    [Fact]
     public void Auto_follows_the_languages_of_the_system()
     {
         var host = new FakeHost { SystemLanguages = () => ["ja-JP", "en-US"] };

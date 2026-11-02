@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using Preferis.Core.Hosting;
+using Preferis.Core.Routing;
 
 namespace Preferis.Platform.Windows;
 
@@ -18,6 +19,7 @@ public sealed class WindowsDefaultBrowserRegistrar : IDefaultBrowserRegistrar
     private const string ClientKey = @"HKCU\Software\Clients\StartMenuInternet\" + AppName;
     private const string CapabilitiesPath = @"Software\Clients\StartMenuInternet\" + AppName + @"\Capabilities";
     private const string ProgIdKey = @"HKCU\Software\Classes\" + ProgId;
+    private const string ReopenSchemeKey = @"HKCU\Software\Classes\" + ReopenUrl.Scheme;
     private const string RegisteredApplications = @"HKCU\Software\RegisteredApplications";
     private const string DefaultAppsPage = "ms-settings:defaultapps?registeredAppUser=" + AppName;
     private static readonly string[] Schemes = ["http", "https"];
@@ -46,11 +48,10 @@ public sealed class WindowsDefaultBrowserRegistrar : IDefaultBrowserRegistrar
 
     public RegistrationStatus GetStatus()
     {
-        // A registration of a copy elsewhere (an older build folder) does not count: URLs would be sent there.
-        var command = _registry.GetString($@"{ProgIdKey}\shell\open\command", null);
-        var registeredPath = command is null ? null : WindowsBrowserDetector.ExecutableFromCommand(command, Environment.GetEnvironmentVariable);
-        var isRegistered = registeredPath is not null
-            && SamePath(registeredPath, _routerPath)
+        // A registration of a copy elsewhere (an older build folder) does not count: URLs would be sent there. Nor does one
+        // without the preferis: scheme, which an older Preferis did not register.
+        var isRegistered = OpensThisRouter(ProgIdKey)
+            && OpensThisRouter(ReopenSchemeKey)
             && _registry.GetString(RegisteredApplications, AppName) is not null;
         var isDefault = isRegistered && Schemes.All(IsChosen);
         return new RegistrationStatus(isRegistered, isDefault, _associations.GetHandlerName("https"));
@@ -80,6 +81,13 @@ public sealed class WindowsDefaultBrowserRegistrar : IDefaultBrowserRegistrar
             // Everything after --single-argument is the URL, so that a crafted URL cannot pass options (as Edge and Chrome do).
             _registry.SetString($@"{ProgIdKey}\shell\open\command", null, $"{quoted} --single-argument %1");
 
+            // preferis: URLs (docs/Design.md §5.5). Only Preferis handles the scheme, so it is not among the URLAssociations:
+            // there is nothing to choose in Settings, and the shell starts the command directly.
+            _registry.SetString(ReopenSchemeKey, null, "URL:Preferis");
+            _registry.SetString(ReopenSchemeKey, "URL Protocol", "");
+            _registry.SetString($@"{ReopenSchemeKey}\DefaultIcon", null, $"{_routerPath},0");
+            _registry.SetString($@"{ReopenSchemeKey}\shell\open\command", null, $"{quoted} --single-argument %1");
+
             _registry.SetString(RegisteredApplications, AppName, CapabilitiesPath);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or System.Security.SecurityException)
@@ -102,6 +110,7 @@ public sealed class WindowsDefaultBrowserRegistrar : IDefaultBrowserRegistrar
         {
             _registry.DeleteTree(ClientKey);
             _registry.DeleteTree(ProgIdKey);
+            _registry.DeleteTree(ReopenSchemeKey);
             _registry.DeleteValue(RegisteredApplications, AppName);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or System.Security.SecurityException)
@@ -115,6 +124,11 @@ public sealed class WindowsDefaultBrowserRegistrar : IDefaultBrowserRegistrar
     public void OpenSystemSettings() => _openUri(DefaultAppsPage);
 
     private bool IsChosen(string scheme) => string.Equals(_associations.GetProgId(scheme), ProgId, StringComparison.OrdinalIgnoreCase);
+
+    private bool OpensThisRouter(string key)
+        => _registry.GetString($@"{key}\shell\open\command", null) is { } command
+            && WindowsBrowserDetector.ExecutableFromCommand(command, Environment.GetEnvironmentVariable) is { } path
+            && SamePath(path, _routerPath);
 
     private static bool SamePath(string a, string b)
     {

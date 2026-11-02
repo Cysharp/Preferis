@@ -155,6 +155,7 @@ Platform 層は単一プロジェクトとし、`OperatingSystem.IsWindows()` �
 | 起動 | 動作 |
 | --- | --- |
 | `Preferis <url> [<url> ...]` | Router。シェルから直接 URL を渡せる |
+| `preferis:<url>` / `preferis://open?url=<エンコードした url>` を開く | ブラウザーやほかのアプリから URL を渡して振り分け直す (§5.5)。Windows は `--single-argument`、macOS は Apple Event で届き、中の http / https の URL を通常の URL と同じく振り分ける |
 | `Preferis --single-argument <url>` | Windows で既定ブラウザーとして登録するコマンド (最速経路)。生のコマンドラインの残り全体を 1 つの URL として扱い、URL 中の引用符や空白でオプションを注入されないようにする (Edge / Chrome と同じ方式、§5.4) |
 | `Preferis` (引数なし、Launch Services から起動) | macOS。NSApplication を起動し、Apple Event で届く URL を処理して終了する。URL が届かなければ (Finder や Spotlight から `Preferis.app` 自体を開いた場合) 設定 UI を開いて終了する |
 | `Preferis` (引数なし、シェルから) | macOS は使い方を表示。Windows は設定 UI を開く (エクスプローラーやスタートメニューのブラウザー項目から開かれるのはこの形で、GUI プログラムなので使い方を表示しても見えない) |
@@ -271,7 +272,8 @@ MagicOnion が使う Cysharp/Actions の `actions-timeline` は入れていま�
 ```
 argv / Apple Event
   │
-  ├─ 1. 入力正規化      ファイルパスなら file:// に変換、Uri パース、Host 小文字化
+  ├─ 1. 入力正規化      preferis: URL なら中の URL を取り出す (§5.5)、ファイルパスなら file:// に変換、
+  │                      Uri パース、Host 小文字化
   ├─ 2. 設定ロード      local.json → configPath 解決 → config.json (ソース生成 JSON)
   ├─ 3. ルーティング    ルールを上から評価 → RoutingDecision
   ├─ 4. プロファイル解決 決定に含まれるプロファイルだけをブラウザー実体に解決
@@ -346,6 +348,40 @@ URL ごとに新しいプロセスが起動します。単一インスタンス�
   前面に来ても、リンクをクリックしたウィンドウで判定できるように (Platform.md §2.9)。
 
 `.html` 等のファイル関連付けも登録した場合は argv にファイルパスが来るので `file://` URI に変換します。
+
+### 5.5 `preferis:` URL による開き直し
+
+ブラウザーで開いているページの URL や、既定ブラウザーを使わずに特定のブラウザーで開くアプリの URL を Preferis に渡し、
+振り分け直すための独自スキームです。ブックマークレット、ブラウザー拡張、URL を開けるだけのランチャーやショートカットから
+使います。Preferis を既定ブラウザーにしていなくても使えます。
+
+| 形式 | 例 | 中の URL |
+| --- | --- | --- |
+| `preferis://open?url=<パーセントエンコードした URL>` | `preferis://open?url=https%3A%2F%2Fexample.com%2F%3Fq%3D1` | `url` の値をパーセントデコードしたもの。`+` は空白にしない (`encodeURIComponent` は空白を `%20` にするので、`+` は URL 自身のもの) |
+| `preferis:<URL>` | `preferis:https://example.com/?q=1` | `preferis:` より後ろ全体をそのまま |
+
+- 2 つの形式は `preferis:` の直後が `//` かどうかで区別する。スキームとアクション (`open`) は大文字小文字を区別せず、
+  `preferis://open/?url=` も受け付ける。前者は曖昧さがなくアクションやパラメーターを足せる形、後者は URL の前に付けるだけで
+  使える形。
+- 中の URL は http / https だけを受け付ける。Web ページはリンクやスクリプトで `preferis:` を開かせられる (ブラウザーの確認で
+  常に許可にしていれば確認なしで開く)。`file:` やほかのスキームを通すと、ルールの `system` アクションやフォールバックで
+  OS の既定ハンドラー (Windows は `ShellExecute`) に渡り、ローカルのプログラムを起動できてしまう。中の `preferis:` も同じ
+  規則で拒否されるので、ループしない。
+- `open` の形式で `url` 以外のパラメーター、2 つ目の `url`、フラグメントがあればエラーにする。エンコードせずに
+  `url=https://example.com/?a=1&b=2` と書くと URL が最初の `&` や `#` で切れ、残りを黙って失ったまま開いてしまうため。
+  アクションやパラメーターを足す時はこの規則を見直す。
+- 取り出した URL は通常の URL と同じく振り分ける (ルール、ピッカー、記憶、フォールバック)。URL を開いたアプリ (§6.2) は
+  `preferis:` の URL を開いたアプリ (多くはブラウザー) なので、「Chrome から開き直したら Firefox で開く」のようなルールが
+  書ける。履歴には取り出した URL を記録する。
+- 中の URL を取り出せない場合は理由をエラーログに書き (入力は §8 の規則で伏せる)、設定の言語で OS のメッセージボックスに
+  出す。ブラウザーでクリックした直後に何も起きないと、ユーザーには理由が分からないため。理由の文にはトークンを含みうる
+  入力を含めない。URL でもパスでもない入力は従来どおりログだけ。
+- 実装は `Core.Routing.ReopenUrl` (取り出し) と `RoutingService.Handle(string)` (設定の言語での表示)。`--dry-run` と設定 UI の
+  テストページも、取り出した URL で振り分ける。
+- 登録: macOS は Router の `Info.plist` の `CFBundleURLTypes` に `preferis` を http / https と別の項目で宣言し
+  (Platform.md §3.1)、Launch Services がバンドルを登録した時点で使える。Windows は `--register` で
+  `HKCU\Software\Classes\preferis` を書く (Platform.md §2.2)。どちらも Preferis だけが扱うスキームなので、既定の
+  ハンドラーを選ぶ操作は要らない。
 
 ## 6. ルーティングエンジン
 
@@ -847,10 +883,10 @@ UI は英語と日本語です。`settings.language` (Configuration.md §2.9) �
 詳細は [Platform.md](Platform.md) を参照。
 
 - **Windows**: HKCU 配下の `Software\Clients\StartMenuInternet\Preferis` (Capabilities、URLAssociations
-  http/https) と `Software\RegisteredApplications`、ProgId `PreferisURL` の `shell\open\command` を
-  `Preferis.exe` に向けて書く。既定ブラウザーの切り替え自体はユーザー操作が必要なので
+  http/https) と `Software\RegisteredApplications`、ProgId `PreferisURL` と独自スキーム `preferis` (§5.5) の
+  `shell\open\command` を `Preferis.exe` に向けて書く。既定ブラウザーの切り替え自体はユーザー操作が必要なので
   `ms-settings:defaultapps` を開く。実行ファイルの場所が変わったら設定 UI 起動時に検出して再登録を促す。
-- **macOS**: `Preferis.app` の `Info.plist` に `CFBundleURLTypes` (http, https) と `CFBundleDocumentTypes`
+- **macOS**: `Preferis.app` の `Info.plist` に `CFBundleURLTypes` (http, https と preferis) と `CFBundleDocumentTypes`
   (public.html 等) を宣言。ピッカーと設定 UI は `Contents/Helpers/` 配下のネストしたバンドルに置く。
   `NSWorkspace.setDefaultApplication(at:toOpenURLsWithScheme:)` (macOS 12+) で既定化を要求する
   (OS が確認ダイアログを出す)。配布には Developer ID 署名と公証が必要。
@@ -1047,6 +1083,8 @@ macOS (M4 の後に追加):
 | 2026-11-01 | Windows の送信元アプリの判定 (Platform.md §2.9) では、親が終了済みか開けない場合に前面ウィンドウに頼らず不明とする。親は `NtQueryInformationProcess` で読み、Toolhelp のスナップショットは使わない。判定はルールにアプリの条件が無くても URL ごとに行う | 親が分からない時に前面ウィンドウを使うと、`cmd /c start` で開くアプリには当たるが、バックグラウンドのスクリプトやツールが開いた URL を前面のアプリが開いたと誤る。誤って一致して別のブラウザーで開くより、どのアプリの条件にも一致しない方が害が小さい。スナップショットは 1 回 10〜20 ms (441 プロセス) かかり、§5.2 の 20 ms の目標をほぼ使い切る。`NtQueryInformationProcess` なら判定全体で 0.3 ms。代わりに開けないプロセス (SYSTEM の svchost.exe など) は名前も分からず仲介プロセスと見分けられないが、スパイク 10 ではそれが直接の親になる経路は無かった。0.3 ms なので、条件が無い時に判定を省く仕組みは入れない |
 | 2026-11-01 | macOS の送信元アプリの判定 (Platform.md §3.9) は Apple Event の送り主を使い、アプリでないプログラムからは親をたどってアプリを探す。アプリは実行ファイルがバンドルの本体 (`X.app/Contents/MacOS/x`) であるプロセスとし、別のアプリの `Contents/Frameworks/` の中のアプリ (ヘルパー) は外側のアプリとする。アプリに着く前に launchd に着いたら不明とする。コマンドラインで渡された URL は Router の親から同じ規則で判定する。実装の後に開発者が実機で確認した (§12 スパイク 11) | 送り主は `open` やシェルのこともあるが、利用者が条件に書きたいのはそれを動かしている Terminal などのアプリ。「アプリかどうか」を `NSRunningApplication` で見る案は、Launch Services に登録していないプロセスでどうなるかが分からず、フェイクでのテストもしにくいため、パスで決める。ヘルパーを外側のアプリに寄せるのは、VS Code の統合ターミナルが `Code Helper.app` の中で動くため。`Contents/Helpers` などそれ以外の入れ子 (設定 UI、Xcode の Simulator) は、利用者から見て別のアプリなのでそのままにする。launchd に着いた時に前面のアプリに頼らないのは、Windows (前の行) と同じく、バックグラウンドのジョブが開いた URL を前面のアプリのものと誤らないため |
 | 2026-11-02 | dmg の背景は濃いグレー (#282828) の地に明るいグレーの矢印を焼き込み、ラベルの行から下 (188pt 以降) は明るいグレー (#D4D4D4) の帯にする (`build/dmg/make-background.py`)。透過の背景にはしない | Finder はフォルダーの背景画像を外観で切り替えず、画像を設定すると透過部分を白の上に描くため、透過にしてもダークモードで白い窓になった。暗い地なら両モードで同じに見えるが、背景画像のある窓では Finder はラベルを常に黒で描くので、暗い地だけではファイル名が読めず、ラベルの下だけ明るくした |
+| 2026-11-02 | 独自スキーム `preferis:` を加え、`preferis://open?url=<エンコードした URL>` と `preferis:<URL>` の両方を受け付ける (§5.5)。中の URL は http / https だけ。`open` の形式は `url` 以外の部分があればエラーにし、取り出せない場合はメッセージボックスで知らせる | ブラウザーで開いているページを Preferis で振り分け直せるようにする。前者は曖昧さがなく拡張できる、後者は手で前に付けるだけで使える。Web ページから開かれうるため、ほかのスキームを通すと OS の既定ハンドラー経由でプログラムを起動できてしまう。エンコードし忘れた URL を途中で切れたまま開かないよう、余分な部分は無視せずエラーにする |
+| 2026-11-02 | Windows では `preferis` のキーが今の `Preferis.exe` を指していない登録も「登録されていない」とみなす (Platform.md §2.2) | 以前の版の登録では `preferis:` が届かない。設定 UI に出る「既定にする」を押せば登録し直し、http / https が既に Preferis なら Windows の設定ページは開かない。実行ファイルを移した場合と同じ扱い |
 | 2026-11-02 | Windows のアプリ内の更新は、Velopack の `GithubSource` (GitHub の API) でなく `SimpleWebSource` で最新のリリースのダウンロード用の URL (`releases/latest/download/`) からフィードとパッケージを読む。インストール済みの版の完全パッケージがフィードにない時 (2 つ以上前の版) は差分を使わず完全パッケージを取る (`LatestReleaseUpdateManager`、Platform.md §2.1) | トークンなしの API は送信元の IP あたり 60 回/時で、同じ IP の利用者全員が分け合うため、社内のネットワークで更新の確認が「403 (rate limit exceeded)」で失敗した。配布するアプリにトークンは埋め込めない。最新のリリースのフィードにある差分は 1 つ前のリリースからのものだけで、Velopack はそれを古い版にも当て、変わらないファイルを古い版のまま残す |
 
 ## 14. マイルストーンと現在の状態

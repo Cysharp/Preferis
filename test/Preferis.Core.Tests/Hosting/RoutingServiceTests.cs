@@ -69,6 +69,72 @@ public class RoutingServiceTests
         Assert.NotEqual("from-slack", fromElsewhere.RuleId);
     }
 
+    [Theory]
+    [InlineData("preferis://open?url=https%3A%2F%2Fwww.example.org%2F%3Fq%3D1")]
+    [InlineData("preferis:https://www.example.org/?q=1")]
+    public void A_preferis_url_routes_the_url_it_carries_as_opened_by_the_app_that_opened_it(string input)
+    {
+        // Reopening from a browser: a rule can tell which browser the URL is coming back from.
+        var host = FullHost();
+        host.Config.Rules.Insert(0, new Rule
+        {
+            Id = "from-safari",
+            Name = "Back from Safari",
+            Condition = new AppIdCondition { Match = MatchKind.Exact, Pattern = "com.apple.Safari" },
+            Actions = [new OpenAction { Profiles = ["chrome-work"] }],
+        });
+
+        var result = host.CreateService().Handle(input, new SourceApp("com.apple.Safari", "/Applications/Safari.app"));
+
+        Assert.Equal(("from-safari", "chrome-work"), (result.RuleId, result.ProfileId));
+        Assert.Equal("https://www.example.org/?q=1", result.Url?.AbsoluteUri);
+        Assert.Equal("https://www.example.org/?q=1", Assert.Single(host.Launched).Arguments[^1]);
+    }
+
+    [Fact]
+    public void A_url_given_as_text_is_routed_as_it_is()
+    {
+        var host = FullHost();
+
+        var result = host.CreateService().Handle("https://admin.google.com/ac/users");
+
+        Assert.Equal(HandleOutcome.Launched, result.Outcome);
+        Assert.Equal("https://admin.google.com/ac/users", result.Url?.AbsoluteUri);
+    }
+
+    [Fact]
+    public void A_preferis_url_that_carries_no_web_address_is_shown_to_the_user()
+    {
+        // The click in the browser would otherwise seem to do nothing.
+        var host = FullHost();
+
+        var result = host.CreateService().Handle("preferis:file:///Applications/Calculator.app?token=secret");
+
+        Assert.Equal(HandleOutcome.Failed, result.Outcome);
+        Assert.Null(result.Url);
+        Assert.Empty(host.Launched);
+        Assert.Empty(host.OpenedWithSystem);
+        Assert.Empty(host.PickerRequests);
+        var error = Assert.Single(host.Errors);
+        Assert.Contains("only http and https", error.Message, StringComparison.Ordinal);
+        Assert.Null(error.Url);
+        Assert.Contains(host.Log, l => l.Level == LogLevel.Error && l.Message.Contains("preferis:file:///Applications/Calculator.app?***", StringComparison.Ordinal));
+        Assert.DoesNotContain(host.Log, l => l.Message.Contains("secret", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Input_that_is_no_url_at_all_is_logged_without_bothering_the_user()
+    {
+        var host = FullHost();
+
+        var result = host.CreateService().Handle("not a url?token=secret");
+
+        Assert.Equal(HandleOutcome.Failed, result.Outcome);
+        Assert.Null(result.Url);
+        Assert.Empty(host.Errors);
+        Assert.Contains(host.Log, l => l.Level == LogLevel.Error && l.Message == "Not an absolute URL or a rooted file path: not a url?***");
+    }
+
     [Fact]
     public void The_log_names_profiles_as_well_as_their_ids()
     {

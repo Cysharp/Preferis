@@ -14,7 +14,17 @@ internal static class DryRunCommand
     /// <param name="source">The app to route the URL as if it had opened it (<c>--app-id</c>, <c>--app-path</c>).</param>
     public static int Run(string input, string? configPathOverride, SourceApp? source, TextWriter output)
     {
-        if (!RoutingUrl.TryParse(input, out var url))
+        RoutingUrl? url;
+        if (ReopenUrl.IsReopenUrl(input))
+        {
+            // As the Router routes it: the URL it carries, which the URL line shows (docs/Design.md §5.5).
+            if (!ReopenUrl.TryUnwrap(input, out url, out var problem))
+            {
+                output.WriteLine(problem);
+                return 1;
+            }
+        }
+        else if (!RoutingUrl.TryParse(input, out url))
         {
             output.WriteLine($"Not an absolute URL or a rooted file path: {input}");
             return 1;

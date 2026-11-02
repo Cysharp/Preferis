@@ -103,7 +103,11 @@ public enum HandleOutcome
 
 /// <param name="ProfileId">The profile that was launched, or <c>browser:&lt;id&gt;</c> for a detected browser without a profile.</param>
 /// <param name="RuleId">The rule whose actions decided, or null for the catch-all (and when routing failed before any rule).</param>
-public sealed record HandleResult(HandleOutcome Outcome, string? ProfileId, string Summary, string? RuleId = null);
+/// <param name="Url">
+/// The URL that was routed, as it came in (for a <c>preferis:</c> URL, the one it carries) rather than as the rules rewrote
+/// it; null when there was none to route.
+/// </param>
+public sealed record HandleResult(HandleOutcome Outcome, string? ProfileId, string Summary, string? RuleId = null, RoutingUrl? Url = null);
 
 /// <summary>Registration of Preferis as a browser with the OS (docs/Platform.md §2.2 / §3.2).</summary>
 public interface IDefaultBrowserRegistrar

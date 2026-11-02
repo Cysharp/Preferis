@@ -38,6 +38,38 @@ public class WindowsDefaultBrowserRegistrarTests
     }
 
     [Fact]
+    public void Register_registers_the_preferis_scheme_too()
+    {
+        Registrar().Register();
+
+        // Only Preferis handles preferis: URLs, so the shell starts the command directly and nothing is chosen in Settings.
+        var scheme = @"HKCU\Software\Classes\preferis";
+        Assert.Equal("", _registry.GetString(scheme, "URL Protocol"));
+        Assert.Equal("URL:Preferis", _registry.GetString(scheme, null));
+        Assert.Equal($"{Router},0", _registry.GetString($@"{scheme}\DefaultIcon", null));
+        Assert.Equal($"\"{Router}\" --single-argument %1", _registry.GetString($@"{scheme}\shell\open\command", null));
+        Assert.Null(_registry.GetString(@"HKCU\Software\Clients\StartMenuInternet\Preferis\Capabilities\URLAssociations", "preferis"));
+    }
+
+    [Fact]
+    public void A_registration_without_the_preferis_scheme_needs_registering_again()
+    {
+        // As an older Preferis registered: the preferis: URLs would not reach it.
+        _associations.ProgIds["http"] = _associations.ProgIds["https"] = "PreferisURL";
+        var registrar = Registrar();
+        registrar.Register();
+        _registry.DeleteTree(@"HKCU\Software\Classes\preferis");
+
+        var before = registrar.GetStatus();
+        registrar.Register();
+        var after = registrar.GetStatus();
+
+        Assert.Equal((false, false), (before.IsRegistered, before.IsDefault));
+        Assert.Equal((true, true), (after.IsRegistered, after.IsDefault));
+        Assert.Empty(_opened);
+    }
+
+    [Fact]
     public void Register_opens_the_default_apps_page_until_preferis_is_chosen_there()
     {
         var result = Registrar().Register();
@@ -101,6 +133,7 @@ public class WindowsDefaultBrowserRegistrarTests
         Assert.True(result.Succeeded);
         Assert.False(_registry.KeyExists(@"HKCU\Software\Clients\StartMenuInternet\Preferis"));
         Assert.False(_registry.KeyExists(@"HKCU\Software\Classes\PreferisURL"));
+        Assert.False(_registry.KeyExists(@"HKCU\Software\Classes\preferis"));
         Assert.Null(_registry.GetString(@"HKCU\Software\RegisteredApplications", "Preferis"));
         Assert.Equal("Software\\Other\\Capabilities", _registry.GetString(@"HKCU\Software\RegisteredApplications", "Other"));
         Assert.Equal(2, _notified);

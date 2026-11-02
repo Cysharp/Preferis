@@ -185,6 +185,34 @@ public sealed class TestPageTests : IDisposable
         Assert.Equal("Open with the default profile (catch-all)", settings.Test.Decision);
     }
 
+    [Theory]
+    [InlineData("preferis://open?url=https%3A%2F%2Flogin.microsoftonline.com%2Fcommon")]
+    [InlineData("preferis:https://login.microsoftonline.com/common")]
+    public void A_preferis_url_is_tested_with_the_url_it_carries(string input)
+    {
+        var page = _harness.WithSample().Create().Test;
+
+        page.Url = input;
+        page.RunCommand.Execute(null);
+
+        Assert.Null(page.Error);
+        Assert.Equal("Show the picker with 3 profiles (rule \"Microsoft ログインは選択する\")", page.Decision);
+        Assert.Null(page.RoutedUrl);
+    }
+
+    [Fact]
+    public void A_preferis_url_that_carries_no_web_address_is_reported()
+    {
+        var page = _harness.WithSample().Create().Test;
+
+        page.Url = "preferis:file:///etc/hosts";
+        page.RunCommand.Execute(null);
+
+        Assert.Contains("only http and https", page.Error, StringComparison.Ordinal);
+        Assert.Empty(page.Trace);
+        Assert.Null(page.Decision);
+    }
+
     [Fact]
     public void Text_that_is_not_a_url_is_reported()
     {

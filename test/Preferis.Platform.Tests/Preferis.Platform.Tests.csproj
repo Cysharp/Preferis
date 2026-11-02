@@ -8,6 +8,11 @@
     <ApplicationIcon Condition="$([MSBuild]::IsOSPlatform('Windows'))">../../src/Preferis.Router/Windows/Preferis.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <!-- Velopack comes with Preferis.Platform on Windows only; VELOPACK marks the tests of the code that uses it. -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <DefineConstants>$(DefineConstants);VELOPACK</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />

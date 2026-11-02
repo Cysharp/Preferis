@@ -120,14 +120,23 @@ Windows は `WindowsSettingsPlatform`、§2.8)。
   入らない。
 - ダウンロード済みで未適用の更新があれば `Run()` はそれを適用して Preferis を再起動する (`SetAutoApplyOnStartup`)。これを
   許すのは設定 UI だけで、Router とピッカーは許さない (リンクを開くのを更新で待たせない。§5.2)。
-- アプリ内からの更新チェックは設定 UI の一般ページの「更新」カード (§2.8): `UpdateManager` + `GithubSource`
-  (`https://github.com/Cysharp/Preferis`。チャネルは指定せず、インストールのマニフェストにあるビルド時の `win-x64` / `win-arm64`
-  を使う) で、最新の公開リリースの `releases.<channel>.json` を読み (`CheckForUpdatesAsync`)、「ダウンロード」
+- アプリ内からの更新チェックは設定 UI の一般ページの「更新」カード (§2.8): `LatestReleaseUpdateManager`
+  (`Preferis.Platform.Windows`。Velopack の `UpdateManager` + `SimpleWebSource`、
+  `https://github.com/Cysharp/Preferis/releases/latest/download/`。チャネルは指定せず、インストールのマニフェストにあるビルド時の
+  `win-x64` / `win-arm64` を使う) で、最新の公開リリースの `releases.<channel>.json` を読み (`CheckForUpdatesAsync`)、「ダウンロード」
   (`DownloadUpdatesAsync`、進捗バー)、「再起動して更新」(保存待ちの編集を書いてから `ApplyUpdatesAndRestart`。`Update.exe` が
   `current\` を置き換えて `Preferis.exe` を引数なしで起動するので、設定 UI が開き直す) の順。カードは Velopack でインストール
   されている時だけ出す (`ISettingsPlatform.Updater` が null なら出さない: ポータブル zip、ローカルビルド、macOS)。
-- リポジトリが非公開の間は GitHub の API がトークン無しの読み取りを拒むため、更新の確認は「404 (Not Found)」で失敗する。公開
-  すれば動く (認証なしの制限は IP あたり 60 回/時)。
+- フィードとパッケージはリリースのダウンロード用の URL (`releases/latest/download/<ファイル名>`。GitHub が最新のリリースの
+  そのファイルへリダイレクトする) から読み、GitHub の API は使わない。`releases/latest` はドラフトとプレリリースを除く最新の
+  リリースで、リポジトリが非公開なら 404 になる。Velopack の `GithubSource` はリリースの一覧を API で取るため、トークンなしでは
+  送信元の IP あたり 60 回/時の制限を同じ IP の利用者全員 (社内の NAT など) で分け合い、使い切ると更新の確認が
+  「403 (rate limit exceeded)」で失敗した (2026-11-02)。アプリにトークンは埋め込めない。
+- 最新のリリースのフィードには、そのリリースと一緒にパックしたものだけが載る: そのリリースの完全パッケージと差分パッケージ、
+  差分の元にした 1 つ前のリリースの完全パッケージ (`vpk download github`、Design.md §4.4)。差分はその 1 つ前のリリースからしか
+  当てられないので、インストール済みの版の完全パッケージがフィードにない時 (2 つ以上前の版) は差分を使わず完全パッケージを取る
+  (`CreateDeltaUpdateStrategy` の上書き)。Velopack はその版にも差分を当て、差分で変わらないファイルをインストール済みの版のまま
+  残し、結果を検証しない。`GithubSource` は直近 10 リリースのフィードをまとめるので差分を連ねられたが、その一覧を API で取る。
 - Velopack のライブラリのログは `%LocalAppData%\velopack\velopack_Preferis.log`。
 - インストールせずにインストール配置を試すには、`artifacts/win-x64/Preferis/` を任意の `current\` にコピーし、
   `Preferis-<version>-win-x64-full.nupkg` の `lib/app/sq.version` (マニフェスト) を `current\` に置き、親フォルダーに

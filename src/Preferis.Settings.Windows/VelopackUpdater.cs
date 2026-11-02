@@ -1,19 +1,16 @@
 using Preferis.Platform.Windows;
 using Preferis.Settings.Services;
 using Velopack;
-using Velopack.Sources;
 
 namespace Preferis.Settings.Windows;
 
 /// <summary>
 /// Updates through Velopack (docs/Platform.md §2.1): the feed is the latest GitHub release's
-/// <c>releases.&lt;channel&gt;.json</c>, the channel (win-x64 / win-arm64) the one this installation was built for.
-/// While the repository is private, GitHub's API answers an unauthenticated check with 404 and the card says so.
+/// <c>releases.&lt;channel&gt;.json</c> (<see cref="LatestReleaseUpdateManager"/>), the channel (win-x64 / win-arm64)
+/// the one this installation was built for.
 /// </summary>
 internal sealed class VelopackUpdater : IAppUpdater
 {
-    private const string Repository = "https://github.com/Cysharp/Preferis";
-
     private readonly UpdateManager _manager;
     private UpdateInfo? _found;
 
@@ -31,7 +28,7 @@ internal sealed class VelopackUpdater : IAppUpdater
         {
             return null;
         }
-        var manager = new UpdateManager(new GithubSource(Repository, accessToken: null, prerelease: false));
+        var manager = new LatestReleaseUpdateManager();
         return manager.IsInstalled && manager.CurrentVersion is { } version ? new VelopackUpdater(manager, version.ToString()) : null;
     }
 

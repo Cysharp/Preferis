@@ -236,9 +236,10 @@ artifacts/                 出力先 (.gitignore 対象)
 
 - 実行ファイルの NativeAOT publish は `-p:Version` だけで済むため、`update-packagejson` でバージョンをコミットする
   MagicOnion 方式は採らず、NativeCompressions と同じく実行中のコミットにタグを打ちます。
-- Velopack の更新フィードは「最新の (ドラフトでない) リリースの `releases.<channel>.json`」なので、ドラフトを公開した時点で
-  利用者に更新が見えます。アプリ内からの更新チェックは設定 UI の一般ページの「更新」カードにあり、Velopack でインストール
-  された時だけ出ます (Platform.md §2.1)。
+- Velopack の更新フィードは「最新の (ドラフトでもプレリリースでもない) リリースの `releases.<channel>.json`」なので、ドラフトを
+  公開した時点で利用者に更新が見えます。アプリは GitHub の API でなくリリースのダウンロード用の URL
+  (`releases/latest/download/`) から読みます。アプリ内からの更新チェックは設定 UI の一般ページの「更新」カードにあり、Velopack で
+  インストールされた時だけ出ます (Platform.md §2.1)。
 - Windows の実行ファイルとインストーラーはコード署名していません (SmartScreen の警告が出る)。`VelopackPackArgs`
   プロパティで `vpk pack` に `--azureTrustedSignFile` などを渡せるようにしてあります。
 - .NET for macOS は、ビルド時の Xcode の major.minor がパックの `RecommendedXcodeVersion` と一致しないとエラー (E0191)
@@ -1046,6 +1047,7 @@ macOS (M4 の後に追加):
 | 2026-11-01 | Windows の送信元アプリの判定 (Platform.md §2.9) では、親が終了済みか開けない場合に前面ウィンドウに頼らず不明とする。親は `NtQueryInformationProcess` で読み、Toolhelp のスナップショットは使わない。判定はルールにアプリの条件が無くても URL ごとに行う | 親が分からない時に前面ウィンドウを使うと、`cmd /c start` で開くアプリには当たるが、バックグラウンドのスクリプトやツールが開いた URL を前面のアプリが開いたと誤る。誤って一致して別のブラウザーで開くより、どのアプリの条件にも一致しない方が害が小さい。スナップショットは 1 回 10〜20 ms (441 プロセス) かかり、§5.2 の 20 ms の目標をほぼ使い切る。`NtQueryInformationProcess` なら判定全体で 0.3 ms。代わりに開けないプロセス (SYSTEM の svchost.exe など) は名前も分からず仲介プロセスと見分けられないが、スパイク 10 ではそれが直接の親になる経路は無かった。0.3 ms なので、条件が無い時に判定を省く仕組みは入れない |
 | 2026-11-01 | macOS の送信元アプリの判定 (Platform.md §3.9) は Apple Event の送り主を使い、アプリでないプログラムからは親をたどってアプリを探す。アプリは実行ファイルがバンドルの本体 (`X.app/Contents/MacOS/x`) であるプロセスとし、別のアプリの `Contents/Frameworks/` の中のアプリ (ヘルパー) は外側のアプリとする。アプリに着く前に launchd に着いたら不明とする。コマンドラインで渡された URL は Router の親から同じ規則で判定する。実装の後に開発者が実機で確認した (§12 スパイク 11) | 送り主は `open` やシェルのこともあるが、利用者が条件に書きたいのはそれを動かしている Terminal などのアプリ。「アプリかどうか」を `NSRunningApplication` で見る案は、Launch Services に登録していないプロセスでどうなるかが分からず、フェイクでのテストもしにくいため、パスで決める。ヘルパーを外側のアプリに寄せるのは、VS Code の統合ターミナルが `Code Helper.app` の中で動くため。`Contents/Helpers` などそれ以外の入れ子 (設定 UI、Xcode の Simulator) は、利用者から見て別のアプリなのでそのままにする。launchd に着いた時に前面のアプリに頼らないのは、Windows (前の行) と同じく、バックグラウンドのジョブが開いた URL を前面のアプリのものと誤らないため |
 | 2026-11-02 | dmg の背景は濃いグレー (#282828) の地に明るいグレーの矢印を焼き込み、ラベルの行から下 (188pt 以降) は明るいグレー (#D4D4D4) の帯にする (`build/dmg/make-background.py`)。透過の背景にはしない | Finder はフォルダーの背景画像を外観で切り替えず、画像を設定すると透過部分を白の上に描くため、透過にしてもダークモードで白い窓になった。暗い地なら両モードで同じに見えるが、背景画像のある窓では Finder はラベルを常に黒で描くので、暗い地だけではファイル名が読めず、ラベルの下だけ明るくした |
+| 2026-11-02 | Windows のアプリ内の更新は、Velopack の `GithubSource` (GitHub の API) でなく `SimpleWebSource` で最新のリリースのダウンロード用の URL (`releases/latest/download/`) からフィードとパッケージを読む。インストール済みの版の完全パッケージがフィードにない時 (2 つ以上前の版) は差分を使わず完全パッケージを取る (`LatestReleaseUpdateManager`、Platform.md §2.1) | トークンなしの API は送信元の IP あたり 60 回/時で、同じ IP の利用者全員が分け合うため、社内のネットワークで更新の確認が「403 (rate limit exceeded)」で失敗した。配布するアプリにトークンは埋め込めない。最新のリリースのフィードにある差分は 1 つ前のリリースからのものだけで、Velopack はそれを古い版にも当て、変わらないファイルを古い版のまま残す |
 
 ## 14. マイルストーンと現在の状態
 

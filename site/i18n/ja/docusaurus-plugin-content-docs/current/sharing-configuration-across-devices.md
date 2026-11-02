@@ -1,5 +1,6 @@
 ---
 title: 複数のデバイスで設定を共有する
+sidebar_position: 7
 ---
 
 Preferis は OneDrive や Google Drive、iCloud のようなクラウドストレージを使用して設定を複数のデバイスで共有するシナリオをサポートしています。

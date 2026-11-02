@@ -1,5 +1,6 @@
 ---
 title: 設定ファイル
+sidebar_position: 4
 ---
 
 Preferis の設定ファイルは **config.json** と **local.json** の 2 つがあります。
